@@ -73,8 +73,14 @@ function Find-NewReviewerCandidates {
         [Parameter(Mandatory = $true)]$Baseline,
         [Parameter(Mandatory = $true)]$Snapshot,
         [DateTimeOffset]$NotBefore = [DateTimeOffset]::MinValue,
-        [string]$ExcludedLogin
+        [string]$ExcludedLogin,
+        [string]$ExpectedHeadSha
     )
+
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedHeadSha) -and
+        $Snapshot.pullRequest.headSha -ne $ExpectedHeadSha) {
+        return @()
+    }
 
     $cutoff = if ($NotBefore -eq [DateTimeOffset]::MinValue) {
         [DateTimeOffset]::MinValue
@@ -532,7 +538,7 @@ function Invoke-PrReviewWatcher {
         $snapshotStartedAt = [DateTimeOffset]::UtcNow
         $snapshot = Get-PrReviewSnapshot -Repository $state.repository -Number ([int]$state.prNumber) -Hostname ([string]$state.hostname)
         if ([string]::IsNullOrWhiteSpace([string]$state.reviewerLogin)) {
-            $candidates = @(Find-NewReviewerCandidates -Baseline $state -Snapshot $snapshot -NotBefore $ReviewRequestedAt -ExcludedLogin ([string]$state.agentLogin))
+            $candidates = @(Find-NewReviewerCandidates -Baseline $state -Snapshot $snapshot -NotBefore $ReviewRequestedAt -ExcludedLogin ([string]$state.agentLogin) -ExpectedHeadSha $ExpectedHeadSha)
             if ($candidates.Count -gt 1) {
                 [pscustomobject]@{
                     status = "reviewer_ambiguous"
