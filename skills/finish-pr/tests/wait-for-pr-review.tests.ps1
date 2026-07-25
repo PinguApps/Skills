@@ -44,7 +44,7 @@ $expandedReactions = @(Expand-PaginatedItems $reactionPages)
 Assert-Equal 2 $expandedReactions.Count "Paginated reaction pages should flatten into one collection."
 Assert-Equal "page-two" $expandedReactions[1].id "Paginated reactions should preserve later pages."
 
-$eyes = [pscustomobject]@{ id = "new-eyes"; content = "eyes"; authorLogin = "example-codex-reviewer[bot]"; authorType = "Organization" }
+$eyes = [pscustomobject]@{ id = "new-eyes"; content = "eyes"; authorLogin = "example-codex-reviewer[bot]"; authorType = "Organization"; createdAt = "2026-01-01T00:00:00Z" }
 $started = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($eyes)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $started.status "Seeing eyes should keep waiting."
 Assert-Equal $true $started.reviewStartedObserved "Seeing eyes should record that review started."
@@ -212,6 +212,18 @@ $unchangedBaselineUpdated = Update-BaselineHeadReactionObservations -State $unch
 Assert-Equal $false $unchangedBaselineUpdated "Expected-head reactions must not be consumed as old-head baseline observations."
 $unchangedApproval = Resolve-ReviewOutcome -Baseline $unchangedHeadState -Snapshot $unchangedHeadSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -BaselineSha "new-sha" -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $unchangedApproval.status "A fresh first-poll thumbs-up should approve an unchanged expected head after confirmation."
+
+$lateEyesState = [pscustomobject]@{
+    seenReactionIds = @()
+    reviewStartedObserved = $false
+    approvalCandidateObserved = $false
+    expectedHeadReactionsCaptured = $false
+    reviewHeadBoundary = $null
+}
+$null = Initialize-ExpectedHeadReactionBaseline -State $lateEyesState -Snapshot (New-Snapshot) -ExpectedSha "new-sha" -Reviewer $reviewer
+$lateEyesInitialized = Initialize-ExpectedHeadReactionBaseline -State $lateEyesState -Snapshot (New-Snapshot -Reactions @($eyes)) -ExpectedSha "new-sha" -Reviewer $reviewer
+Assert-Equal $true $lateEyesInitialized "A later poll should establish a missing expected-HEAD review boundary."
+Assert-Equal "2026-01-01T00:00:00.0000000+00:00" $lateEyesState.reviewHeadBoundary "The later fresh eyes timestamp should become the review boundary."
 
 $staleEyesState = [pscustomobject]@{
     seenReactionIds = @("old-eyes")

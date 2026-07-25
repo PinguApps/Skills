@@ -455,7 +455,10 @@ function Initialize-ExpectedHeadReactionBaseline {
 
     $alreadyInitialized = $State.PSObject.Properties.Name -contains "expectedHeadReactionsCaptured" -and
         [bool]$State.expectedHeadReactionsCaptured
-    if ($alreadyInitialized -or $Snapshot.pullRequest.headSha -ne $ExpectedSha) {
+    $reviewBoundaryCaptured = $State.PSObject.Properties.Name -contains "reviewHeadBoundary" -and
+        -not [string]::IsNullOrWhiteSpace([string]$State.reviewHeadBoundary)
+    if (($alreadyInitialized -and $reviewBoundaryCaptured) -or
+        $Snapshot.pullRequest.headSha -ne $ExpectedSha) {
         return $false
     }
 
@@ -496,7 +499,7 @@ function Initialize-ExpectedHeadReactionBaseline {
         $State | Add-Member -NotePropertyName expectedHeadReactionsCaptured -NotePropertyValue $true
     }
 
-    return $true
+    return -not $alreadyInitialized -or $timestampedFreshEyes.Count -gt 0
 }
 
 function Update-BaselineHeadReactionObservations {
