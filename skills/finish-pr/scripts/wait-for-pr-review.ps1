@@ -458,7 +458,8 @@ function Resolve-ReviewOutcome {
     $expectedHeadReviews = @($Snapshot.feedbackItems | Where-Object {
         $_.kind -eq "review" -and
         (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
-        $_.id -notin $seenFeedbackIds -and
+        ($_.id -notin $seenFeedbackIds -or
+            $_.id -in @($Baseline.preservedExpectedHeadReviewIds)) -and
         $_.headSha -eq $ExpectedSha -and
         -not [string]::IsNullOrWhiteSpace([string]$_.createdAt)
     })
@@ -618,6 +619,17 @@ function Invoke-PrReviewWatcher {
         } else {
             $null
         }
+        $preservedExpectedHeadReviewIds = if (-not [string]::IsNullOrWhiteSpace([string]$existingReviewBoundary)) {
+            @($snapshot.feedbackItems | Where-Object {
+                $_.kind -eq "review" -and
+                (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
+                $_.headSha -eq $snapshot.pullRequest.headSha -and
+                -not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
+                (ConvertTo-ReviewTimestamp $_.createdAt) -ge [DateTimeOffset]$existingReviewBoundary
+            } | ForEach-Object { $_.id })
+        } else {
+            @()
+        }
         $viewerArgs = @("api")
         if (-not [string]::IsNullOrWhiteSpace($routing.hostname)) {
             $viewerArgs += @("--hostname", $routing.hostname)
@@ -647,6 +659,7 @@ function Invoke-PrReviewWatcher {
             approvalCandidateObserved = $false
             expectedHeadReactionsCaptured = $false
             reviewHeadBoundary = $existingReviewBoundary
+            preservedExpectedHeadReviewIds = $preservedExpectedHeadReviewIds
         }
         Save-ReviewState -State $state -Path $StatePath
 
