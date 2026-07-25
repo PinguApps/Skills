@@ -1,7 +1,7 @@
 ---
 name: finish-pr
 description: Finish the GitHub pull request attached to the current branch; resolve merge conflicts, diagnose and fix failed CI checks, action unresolved review feedback without duplicating replies that are awaiting a reviewer response, push focused commits, and continue through Codex review until the PR body has Codex's thumbs-up approval. Use whenever the user asks to finish, complete, ready, resolve, fix, or address feedback/CI/conflicts on the current PR.
-compatibility: Requires Git, GitHub CLI (`gh`) authenticated for the repository, and PowerShell 7 (`pwsh`) for bundled helpers.
+compatibility: Requires Git 2.38+, GitHub CLI (`gh`) authenticated for the repository, and PowerShell 7 (`pwsh`) for bundled helpers.
 ---
 
 # Finish PR
