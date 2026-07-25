@@ -207,6 +207,8 @@ $preservedApprovalBaseline = [pscustomobject]@{
 }
 $preservedBaselineApproval = Resolve-ReviewOutcome -Baseline $preservedApprovalBaseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb) -FeedbackItems @($expectedHeadReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewHeadBoundary $pushCompletedAt -ReviewStartedObserved $true -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $preservedBaselineApproval.status "A baseline thumbs-up already linked to a current-HEAD review must remain eligible."
+$supersededPreservedApproval = Resolve-ReviewOutcome -Baseline $preservedApprovalBaseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb) -FeedbackItems @($expectedHeadReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewHeadBoundary $pushCompletedAt.AddSeconds(10) -ReviewStartedObserved $true -ApprovalCandidateObserved $false
+Assert-Equal "waiting" $supersededPreservedApproval.status "An approval predating the latest review start must not complete an unchanged-HEAD run."
 $oldHeadReview = [pscustomobject]@{ id = "old-head-review"; kind = "review"; authorLogin = $reviewer; body = ""; reviewState = "COMMENTED"; headSha = "old-sha"; createdAt = $sameSecondThumb.createdAt }
 $staleReactionApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb) -FeedbackItems @($oldHeadReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewHeadBoundary $pushCompletedAt -ReviewStartedObserved $true -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $staleReactionApproval.status "A reaction without a submitted expected-HEAD review must not approve the pushed HEAD."
