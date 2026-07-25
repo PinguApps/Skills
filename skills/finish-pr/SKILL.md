@@ -1,0 +1,270 @@
+---
+name: finish-pr
+description: Finish the GitHub pull request attached to the current branch; resolve merge conflicts, diagnose and fix failed CI checks, action unresolved review feedback without duplicating replies that are awaiting a reviewer response, push focused commits, and continue through Codex review until the PR body has Codex's thumbs-up approval. Use whenever the user asks to finish, complete, ready, resolve, fix, or address feedback/CI/conflicts on the current PR.
+compatibility: Requires Git, GitHub CLI (`gh`) authenticated for the repository, and PowerShell 7 (`pwsh`) for bundled helpers.
+---
+
+# Finish PR
+
+Bring the pull request attached to the current branch to a genuinely ready state.
+
+## Definition of done
+
+Finish only when all of these are true for the current PR HEAD:
+
+- GitHub and a local merge probe show no merge conflicts.
+- No CI check is failing. Pending checks may still be running, but never describe the PR as fully ready while a required check is pending.
+- Every unresolved review thread is in one of these states:
+  - its latest unaddressed feedback has been actioned and the agent has replied with the result; or
+  - the latest relevant comment is the agent's response and no reviewer has replied afterwards, so the thread is awaiting review and needs no duplicate work.
+- No reply created by this run remains in a pending GitHub review.
+- No review thread's resolution state was changed by this run.
+- The PR body has a 👍 reaction from the Codex reviewer that applies to the current pushed HEAD, with no later Codex pushback left unaddressed.
+
+An unresolved thread is not automatically unfinished. Reviewers own resolution state; the conversation order determines whether the agent currently owes action.
+
+## Operating rules
+
+- Use the conversation history as first-class task context. The skill is often invoked after implementation, so recover the user's intent, earlier decisions, tradeoffs, verification, known limitations, and reasons for the current design before judging PR feedback.
+- Read every applicable `AGENTS.md` plus repository-native requirements and design documents implicated by the PR. Discover these from the repository and PR; never assume a particular task directory, branch naming scheme, language, build system, or hosting provider.
+- Treat unresolved review threads as the authoritative inline-feedback list. Also inspect PR-level reviews and issue comments for standalone actionable feedback.
+- Preserve unrelated worktree changes. Commit only changes made during this run.
+- Resolve conflicts before failed checks, and failed checks before review feedback. Later evidence may require revisiting an earlier phase.
+- Prefer the smallest correct change. Add focused tests for behavioural or regression-prone fixes.
+- Use one focused commit per independent conflict/check/feedback fix where practical.
+- Never rebase, force-push, merge, close, approve, or mark the PR ready for review unless the user explicitly requested that separate action.
+- Never resolve or unresolve a review thread. Do not call `resolveReviewThread`, `unresolveReviewThread`, or an equivalent.
+- Reply directly to review threads, one at a time. Never create replies concurrently.
+- Continue autonomously through new Codex feedback after pushes, within the convergence bounds below.
+
+## 1. Establish state and intent
+
+1. Locate the repository root and read applicable instructions.
+2. Inspect:
+
+   ```powershell
+   git status --short
+   git rev-parse --abbrev-ref HEAD
+   git rev-parse HEAD
+   gh --version
+   gh auth status
+   git fetch origin
+   gh pr view --json number,title,url,body,author,headRefName,headRefOid,baseRefName,baseRefOid,mergeable,mergeStateStatus,reviews,comments
+   ```
+
+3. Record the starting SHA and existing worktree changes. Never include pre-existing changes in this run's commits.
+4. If the current branch has no PR, inspect `gh pr status`. Switch or check out a PR only when the mapping is unambiguous and local changes are safe; otherwise ask the user.
+5. Reconstruct the intended change from, in priority order:
+   - explicit user instructions and this conversation;
+   - applicable repository instructions;
+   - PR title, body, commits, and diff;
+   - linked issue/spec/design documents;
+   - surrounding code, tests, and conventions.
+6. Inspect the complete PR diff before evaluating conflicts, CI, or feedback.
+7. Identify the Codex reviewer login from existing Codex-authored review comments, reviews, or PR-body reactions. Normalize an optional `[bot]` suffix. Never assume a fixed login. If multiple identities are plausible and approval identity changes the outcome, ask the user.
+8. Resolve the authenticated GitHub viewer login. Treat comments from that login, or another agent login established unambiguously by the conversation/PR history, as agent responses.
+
+## 2. Resolve merge conflicts
+
+Run this before CI or feedback:
+
+1. Refresh PR/base metadata and perform a non-mutating local probe:
+
+   ```powershell
+   git fetch origin
+   gh pr view --json number,url,baseRefName,baseRefOid,headRefName,headRefOid,mergeable,mergeStateStatus
+   git merge-tree --write-tree --messages HEAD origin/<baseRefName>
+   ```
+
+2. Investigate locally when GitHub reports `CONFLICTING`, `DIRTY`, or `UNKNOWN`, or when the probe reports conflicts.
+3. If conflicts exist and unrelated local changes are safe, merge the latest base into the PR branch:
+
+   ```powershell
+   git merge --no-ff origin/<baseRefName>
+   ```
+
+4. Resolve each conflict using the recovered task intent, repository requirements, adjacent code, and tests. Do not mechanically prefer either side.
+5. Run focused verification, stage only the resolution, and commit it. Record the conflict summary, commit SHA, and checks run.
+6. If the merge is clean, keep any Git-created merge commit but do not create an extra empty commit.
+
+## 3. Fix failed CI
+
+1. Inspect all checks:
+
+   ```powershell
+   gh pr checks <pr-number> --json bucket,completedAt,description,event,link,name,startedAt,state,workflow
+   ```
+
+2. For each failure, retrieve the actual logs before editing:
+
+   ```powershell
+   gh run list --branch <headRefName> --commit <headRefOid> --json databaseId,name,workflowName,status,conclusion,url,headSha,event,createdAt -L 50
+   gh run view <run-id> --json name,status,conclusion,jobs,url
+   gh run view <run-id> --log-failed
+   ```
+
+3. For non-Actions checks, inspect the provider link or available check details.
+4. Fix the root cause, not merely the symptom. Work from the clearest upstream failure outward because one failure may cascade into others.
+5. Run the closest local equivalent, stage only that fix, and make a focused commit. Record the check, cause, SHA, and verification.
+6. If a failure is external, flaky, permission-related, or not repository-fixable, capture evidence. Retry only when safe and supported; do not change code to appease an unrelated failure.
+
+## 4. Fetch and classify feedback
+
+Resolve the loaded skill's directory, then use its bundled helpers by absolute path; do not assume the skill lives inside the target repository.
+
+Capture every thread's read-only resolution baseline outside the repository:
+
+```powershell
+$threadBaseline = Join-Path ([IO.Path]::GetTempPath()) "finish-pr-$prNumber-thread-resolution.json"
+pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -All |
+  Set-Content -Encoding utf8 $threadBaseline
+
+pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber |
+  Set-Content -Encoding utf8 $threadSnapshot
+```
+
+For each unresolved thread, read all paginated comments in chronological order and classify it:
+
+- **Awaiting reviewer:** the latest relevant comment is an agent response and nobody has replied later. Do nothing. Do not post a reminder, repeat the fix, or duplicate the response.
+- **Action required:** there is reviewer feedback after the agent's latest response, or the agent has never responded.
+- **Superseded/non-actionable:** the later conversation explicitly withdraws, answers, or supersedes the point. Reply only if the thread still needs an agent acknowledgement; avoid duplicating an existing agent response.
+
+Within action-required threads, identify each distinct feedback item. Judge it against the user's intent, conversation history, repository rules, linked requirements, PR scope, current code, conventions, and tests:
+
+- Agree when it identifies a real bug, missed requirement, broken invariant, missing test, misleading behaviour, or scoped maintainability problem.
+- Disagree when it conflicts with requirements, established intent, repository invariants, or would produce a worse/out-of-scope design.
+- When uncertain, make a small scoped correctness fix if evidence supports it. Otherwise explain the uncertainty and why no change was made.
+
+Do not skip outdated unresolved threads; determine whether their feedback still applies to current code.
+
+## 5. Fix and reply
+
+For each action-required item:
+
+1. Make the smallest complete fix and focused test.
+2. Run the narrowest meaningful verification.
+3. Inspect and stage only files for that item:
+
+   ```powershell
+   git status --short
+   git diff
+   git add <paths>
+   git diff --cached
+   ```
+
+4. Commit before moving to an independent item:
+
+   ```powershell
+   git commit -m "fix(pr): address <feedback summary>"
+   ```
+
+5. Reply directly to the thread after evaluating it and creating any relevant commit:
+
+   ```powershell
+   $body = @"
+   Agreed. I fixed this in commit <sha> by <specific change>.
+
+   Verification: <command and result>.
+   "@
+   pwsh <skill-directory>/scripts/reply-to-review-thread.ps1 -ThreadId "<thread-id>" -Body $body
+   ```
+
+   For a justified disagreement:
+
+   ```text
+   I don't think this change is correct for this PR.
+
+   Reason: <specific reason grounded in requirements, conversation, or code>.
+
+   No code change made.
+   ```
+
+6. Record the thread ID, disposition, commit SHA if any, verification, and returned comment ID.
+
+The reply helper refuses to mutate when the authenticated user already has a pending review. It submits a review created by the reply and verifies `state != PENDING` plus a non-null `submittedAt`. A helper failure is blocking; a returned comment URL alone is not proof of submission.
+
+After all replies:
+
+1. Re-fetch all threads with `-All`.
+2. Verify every reply created in this run belongs to a submitted review.
+3. Compare all thread IDs and `isResolved` values with the baseline. They must be unchanged. If external state changed, report it; never mutate it back.
+
+## 6. Push and converge with Codex
+
+1. Confirm the worktree contains no uncommitted changes created by this run.
+2. Review commits after the starting SHA and fetch before pushing:
+
+   ```powershell
+   git log --oneline <starting-sha>..HEAD
+   git fetch origin
+   git status --short --branch
+   ```
+
+3. If there are commits to push, capture a reviewer baseline immediately before pushing:
+
+   ```powershell
+   $reviewState = Join-Path ([IO.Path]::GetTempPath()) "finish-pr-$prNumber-review.json"
+   pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
+     -CaptureBaseline `
+     -StatePath $reviewState `
+     -PrNumber $prNumber `
+     -ReviewerLogin "<discovered-codex-login>"
+   ```
+
+4. Push without force and record the exact HEAD and push completion time:
+
+   ```powershell
+   git push origin HEAD
+   $pushedAt = [DateTimeOffset]::UtcNow
+   $expectedHeadSha = git rev-parse HEAD
+   ```
+
+5. Wait for Codex using the bundled watcher:
+
+   ```powershell
+   pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
+     -Wait `
+     -StatePath $reviewState `
+     -ExpectedHeadSha $expectedHeadSha `
+     -PushedAt $pushedAt `
+     -TimeoutMinutes 25 `
+     -PollSeconds 20
+   ```
+
+   Run it as a long-lived tool call. While it runs, use only the environment's wait mechanism and remain silent unless the user interrupts. The watcher keeps repeated polling out of model context.
+
+6. Handle its terminal result:
+   - `feedback`: fetch all feedback for context, but action only IDs in `newFeedback`. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response.
+   - `approved`: the same Codex identity produced the stable 👍 signal. Re-fetch checks, PR-body reactions, PR-level feedback, and threads once; finish only if the full definition of done still holds.
+   - `timeout`: report that Codex did not reach a terminal state; do not claim readiness.
+   - `head_changed`: fetch and inspect the new state. Stop when another actor's push makes continued mutation unsafe.
+   - `pr_closed`: stop and report the PR state.
+
+7. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → wait.
+
+If no push is needed, still verify that a current 👍 from the discovered Codex identity exists on the PR body and that no later Codex feedback requires action. An old approval cannot satisfy a newer pushed HEAD.
+
+Bound convergence to five pushed review rounds or two hours overall. Stop earlier for approval, timeout, closure, unexpected head movement, or a genuine blocker.
+
+## Final audit and response
+
+Re-fetch rather than relying on cached state:
+
+- PR head, mergeability, and base;
+- all checks;
+- PR-body reactions from the discovered Codex identity;
+- PR-level reviews/comments;
+- all review threads and reply submission states;
+- local/remote branch state and worktree.
+
+Report concisely:
+
+- PR number and URL;
+- conflict and CI outcome, with commits;
+- thread counts: actioned, awaiting reviewer, and disagreed;
+- fixes, focused verification, and commit SHAs;
+- push result and Codex review rounds;
+- terminal Codex 👍 status for current HEAD;
+- pending review replies: `0`;
+- review-thread resolution mutations: `0`, with baseline audit result;
+- any blocker or required check still pending.
