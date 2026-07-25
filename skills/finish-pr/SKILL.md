@@ -65,7 +65,8 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 9. Resolve the base and head repositories independently from PR metadata:
    - derive the base repository from the PR URL;
    - use `headRepository.nameWithOwner` for the head repository;
-   - construct separate authenticated Git URLs using the PR host;
+   - prefer existing configured remotes that match those exact repositories;
+   - otherwise use GitHub-provided clone URLs and configure Git to use the authenticated `gh` credential helper;
    - retain the exact `headRefName`.
 
    ```powershell
@@ -75,11 +76,16 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    $prUri = [uri]$pr.url
    $pathSegments = $prUri.AbsolutePath.Trim("/").Split("/")
    $baseRepository = "$($pathSegments[0])/$($pathSegments[1])"
-   $baseFetchUrl = "$($prUri.Scheme)://$($prUri.Host)/$baseRepository.git"
-   $headPushUrl = "$($prUri.Scheme)://$($prUri.Host)/$($pr.headRepository.nameWithOwner).git"
+   $baseMetadata = gh api --hostname $prUri.Host "repos/$baseRepository" |
+     ConvertFrom-Json
+   $headMetadata = gh api --hostname $prUri.Host "repos/$($pr.headRepository.nameWithOwner)" |
+     ConvertFrom-Json
+   gh auth setup-git --hostname $prUri.Host
+   $baseFetchUrl = [string]$baseMetadata.clone_url
+   $headPushUrl = [string]$headMetadata.clone_url
    ```
 
-   Stop if the head repository is unavailable or ambiguous. Never assume `origin` points to either side of a fork-based PR.
+   GitHub's `clone_url` preserves the server authority, including non-default ports, while `gh auth setup-git` makes HTTPS Git operations use the authenticated CLI identity. A verified matching SSH/configured remote may be used instead. Stop if authentication, repository identity, or the head repository is unavailable or ambiguous. Never assume `origin` points to either side of a fork-based PR.
 10. Align the checkout with the exact PR head before making any changes:
 
    ```powershell
