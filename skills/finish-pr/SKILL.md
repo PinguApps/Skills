@@ -49,7 +49,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    gh --version
    gh auth status
    git fetch origin
-   gh pr view --json number,title,url,body,author,headRefName,headRefOid,baseRefName,baseRefOid,mergeable,mergeStateStatus,reviews,comments
+   gh pr view --json number,title,url,body,author,headRefName,headRefOid,headRepository,headRepositoryOwner,isCrossRepository,baseRefName,baseRefOid,mergeable,mergeStateStatus,reviews,comments
    ```
 
 3. Record the starting SHA and existing worktree changes. Never include pre-existing changes in this run's commits.
@@ -63,7 +63,24 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 6. Inspect the complete PR diff before evaluating conflicts, CI, or feedback.
 7. Identify the Codex reviewer login from existing Codex-authored review comments, reviews, or PR-body reactions. Normalize an optional `[bot]` suffix. Never assume a fixed login. If multiple identities are plausible and approval identity changes the outcome, ask the user.
 8. Resolve the authenticated GitHub viewer login. Treat comments from that login, or another agent login established unambiguously by the conversation/PR history, as agent responses.
-9. Create one unique state directory outside the repository and retain it for the full run:
+9. Resolve the base and head repositories independently from PR metadata:
+   - derive the base repository from the PR URL;
+   - use `headRepository.nameWithOwner` for the head repository;
+   - construct separate authenticated Git URLs using the PR host;
+   - retain the exact `headRefName`.
+
+   ```powershell
+   $pr = gh pr view --json url,headRefName,headRefOid,headRepository,headRepositoryOwner |
+     ConvertFrom-Json
+   $prUri = [uri]$pr.url
+   $pathSegments = $prUri.AbsolutePath.Trim("/").Split("/")
+   $baseRepository = "$($pathSegments[0])/$($pathSegments[1])"
+   $baseFetchUrl = "$($prUri.Scheme)://$($prUri.Host)/$baseRepository.git"
+   $headPushUrl = "$($prUri.Scheme)://$($prUri.Host)/$($pr.headRepository.nameWithOwner).git"
+   ```
+
+   Stop if the head repository is unavailable or ambiguous. Never assume `origin` points to either side of a fork-based PR.
+10. Create one unique state directory outside the repository and retain it for the full run:
 
    ```powershell
    $runStateDirectory = Join-Path ([IO.Path]::GetTempPath()) (
@@ -81,16 +98,18 @@ Run this before CI or feedback:
 1. Refresh PR/base metadata and perform a non-mutating local probe:
 
    ```powershell
-   git fetch origin
-   gh pr view --json number,url,baseRefName,baseRefOid,headRefName,headRefOid,mergeable,mergeStateStatus
-   git merge-tree --write-tree --messages HEAD origin/<baseRefName>
+   $pr = gh pr view --json number,url,baseRefName,baseRefOid,headRefName,headRefOid,headRepository,headRepositoryOwner,mergeable,mergeStateStatus |
+     ConvertFrom-Json
+   git fetch $baseFetchUrl $pr.baseRefName
+   $baseCommit = (git rev-parse FETCH_HEAD).Trim()
+   git merge-tree --write-tree --messages HEAD $baseCommit
    ```
 
 2. Investigate locally when GitHub reports `CONFLICTING`, `DIRTY`, or `UNKNOWN`, or when the probe reports conflicts.
 3. If conflicts exist and unrelated local changes are safe, merge the latest base into the PR branch:
 
    ```powershell
-   git merge --no-ff origin/<baseRefName>
+   git merge --no-ff $baseCommit
    ```
 
 4. Resolve each conflict using the recovered task intent, repository requirements, adjacent code, and tests. Do not mechanically prefer either side.
@@ -203,13 +222,17 @@ After all replies:
 ## 6. Push and converge with Codex
 
 1. Confirm the worktree contains no uncommitted changes created by this run.
-2. Review commits after the starting SHA and fetch before pushing:
+2. Review commits after the starting SHA, then fetch the exact PR head before pushing:
 
    ```powershell
    git log --oneline <starting-sha>..HEAD
-   git fetch origin
+   git fetch $headPushUrl $pr.headRefName
+   $remoteHeadSha = (git rev-parse FETCH_HEAD).Trim()
+   $currentPrHeadSha = (gh pr view --json headRefOid --jq .headRefOid).Trim()
    git status --short --branch
    ```
+
+   Stop if `$remoteHeadSha` and `$currentPrHeadSha` differ, or if the current PR head moved since this run's last observation.
 
 3. If there are commits to push, increment `$reviewRound` and capture a reviewer baseline immediately before pushing:
 
@@ -226,7 +249,7 @@ After all replies:
 4. Push without force and record the exact HEAD and push completion time:
 
    ```powershell
-   git push origin HEAD
+   git push $headPushUrl "HEAD:refs/heads/$($pr.headRefName)"
    $pushedAt = [DateTimeOffset]::UtcNow
    $expectedHeadSha = git rev-parse HEAD
    ```
