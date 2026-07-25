@@ -383,10 +383,10 @@ function Invoke-PrReviewWatcher {
 
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         $snapshot = Get-PrReviewSnapshot -Repository $state.repository -Number ([int]$state.prNumber)
-        if (Update-BaselineHeadReactionObservations -State $state -Snapshot $snapshot) {
+        if (Initialize-ExpectedHeadReactionBaseline -State $state -Snapshot $snapshot -ExpectedSha $ExpectedHeadSha -Reviewer $state.reviewerLogin) {
             Save-ReviewState -State $state -Path $StatePath
         }
-        if (Initialize-ExpectedHeadReactionBaseline -State $state -Snapshot $snapshot -ExpectedSha $ExpectedHeadSha -Reviewer $state.reviewerLogin) {
+        if (Update-BaselineHeadReactionObservations -State $state -Snapshot $snapshot) {
             Save-ReviewState -State $state -Path $StatePath
         }
         $outcome = Resolve-ReviewOutcome `

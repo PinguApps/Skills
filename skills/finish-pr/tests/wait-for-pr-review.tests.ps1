@@ -154,6 +154,23 @@ $null = Initialize-ExpectedHeadReactionBaseline -State $propagationState -Snapsh
 $stalePropagationApproval = Resolve-ReviewOutcome -Baseline $propagationState -Snapshot $newHeadAfterPropagation -ExpectedSha "new-sha" -Reviewer $reviewer -BaselineSha "old-sha" -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $stalePropagationApproval.status "A reaction first observed on the baseline head must not approve the expected head."
 
+$unchangedHeadState = [pscustomobject]@{
+    baselineHeadSha = "new-sha"
+    seenReactionIds = @("old-thumb")
+    seenFeedbackIds = @()
+    reviewStartedObserved = $false
+    approvalCandidateObserved = $false
+    expectedHeadReactionsCaptured = $false
+}
+$unchangedHeadThumb = [pscustomobject]@{ id = "fresh-unchanged-head-thumb"; content = "+1"; authorLogin = $reviewer }
+$unchangedHeadSnapshot = New-Snapshot -HeadSha "new-sha" -Reactions @($unchangedHeadThumb)
+$unchangedInitialized = Initialize-ExpectedHeadReactionBaseline -State $unchangedHeadState -Snapshot $unchangedHeadSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer
+Assert-Equal $true $unchangedInitialized "An unchanged expected head should initialize before baseline-head reaction updating."
+$unchangedBaselineUpdated = Update-BaselineHeadReactionObservations -State $unchangedHeadState -Snapshot $unchangedHeadSnapshot
+Assert-Equal $false $unchangedBaselineUpdated "Expected-head reactions must not be consumed as old-head baseline observations."
+$unchangedApproval = Resolve-ReviewOutcome -Baseline $unchangedHeadState -Snapshot $unchangedHeadSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -BaselineSha "new-sha" -ReviewStartedObserved $false -ApprovalCandidateObserved $false
+Assert-Equal "approval_candidate" $unchangedApproval.status "A fresh first-poll thumbs-up should approve an unchanged expected head after confirmation."
+
 $baselinePath = Join-Path ([IO.Path]::GetTempPath()) "finish-pr-wait-review-baseline-test.json"
 function Invoke-GhJson {
     return [pscustomobject]@{
