@@ -60,7 +60,10 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    - linked issue/spec/design documents;
    - surrounding code, tests, and conventions.
 6. Inspect the complete PR diff before evaluating conflicts, CI, or feedback.
-7. Identify the Codex reviewer login from existing Codex-authored review comments, reviews, or PR-body reactions. Normalize an optional `[bot]` suffix. Never assume a fixed login. If multiple identities are plausible and approval identity changes the outcome, ask the user.
+7. Identify the Codex reviewer login from existing Codex-authored review comments, reviews, or PR-body reactions. Normalize an optional `[bot]` suffix. Never assume a fixed login.
+   - If one identity is established, retain it for the run.
+   - If multiple identities are plausible and approval identity changes the outcome, ask the user.
+   - If no candidate exists, mark reviewer bootstrap as required. After step 9 resolves the exact base repository and PR number—but before calling a helper that requires `-ReviewerLogin`—record current PR review/comment/reaction IDs and current HEAD, request `@codex review`, then poll read-only PR state for a bounded period. Attribute only new events produced in response to that request. A fresh 👍 directly proves approval for the recorded HEAD; fresh feedback establishes the Codex identity and must be handled; a fresh review-start reaction establishes the identity for the normal baseline/watcher flow. Stop if no identity or terminal signal appears within the review timeout.
 8. Resolve the authenticated GitHub viewer login. Treat comments from that login, or another agent login established unambiguously by the conversation/PR history, as agent responses.
 9. Resolve the base and head repositories independently from PR metadata:
    - derive the base repository from the PR URL;
