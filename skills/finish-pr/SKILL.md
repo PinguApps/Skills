@@ -80,7 +80,28 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    ```
 
    Stop if the head repository is unavailable or ambiguous. Never assume `origin` points to either side of a fork-based PR.
-10. Create one unique state directory outside the repository and retain it for the full run:
+10. Align the checkout with the exact PR head before making any changes:
+
+   ```powershell
+   git fetch $headPushUrl $pr.headRefName
+   $remoteHeadSha = (git rev-parse FETCH_HEAD).Trim()
+   $localHeadSha = (git rev-parse HEAD).Trim()
+   git merge-base --is-ancestor $remoteHeadSha $localHeadSha
+   $localContainsRemoteHead = $LASTEXITCODE -eq 0
+
+   if (-not $localContainsRemoteHead) {
+     git merge-base --is-ancestor $localHeadSha $remoteHeadSha
+     $canFastForward = $LASTEXITCODE -eq 0 -and -not (git status --porcelain)
+     if (-not $canFastForward) {
+       throw "Local HEAD is stale or diverged from the PR head; stop before mutation."
+     }
+
+     git merge --ff-only $remoteHeadSha
+   }
+   ```
+
+   Continue only when local `HEAD` matches or contains the fetched PR head. A clean checkout that is merely behind may be fast-forwarded; stop on divergence or unsafe local changes.
+11. Create one unique state directory outside the repository and retain it for the full run:
 
    ```powershell
    $runStateDirectory = Join-Path ([IO.Path]::GetTempPath()) (
