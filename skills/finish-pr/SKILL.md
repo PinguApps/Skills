@@ -52,7 +52,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    ```
 
 3. Record the starting SHA and every existing changed path, separating staged, unstaged, and untracked changes. Never include pre-existing changes in this run's commits.
-   A feedback fix must not touch a path that had any pre-existing change unless the user's work can be isolated safely at patch level. Otherwise stop and ask the user; an exact pathspec alone does not isolate same-file content.
+   A feedback or CI fix must not touch a path that had any pre-existing staged, unstaged, or untracked change. Stop and ask the user before editing that path; partial staging plus `git commit --only` does not preserve same-file hunk isolation.
 4. If the current branch has no PR, inspect `gh pr status`. Switch or check out a PR only when the mapping is unambiguous and local changes are safe; otherwise ask the user.
 5. Reconstruct the intended change from, in priority order:
    - explicit user instructions and this conversation;
@@ -185,7 +185,7 @@ Run this before CI or feedback:
    git commit --only -m "fix(ci): address <failed check>" -- <exact-ci-fix-paths>
    ```
 
-   If a CI fix path had pre-existing staged, unstaged, or untracked changes, stop unless the new hunks can be isolated safely at patch level. Record the check, cause, SHA, and verification.
+   If a CI fix path had pre-existing staged, unstaged, or untracked changes, stop before editing it. Record the check, cause, SHA, and verification.
 6. If a failure is external, flaky, permission-related, or not repository-fixable, capture evidence. Retry only when safe and supported; do not change code to appease an unrelated failure.
 
 ## 4. Fetch and classify feedback
@@ -235,7 +235,7 @@ For each action-required review thread or standalone feedback item:
    git diff --cached
    ```
 
-   Keep unrelated staged changes staged. Stop if a fix path had any pre-existing staged, unstaged, or untracked change and the new hunks cannot be isolated safely at patch level.
+   Keep unrelated staged changes in other paths staged. Stop before editing any fix path that had a pre-existing staged, unstaged, or untracked change; never rely on partial staging followed by `git commit --only` for same-file isolation.
 
 4. If the disposition produces a change, create exactly one commit for the feedback unit before moving to the next unit:
 
