@@ -166,15 +166,12 @@ foreach ($thread in $threads) {
     }
 }
 
-if ($All) {
-    $selectedThreads = @($threads)
-} else {
-    $selectedThreads = @($threads | Where-Object { -not $_.isResolved })
-}
+$unresolvedThreads = @($threads | Where-Object { -not $_.isResolved })
+$selectedThreads = if ($All) { @($threads) } else { $unresolvedThreads }
 
 [pscustomobject]@{
     repository = "$owner/$name"
     pullRequest = $pr
-    unresolvedCount = $selectedThreads.Count
+    unresolvedCount = $unresolvedThreads.Count
     threads = $selectedThreads
 } | ConvertTo-Json -Depth 100
