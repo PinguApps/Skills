@@ -71,6 +71,24 @@ function Normalize-ReviewerLogin {
     return $Login.Trim().ToLowerInvariant() -replace '\[bot\]$', ''
 }
 
+function ConvertTo-ReviewTimestamp {
+    param([Parameter(Mandatory = $true)]$Value)
+
+    if ($Value -is [DateTimeOffset]) {
+        return $Value
+    }
+
+    if ($Value -is [DateTime]) {
+        return [DateTimeOffset]$Value
+    }
+
+    return [DateTimeOffset]::Parse(
+        [string]$Value,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::RoundtripKind
+    )
+}
+
 function Test-CodexReviewerEvidence {
     param(
         [AllowNull()][string]$Login,
@@ -380,13 +398,14 @@ function Resolve-ReviewOutcome {
         }
 
         if ($feedbackCutoff -ne [DateTimeOffset]::MinValue) {
-            $feedbackTimestampText = if (-not [string]::IsNullOrWhiteSpace([string]$_.updatedAt)) {
-                [string]$_.updatedAt
+            $feedbackTimestampValue = if (-not [string]::IsNullOrWhiteSpace([string]$_.updatedAt)) {
+                $_.updatedAt
             } else {
-                [string]$_.createdAt
+                $_.createdAt
             }
-            if ([string]::IsNullOrWhiteSpace($feedbackTimestampText) -or
-                [DateTimeOffset]$feedbackTimestampText -lt $feedbackCutoff) {
+            if ($null -eq $feedbackTimestampValue -or
+                [string]::IsNullOrWhiteSpace([string]$feedbackTimestampValue) -or
+                (ConvertTo-ReviewTimestamp $feedbackTimestampValue) -lt $feedbackCutoff) {
                 return $false
             }
         }

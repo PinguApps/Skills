@@ -175,6 +175,18 @@ Assert-Equal "approval_candidate" $headLinkedApproval.status "A thumbs-up at the
 $oldHeadFeedback = [pscustomobject]@{ id = "old-head-feedback"; kind = "thread_comment"; authorLogin = $reviewer; body = "Please fix this."; createdAt = $pushCompletedAt.AddSeconds(-1) }
 $filteredOldHeadFeedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($oldHeadFeedback)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewHeadBoundary $pushCompletedAt -ReviewStartedObserved $true -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $filteredOldHeadFeedback.status "Feedback predating the expected-HEAD review boundary must be ignored."
+$offsetBoundary = [DateTimeOffset]"2026-07-25T22:21:04+01:00"
+$utcFeedbackAfterBoundary = [pscustomobject]@{
+    id = "utc-feedback-after-boundary"
+    kind = "thread_comment"
+    authorLogin = $reviewer
+    body = "Please fix this."
+    createdAt = [DateTime]"2026-07-25T21:28:15Z"
+}
+$offsetSafeFeedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($utcFeedbackAfterBoundary)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewHeadBoundary $offsetBoundary -ReviewStartedObserved $true -ApprovalCandidateObserved $false
+Assert-Equal "feedback" $offsetSafeFeedback.status "UTC feedback after an offset review boundary must not be shifted by locale formatting."
+$positiveOffsetTimestamp = [DateTimeOffset]"2026-01-01T01:30:00+02:00"
+Assert-Equal ([DateTimeOffset]"2025-12-31T23:30:00Z") ((ConvertTo-ReviewTimestamp $positiveOffsetTimestamp).ToUniversalTime()) "Review timestamps must preserve their explicit offset."
 $initializedAgain = Initialize-ExpectedHeadReactionBaseline -State $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer
 Assert-Equal $false $initializedAgain "The expected-head reaction baseline should initialize only once."
 
