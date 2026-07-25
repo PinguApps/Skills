@@ -176,6 +176,13 @@ $sameSecondThumb = [pscustomobject]@{ id = "same-second-thumb"; content = "+1"; 
 $sameSecondApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $sameSecondApproval.status "A thumbs-up without fresh expected-HEAD review-start evidence must remain ineligible."
 $expectedHeadReview = [pscustomobject]@{ id = "expected-head-review"; kind = "review"; authorLogin = $reviewer; body = ""; reviewState = "COMMENTED"; headSha = "new-sha"; createdAt = $sameSecondThumb.createdAt }
+$missedEyesApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb) -FeedbackItems @($expectedHeadReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewStartedObserved $false -ApprovalCandidateObserved $false
+Assert-Equal "approval_candidate" $missedEyesApproval.status "A submitted expected-HEAD review should link approval when the eyes reaction was missed."
+$missedEyesReviewStart = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($expectedHeadReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewStartedObserved $false -ApprovalCandidateObserved $false
+Assert-Equal $true $missedEyesReviewStart.reviewStartedObserved "A submitted expected-HEAD review should prove that review started when eyes was missed."
+$missedEyesFeedbackItem = [pscustomobject]@{ id = "missed-eyes-feedback"; kind = "thread_comment"; authorLogin = $reviewer; body = "Please fix this."; headSha = "new-sha"; createdAt = $pushCompletedAt.AddSeconds(1) }
+$missedEyesFeedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($expectedHeadReview, $missedEyesFeedbackItem)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewStartedObserved $false -ApprovalCandidateObserved $false
+Assert-Equal "feedback" $missedEyesFeedback.status "Expected-HEAD feedback should remain visible when the eyes reaction was missed."
 $headLinkedApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb) -FeedbackItems @($expectedHeadReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewHeadBoundary $pushCompletedAt -ReviewStartedObserved $true -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $headLinkedApproval.status "A thumbs-up at the fresh expected-HEAD review boundary should remain eligible."
 $preservedReviewBaseline = [pscustomobject]@{

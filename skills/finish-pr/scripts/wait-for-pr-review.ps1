@@ -402,6 +402,8 @@ function Resolve-ReviewOutcome {
     }
     $feedbackCutoff = if ($ReviewHeadBoundary -ne [DateTimeOffset]::MinValue) {
         $ReviewHeadBoundary.AddTicks(-($ReviewHeadBoundary.Ticks % [TimeSpan]::TicksPerSecond))
+    } elseif ($expectedHeadReviews.Count -gt 0) {
+        $headLinkedReviewCutoff
     } elseif ($ReviewRequestedAt -eq [DateTimeOffset]::MinValue) {
         [DateTimeOffset]::MinValue
     } else {
@@ -474,6 +476,8 @@ function Resolve-ReviewOutcome {
     $hasEyes = @($newReviewerReactions | Where-Object { $_.content -eq "eyes" }).Count -gt 0
     $approvalCutoff = if ($ReviewHeadBoundary -ne [DateTimeOffset]::MinValue) {
         $ReviewHeadBoundary.AddTicks(-($ReviewHeadBoundary.Ticks % [TimeSpan]::TicksPerSecond))
+    } elseif ($expectedHeadReviews.Count -gt 0) {
+        $headLinkedReviewCutoff
     } elseif ($ReviewRequestedAt -eq [DateTimeOffset]::MinValue) {
         [DateTimeOffset]::MinValue
     } else {
@@ -487,7 +491,7 @@ function Resolve-ReviewOutcome {
         -not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
         (ConvertTo-ReviewTimestamp $_.createdAt) -ge $headLinkedReviewCutoff
     }).Count -gt 0
-    $started = $ReviewStartedObserved -or $hasEyes
+    $started = $ReviewStartedObserved -or $hasEyes -or $expectedHeadReviews.Count -gt 0
 
     if ($hasThumbsUp) {
         if ($ApprovalCandidateObserved) {
