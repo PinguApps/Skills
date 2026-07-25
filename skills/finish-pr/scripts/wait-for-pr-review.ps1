@@ -92,7 +92,10 @@ function Find-NewReviewerCandidates {
 
         $Snapshot.feedbackItems | Where-Object {
             $_.id -notin @($Baseline.seenFeedbackIds) -and
-            (Test-ActionableFeedbackItem $_)
+            (Test-ActionableFeedbackItem $_) -and
+            ($cutoff -eq [DateTimeOffset]::MinValue -or
+                (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
+                    [DateTimeOffset]$_.createdAt -ge $cutoff))
         } | ForEach-Object { Normalize-ReviewerLogin $_.authorLogin }
     )
 
@@ -103,6 +106,19 @@ function Find-NewReviewerCandidates {
             $_ -ne $normalizedExcludedLogin
         } |
         Sort-Object -Unique)
+}
+
+function Test-ReviewStartGraceExpired {
+    param(
+        [int]$GraceSeconds,
+        [bool]$ReviewStartedObserved,
+        [DateTimeOffset]$SnapshotStartedAt,
+        [DateTimeOffset]$ReviewStartDeadline
+    )
+
+    return $GraceSeconds -gt 0 -and
+        -not $ReviewStartedObserved -and
+        $SnapshotStartedAt -ge $ReviewStartDeadline
 }
 
 function Test-ActionableFeedbackItem {
@@ -499,6 +515,7 @@ function Invoke-PrReviewWatcher {
     }
 
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
+        $snapshotStartedAt = [DateTimeOffset]::UtcNow
         $snapshot = Get-PrReviewSnapshot -Repository $state.repository -Number ([int]$state.prNumber) -Hostname ([string]$state.hostname)
         if ([string]::IsNullOrWhiteSpace([string]$state.reviewerLogin)) {
             $candidates = @(Find-NewReviewerCandidates -Baseline $state -Snapshot $snapshot -NotBefore $ReviewRequestedAt -ExcludedLogin ([string]$state.agentLogin))
@@ -553,9 +570,11 @@ function Invoke-PrReviewWatcher {
             return
         }
 
-        if ($ReviewStartGraceSeconds -gt 0 -and
-            -not $outcome.reviewStartedObserved -and
-            [DateTimeOffset]::UtcNow -ge $reviewStartDeadline) {
+        if (Test-ReviewStartGraceExpired `
+            -GraceSeconds $ReviewStartGraceSeconds `
+            -ReviewStartedObserved $outcome.reviewStartedObserved `
+            -SnapshotStartedAt $snapshotStartedAt `
+            -ReviewStartDeadline $reviewStartDeadline) {
             [pscustomobject]@{
                 status = "review_not_started"
                 repository = $state.repository

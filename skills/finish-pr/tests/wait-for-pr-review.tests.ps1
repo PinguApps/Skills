@@ -54,6 +54,12 @@ Assert-Equal $reviewer $bootstrapCandidates[0] "Reviewer bootstrap should normal
 $fallbackRequest = [pscustomobject]@{ id = "fallback-request"; kind = "issue_comment"; authorLogin = "example-agent"; body = "@codex review" }
 $fallbackCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($fallbackRequest)) -ExcludedLogin "example-agent")
 Assert-Equal 0 $fallbackCandidates.Count "Reviewer bootstrap should exclude the authenticated fallback requester."
+$bootstrapBoundary = [DateTimeOffset]::UtcNow
+$earlyHumanComment = [pscustomobject]@{ id = "early-human-comment"; kind = "issue_comment"; authorLogin = "example-human"; body = "Please fix this."; createdAt = $bootstrapBoundary.AddSeconds(-1) }
+$earlyCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($earlyHumanComment)) -NotBefore $bootstrapBoundary)
+Assert-Equal 0 $earlyCandidates.Count "Reviewer bootstrap should exclude feedback created before the pushed-head boundary."
+Assert-Equal $false (Test-ReviewStartGraceExpired -GraceSeconds 30 -ReviewStartedObserved $false -SnapshotStartedAt $bootstrapBoundary.AddSeconds(-1) -ReviewStartDeadline $bootstrapBoundary) "A snapshot started before the grace deadline must not trigger fallback."
+Assert-Equal $true (Test-ReviewStartGraceExpired -GraceSeconds 30 -ReviewStartedObserved $false -SnapshotStartedAt $bootstrapBoundary -ReviewStartDeadline $bootstrapBoundary) "A snapshot started at the grace deadline may trigger fallback."
 
 $comment = [pscustomobject]@{ id = "new-comment"; kind = "thread_comment"; authorLogin = $reviewer; body = "Please fix this." }
 $feedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($comment)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $false
