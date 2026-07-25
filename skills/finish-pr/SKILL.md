@@ -281,7 +281,7 @@ For each action-required review thread or standalone feedback item:
 
 6. Record the one-to-one feedback-unit ID → commit SHA mapping for changed dispositions, plus every disposition, verification, and returned comment ID. Use the thread ID for review threads and the feedback ID for standalone items. Record `no commit — disagreement` for justified disagreements.
 
-The reply helper refuses to mutate when the authenticated user already has a pending review. It submits a review created by the reply and verifies `state != PENDING` plus a non-null `submittedAt`. A helper failure is blocking; a returned comment URL alone is not proof of submission.
+The reply helper uses GitHub's single-comment reply endpoint so it never submits or modifies a shared pending review. It then verifies `state != PENDING` plus a non-null `submittedAt`. A helper failure is blocking; a returned comment URL alone is not proof of submission.
 
 After all replies:
 
