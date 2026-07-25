@@ -255,13 +255,15 @@ After all replies:
    git log --oneline <starting-sha>..HEAD
    git fetch $headPushUrl $pr.headRefName
    $remoteHeadSha = (git rev-parse FETCH_HEAD).Trim()
+   $localHeadSha = (git rev-parse HEAD).Trim()
    $currentPrHeadSha = (gh pr view $prNumber --repo $baseRepository --json headRefOid --jq .headRefOid).Trim()
+   $pushRequired = $localHeadSha -ne $remoteHeadSha
    git status --short --branch
    ```
 
-   Stop if `$remoteHeadSha` and `$currentPrHeadSha` differ, or if the current PR head moved since this run's last observation.
+   Stop if `$remoteHeadSha` and `$currentPrHeadSha` differ, or if the current PR head moved since this run's last observation. Use `$pushRequired`, not the starting-SHA commit range, to decide whether the PR head needs a push; the range is reporting context only.
 
-3. If there are commits to push, increment `$reviewRound` and capture a reviewer baseline immediately before pushing:
+3. If `$pushRequired`, increment `$reviewRound` and capture a reviewer baseline immediately before pushing:
 
    ```powershell
    $reviewRound++
