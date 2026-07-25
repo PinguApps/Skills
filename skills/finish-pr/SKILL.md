@@ -98,7 +98,7 @@ Run this before CI or feedback:
 1. Refresh PR/base metadata and perform a non-mutating local probe:
 
    ```powershell
-   $pr = gh pr view --json number,url,baseRefName,baseRefOid,headRefName,headRefOid,headRepository,headRepositoryOwner,mergeable,mergeStateStatus |
+   $pr = gh pr view $prNumber --repo $baseRepository --json number,url,baseRefName,baseRefOid,headRefName,headRefOid,headRepository,headRepositoryOwner,mergeable,mergeStateStatus |
      ConvertFrom-Json
    git fetch $baseFetchUrl $pr.baseRefName
    $baseCommit = (git rev-parse FETCH_HEAD).Trim()
@@ -121,15 +121,15 @@ Run this before CI or feedback:
 1. Inspect all checks:
 
    ```powershell
-   gh pr checks <pr-number> --json bucket,completedAt,description,event,link,name,startedAt,state,workflow
+   gh pr checks $prNumber --repo $baseRepository --json bucket,completedAt,description,event,link,name,startedAt,state,workflow
    ```
 
 2. For each failure, retrieve the actual logs before editing:
 
    ```powershell
-   gh run list --branch <headRefName> --commit <headRefOid> --json databaseId,name,workflowName,status,conclusion,url,headSha,event,createdAt -L 50
-   gh run view <run-id> --json name,status,conclusion,jobs,url
-   gh run view <run-id> --log-failed
+   gh run list --repo $baseRepository --branch $pr.headRefName --commit $pr.headRefOid --json databaseId,name,workflowName,status,conclusion,url,headSha,event,createdAt -L 50
+   gh run view <run-id> --repo $baseRepository --json name,status,conclusion,jobs,url
+   gh run view <run-id> --repo $baseRepository --log-failed
    ```
 
 3. For non-Actions checks, inspect the provider link or available check details.
@@ -228,7 +228,7 @@ After all replies:
    git log --oneline <starting-sha>..HEAD
    git fetch $headPushUrl $pr.headRefName
    $remoteHeadSha = (git rev-parse FETCH_HEAD).Trim()
-   $currentPrHeadSha = (gh pr view --json headRefOid --jq .headRefOid).Trim()
+   $currentPrHeadSha = (gh pr view $prNumber --repo $baseRepository --json headRefOid --jq .headRefOid).Trim()
    git status --short --branch
    ```
 
