@@ -76,6 +76,13 @@ $changed = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -He
 Assert-Equal "head_changed" $changed.status "An unexpected head change should stop the watcher."
 $prePushHead = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -HeadSha "old-sha") -ExpectedSha "new-sha" -Reviewer $reviewer -BaselineSha "old-sha" -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $prePushHead.status "The watcher should wait while GitHub still reports the pre-push baseline head."
+$expectedHeadObservedBaseline = [pscustomobject]@{
+    seenReactionIds = @()
+    seenFeedbackIds = @()
+    expectedHeadReactionsCaptured = $true
+}
+$restoredBaselineHead = Resolve-ReviewOutcome -Baseline $expectedHeadObservedBaseline -Snapshot (New-Snapshot -HeadSha "old-sha") -ExpectedSha "new-sha" -Reviewer $reviewer -BaselineSha "old-sha" -ReviewStartedObserved $false -ApprovalCandidateObserved $false
+Assert-Equal "head_changed" $restoredBaselineHead.status "Returning to the baseline head after the expected head was observed should stop the watcher."
 
 $racedApprovalState = [pscustomobject]@{
     seenReactionIds = @("old-thumb")

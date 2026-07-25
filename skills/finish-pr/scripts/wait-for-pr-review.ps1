@@ -184,7 +184,11 @@ function Resolve-ReviewOutcome {
     }
 
     if ($Snapshot.pullRequest.headSha -ne $ExpectedSha) {
-        if (-not [string]::IsNullOrWhiteSpace($BaselineSha) -and $Snapshot.pullRequest.headSha -eq $BaselineSha) {
+        $expectedHeadObserved = $Baseline.PSObject.Properties.Name -contains "expectedHeadReactionsCaptured" -and
+            [bool]$Baseline.expectedHeadReactionsCaptured
+        if (-not $expectedHeadObserved -and
+            -not [string]::IsNullOrWhiteSpace($BaselineSha) -and
+            $Snapshot.pullRequest.headSha -eq $BaselineSha) {
             return [pscustomobject]@{ status = "waiting"; reviewStartedObserved = $ReviewStartedObserved; approvalCandidateObserved = $false; newFeedback = @() }
         }
 
