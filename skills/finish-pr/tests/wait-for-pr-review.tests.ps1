@@ -54,6 +54,9 @@ Assert-Equal $reviewer $bootstrapCandidates[0] "Reviewer bootstrap should normal
 $fallbackRequest = [pscustomobject]@{ id = "fallback-request"; kind = "issue_comment"; authorLogin = "example-agent"; body = "@codex review" }
 $fallbackCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($fallbackRequest)) -ExcludedLogin "example-agent")
 Assert-Equal 0 $fallbackCandidates.Count "Reviewer bootstrap should exclude the authenticated fallback requester."
+$unlinkedCodexIssue = [pscustomobject]@{ id = "unlinked-codex-issue"; kind = "issue_comment"; authorLogin = $reviewer; authorType = "Bot"; body = "Please fix this."; createdAt = [DateTimeOffset]::UtcNow }
+$unlinkedIssueCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($unlinkedCodexIssue)))
+Assert-Equal 0 $unlinkedIssueCandidates.Count "Reviewer bootstrap should exclude SHA-less issue comments."
 $humanFeedback = [pscustomobject]@{ id = "human-feedback"; kind = "issue_comment"; authorLogin = "example-human"; body = "Please fix this."; createdAt = [DateTimeOffset]::UtcNow }
 $humanCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($humanFeedback)))
 Assert-Equal 0 $humanCandidates.Count "Reviewer bootstrap should not promote an arbitrary human feedback author."
@@ -214,7 +217,7 @@ $filteredPreReviewIssueComment = Resolve-ReviewOutcome -Baseline $baseline -Snap
 Assert-Equal "waiting" $filteredPreReviewIssueComment.status "An issue comment predating the submitted expected-HEAD review must not become feedback for that HEAD."
 $postReviewIssueComment = [pscustomobject]@{ id = "post-review-issue-comment"; kind = "issue_comment"; authorLogin = $reviewer; body = "Please fix this."; createdAt = $pushCompletedAt.AddSeconds(1) }
 $linkedPostReviewIssueComment = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($expectedHeadReview, $postReviewIssueComment)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewHeadBoundary $pushCompletedAt.AddSeconds(-2) -ReviewStartedObserved $true -ApprovalCandidateObserved $false
-Assert-Equal "feedback" $linkedPostReviewIssueComment.status "An issue comment posted after a submitted expected-HEAD review should remain actionable."
+Assert-Equal "waiting" $linkedPostReviewIssueComment.status "A SHA-less issue comment must remain outside pushed-HEAD watcher feedback and be handled by the standalone audit."
 $oldHeadFeedback = [pscustomobject]@{ id = "old-head-feedback"; kind = "thread_comment"; authorLogin = $reviewer; body = "Please fix this."; createdAt = $pushCompletedAt.AddSeconds(-1) }
 $filteredOldHeadFeedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($oldHeadFeedback)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewHeadBoundary $pushCompletedAt -ReviewStartedObserved $true -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $filteredOldHeadFeedback.status "Feedback predating the expected-HEAD review boundary must be ignored."

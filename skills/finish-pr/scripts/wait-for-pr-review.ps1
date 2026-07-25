@@ -131,6 +131,7 @@ function Find-NewReviewerCandidates {
 
         $Snapshot.feedbackItems | Where-Object {
             $_.id -notin @($Baseline.seenFeedbackIds) -and
+            $_.kind -ne "issue_comment" -and
             (Test-ActionableFeedbackItem $_) -and
             (Test-CodexReviewerEvidence -Login $_.authorLogin -AuthorType $_.authorType) -and
             ($cutoff -eq [DateTimeOffset]::MinValue -or
@@ -425,9 +426,7 @@ function Resolve-ReviewOutcome {
             return $false
         }
 
-        if ($_.kind -eq "issue_comment" -and
-            ([string]::IsNullOrWhiteSpace([string]$_.createdAt) -or
-                (ConvertTo-ReviewTimestamp $_.createdAt) -lt $headLinkedReviewCutoff)) {
+        if ($_.kind -eq "issue_comment") {
             return $false
         }
 
