@@ -238,10 +238,12 @@ function Initialize-ExpectedHeadReactionBaseline {
     }
 
     $normalizedReviewer = Normalize-ReviewerLogin $Reviewer
-    $State.seenReactionIds = @($Snapshot.reactions |
+    $prePushReactionIds = @($Snapshot.reactions |
         Where-Object { Test-ReactionPredatesPush -Reaction $_ -PushCompletedAt $PushCompletedAt } |
         ForEach-Object { $_.id } |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $combinedReactionIds = @($State.seenReactionIds) + $prePushReactionIds
+    $State.seenReactionIds = @($combinedReactionIds | Sort-Object -Unique)
     $State.reviewStartedObserved = [bool]$State.reviewStartedObserved -or @($Snapshot.reactions | Where-Object {
         (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
         $_.content -eq "eyes"
@@ -253,6 +255,27 @@ function Initialize-ExpectedHeadReactionBaseline {
     } else {
         $State | Add-Member -NotePropertyName expectedHeadReactionsCaptured -NotePropertyValue $true
     }
+
+    return $true
+}
+
+function Update-BaselineHeadReactionObservations {
+    param(
+        [Parameter(Mandatory = $true)]$State,
+        [Parameter(Mandatory = $true)]$Snapshot
+    )
+
+    $expectedHeadObserved = $State.PSObject.Properties.Name -contains "expectedHeadReactionsCaptured" -and
+        [bool]$State.expectedHeadReactionsCaptured
+    if ($expectedHeadObserved -or $Snapshot.pullRequest.headSha -ne $State.baselineHeadSha) {
+        return $false
+    }
+
+    $observedIds = @($Snapshot.reactions |
+        ForEach-Object { $_.id } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $combinedIds = @($State.seenReactionIds) + $observedIds
+    $State.seenReactionIds = @($combinedIds | Sort-Object -Unique)
 
     return $true
 }
@@ -321,6 +344,9 @@ function Invoke-PrReviewWatcher {
 
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         $snapshot = Get-PrReviewSnapshot -Repository $state.repository -Number ([int]$state.prNumber)
+        if (Update-BaselineHeadReactionObservations -State $state -Snapshot $snapshot) {
+            Save-ReviewState -State $state -Path $StatePath
+        }
         if (Initialize-ExpectedHeadReactionBaseline -State $state -Snapshot $snapshot -ExpectedSha $ExpectedHeadSha -Reviewer $state.reviewerLogin -PushCompletedAt $PushedAt) {
             Save-ReviewState -State $state -Path $StatePath
         }
