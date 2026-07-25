@@ -286,7 +286,15 @@ After all replies:
    $expectedHeadSha = git rev-parse HEAD
    ```
 
-5. Wait for Codex using the bundled watcher:
+5. Request Codex review for the pushed HEAD unless repository configuration explicitly verifies that every push triggers review automatically. Do not infer automatic review from earlier activity:
+
+   ```powershell
+   gh pr comment $prNumber --repo $baseRepository --body "@codex review"
+   ```
+
+   Request once per pushed HEAD, after the push and before waiting.
+
+6. Wait for Codex using the bundled watcher:
 
    ```powershell
    pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
@@ -299,14 +307,14 @@ After all replies:
 
    Run it as a long-lived tool call. While it runs, use only the environment's wait mechanism and remain silent unless the user interrupts. The watcher keeps repeated polling out of model context.
 
-6. Handle its terminal result:
+7. Handle its terminal result:
    - `feedback`: fetch all feedback for context, but action only IDs in `newFeedback`. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response.
    - `approved`: the same Codex identity produced the stable 👍 signal. Re-fetch checks, PR-body reactions, PR-level feedback, and threads once; finish only if the full definition of done still holds.
    - `timeout`: report that Codex did not reach a terminal state; do not claim readiness.
    - `head_changed`: fetch and inspect the new state. Stop when another actor's push makes continued mutation unsafe.
    - `pr_closed`: stop and report the PR state.
 
-7. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → wait.
+8. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → request review → wait.
 
 If no push is needed, do not trust an existing PR-body reaction because reactions are not linked to commit SHAs. Capture a reviewer baseline for the current HEAD, request a fresh review after that baseline, and run the same watcher against the unchanged HEAD:
 
