@@ -4,6 +4,21 @@ Opinionated skills I use in my setup each day.
 
 ## Skills
 
+### [implement-task-linear](skills/implement-task-linear/)
+
+Implements a Linear issue end to end in the current repository.
+
+The skill:
+
+- Accepts a Linear issue identifier or asks for one.
+- Reads root `PLAN.md` and `CONTEXT.md` when present.
+- Reconciles the issue, surrounding work, and repository state.
+- Implements and verifies every requirement and acceptance criterion.
+- Restricts all Linear access and mutations to the issue's exact team and project.
+- Creates or updates related issues when justified, including moving fully covered
+  issues to In Review.
+- Reports repository drift, verification results, and every Linear mutation.
+
 ### [to-linear](skills/to-linear/)
 
 Turns a project's `PLAN.md` and supporting context into an ordered Linear
