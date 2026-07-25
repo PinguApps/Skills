@@ -72,6 +72,23 @@ Assert-Equal "feedback" $editedFeedback.status "An edited baseline comment shoul
 Assert-Equal 1 $editedFeedback.newFeedback.Count "Edited feedback should be returned once."
 
 $thumb = [pscustomobject]@{ id = "new-thumb"; content = "+1"; authorLogin = "example-codex-reviewer[bot]" }
+$positiveReview = [pscustomobject]@{
+    id = "positive-review"
+    kind = "review"
+    authorLogin = $reviewer
+    body = ""
+    reviewState = "APPROVED"
+}
+$positiveReviewCandidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb) -FeedbackItems @($positiveReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
+Assert-Equal "approval_candidate" $positiveReviewCandidate.status "A non-actionable positive review should not suppress a simultaneous thumbs-up."
+$acknowledgement = [pscustomobject]@{
+    id = "acknowledgement"
+    kind = "issue_comment"
+    authorLogin = $reviewer
+    body = "Looks good."
+}
+Assert-Equal $false (Test-ActionableFeedbackItem $acknowledgement) "A positive acknowledgement should not be actionable feedback."
+
 $candidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $candidate.status "A thumbs-up should become an approval candidate even when no eyes reaction was sampled."
 $approved = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $true

@@ -57,6 +57,32 @@ function Normalize-ReviewerLogin {
     return $Login.Trim().ToLowerInvariant() -replace '\[bot\]$', ''
 }
 
+function Test-ActionableFeedbackItem {
+    param([Parameter(Mandatory = $true)]$Item)
+
+    if ($Item.kind -eq "thread_comment") {
+        return $true
+    }
+
+    $body = [string]$Item.body
+    if ([string]::IsNullOrWhiteSpace($body)) {
+        return $false
+    }
+
+    $trimmedBody = $body.Trim()
+    if ($Item.kind -eq "review") {
+        if ($Item.reviewState -in @("APPROVED", "DISMISSED", "PENDING")) {
+            return $false
+        }
+
+        if ($trimmedBody -match '^###\s+💡\s+Codex Review\b') {
+            return $false
+        }
+    }
+
+    return $trimmedBody -notmatch '^(?:lgtm|looks good(?: to me)?|approved|acknowledged|thanks|thank you|done|👍)[.! ]*$'
+}
+
 function Expand-PaginatedItems {
     param([AllowNull()]$Pages)
 
@@ -127,6 +153,7 @@ function Get-PrReviewSnapshot {
             url = [string]$pr.url
             createdAt = $review.submittedAt
             updatedAt = $review.updatedAt
+            reviewState = [string]$review.state
             threadId = $null
         }
     }
@@ -189,6 +216,10 @@ function Resolve-ReviewOutcome {
     $seenReactionIds = @($Baseline.seenReactionIds)
     $newFeedback = @($Snapshot.feedbackItems | Where-Object {
         if ((Normalize-ReviewerLogin $_.authorLogin) -ne $normalizedReviewer) {
+            return $false
+        }
+
+        if (-not (Test-ActionableFeedbackItem $_)) {
             return $false
         }
 
