@@ -48,7 +48,6 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    git rev-parse HEAD
    gh --version
    gh auth status
-   git fetch origin
    gh pr view --json number,title,url,body,author,headRefName,headRefOid,headRepository,headRepositoryOwner,isCrossRepository,baseRefName,baseRefOid,mergeable,mergeStateStatus,reviews,comments
    ```
 
