@@ -187,8 +187,8 @@ pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber
 
 For each unresolved thread, read all paginated comments in chronological order and classify it:
 
-- **Awaiting reviewer:** the latest relevant comment is an agent response and nobody has replied later. Do nothing. Do not post a reminder, repeat the fix, or duplicate the response.
-- **Action required:** there is reviewer feedback after the agent's latest response, or the agent has never responded.
+- **Awaiting reviewer:** the latest relevant comment is an agent response in a submitted review (`pullRequestReview.state != PENDING` with non-null `submittedAt`) and nobody has replied later. Do nothing. Do not post a reminder, repeat the fix, or duplicate the response.
+- **Action required:** there is reviewer feedback after the agent's latest submitted response, the agent has never responded, or its latest response exists only in a pending review.
 - **Superseded/non-actionable:** the later conversation explicitly withdraws, answers, or supersedes the point. Reply only if the thread still needs an agent acknowledgement; avoid duplicating an existing agent response.
 
 Within action-required threads, identify each distinct feedback item. Judge it against the user's intent, conversation history, repository rules, linked requirements, PR scope, current code, conventions, and tests:
@@ -249,7 +249,8 @@ After all replies:
 
 1. Re-fetch all threads with `-All`.
 2. Verify every reply created in this run belongs to a submitted review.
-3. Compare all thread IDs and `isResolved` values with the baseline. They must be unchanged. If external state changed, report it; never mutate it back.
+3. Verify the authenticated user has no pending review on the PR, including reviews created before this run.
+4. Compare all thread IDs and `isResolved` values with the baseline. They must be unchanged. If external state changed, report it; never mutate it back.
 
 ## 6. Push and converge with Codex
 

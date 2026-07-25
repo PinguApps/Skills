@@ -257,12 +257,17 @@ function Resolve-ReviewOutcome {
         return [pscustomobject]@{ status = "feedback"; reviewStartedObserved = $ReviewStartedObserved; approvalCandidateObserved = $false; newFeedback = $newFeedback }
     }
 
+    $reviewRequestCutoff = if ($ReviewRequestedAt -eq [DateTimeOffset]::MinValue) {
+        [DateTimeOffset]::MinValue
+    } else {
+        $ReviewRequestedAt.AddTicks(-($ReviewRequestedAt.Ticks % [TimeSpan]::TicksPerSecond))
+    }
     $newReviewerReactions = @($Snapshot.reactions | Where-Object {
         (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
         $_.id -notin $seenReactionIds -and
-        ($ReviewRequestedAt -eq [DateTimeOffset]::MinValue -or
+        ($reviewRequestCutoff -eq [DateTimeOffset]::MinValue -or
             (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
-                [DateTimeOffset]$_.createdAt -ge $ReviewRequestedAt))
+                [DateTimeOffset]$_.createdAt -ge $reviewRequestCutoff))
     })
     $hasEyes = @($newReviewerReactions | Where-Object { $_.content -eq "eyes" }).Count -gt 0
     $hasThumbsUp = @($newReviewerReactions | Where-Object { $_.content -eq "+1" }).Count -gt 0
@@ -351,7 +356,13 @@ function Invoke-PrReviewWatcher {
             $script:Repository = "$($repo.owner.login)/$($repo.name)"
         }
         if ($PrNumber -le 0) {
-            $pr = Invoke-GhJson @("pr", "view", "--repo", $Repository, "--json", "number")
+            $repositorySelector = if ([string]::IsNullOrWhiteSpace($Hostname) -or
+                $Repository.StartsWith("$Hostname/", [StringComparison]::OrdinalIgnoreCase)) {
+                $Repository
+            } else {
+                "$Hostname/$Repository"
+            }
+            $pr = Invoke-GhJson @("pr", "view", "--repo", $repositorySelector, "--json", "number")
             $script:PrNumber = [int]$pr.number
         }
 

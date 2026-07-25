@@ -149,6 +149,9 @@ Assert-Equal $true $racedApprovalState.reviewStartedObserved "The refreshed base
 Assert-Equal 1 $racedApprovalState.seenReactionIds.Count "Expected-head initialization should preserve only reactions observed on the baseline head."
 $racedApproval = Resolve-ReviewOutcome -Baseline $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewStartedObserved $racedApprovalState.reviewStartedObserved -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $racedApproval.status "A thumbs-up predating the review request must not approve the expected head."
+$sameSecondThumb = [pscustomobject]@{ id = "same-second-thumb"; content = "+1"; authorLogin = $reviewer; createdAt = $pushCompletedAt.AddTicks(-($pushCompletedAt.Ticks % [TimeSpan]::TicksPerSecond)) }
+$sameSecondApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewStartedObserved $false -ApprovalCandidateObserved $false
+Assert-Equal "approval_candidate" $sameSecondApproval.status "A thumbs-up rounded to the request's whole second should remain eligible."
 $initializedAgain = Initialize-ExpectedHeadReactionBaseline -State $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer
 Assert-Equal $false $initializedAgain "The expected-head reaction baseline should initialize only once."
 
@@ -206,6 +209,27 @@ try {
     Invoke-PrReviewWatcher | Out-Null
     $capturedBaseline = Get-Content -Raw -LiteralPath $baselinePath | ConvertFrom-Json -Depth 100
     Assert-Equal $true $capturedBaseline.reviewStartedObserved "Baseline capture should preserve an existing reviewer start reaction."
+}
+finally {
+    Remove-Item -LiteralPath $baselinePath -ErrorAction SilentlyContinue
+}
+
+$script:CapturedGhArgs = @()
+function Invoke-GhJson {
+    param([string[]]$GhArgs)
+    $script:CapturedGhArgs = $GhArgs
+    return [pscustomobject]@{ number = 25 }
+}
+
+try {
+    $CaptureBaseline = $true
+    $StatePath = $baselinePath
+    $PrNumber = 0
+    $Repository = "example-owner/example-repository"
+    $Hostname = "ghe.example"
+    $ReviewerLogin = $reviewer
+    Invoke-PrReviewWatcher | Out-Null
+    Assert-Equal "pr view --repo ghe.example/example-owner/example-repository --json number" ($script:CapturedGhArgs -join " ") "PR discovery should retain the supplied hostname."
 }
 finally {
     Remove-Item -LiteralPath $baselinePath -ErrorAction SilentlyContinue
