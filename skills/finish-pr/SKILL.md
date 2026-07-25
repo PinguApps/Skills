@@ -368,6 +368,7 @@ After all replies:
 
 7. Handle its terminal result:
    - `feedback`: fetch all feedback for context, but action only IDs in `newFeedback`. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response.
+   - `standalone_feedback`: re-fetch PR-level reviews and issue comments, then classify and action only standalone IDs in `newFeedback`. This signal wakes the audit without treating SHA-less issue comments as feedback tied to the pushed HEAD.
    - `approved`: the same Codex identity produced the stable 👍 signal. Re-fetch checks, PR-body reactions, PR-level feedback, and threads once; finish only if the full definition of done still holds.
    - `review_not_started`: post the single fallback `@codex review` comment, then resume step 6.
    - `reviewer_ambiguous`: stop and ask the user which fresh identity is Codex.

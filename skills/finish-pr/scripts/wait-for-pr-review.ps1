@@ -460,6 +460,26 @@ function Resolve-ReviewOutcome {
         return [pscustomobject]@{ status = "feedback"; reviewStartedObserved = $ReviewStartedObserved; approvalCandidateObserved = $false; newFeedback = $newFeedback }
     }
 
+    $newStandaloneFeedback = @($Snapshot.feedbackItems | Where-Object {
+        if ($_.kind -ne "issue_comment" -or
+            (Normalize-ReviewerLogin $_.authorLogin) -ne $normalizedReviewer -or
+            -not (Test-ActionableFeedbackItem $_)) {
+            return $false
+        }
+
+        if ($_.id -notin $seenFeedbackIds) {
+            return $true
+        }
+
+        $seenVersion = $seenFeedbackVersions | Where-Object id -eq $_.id | Select-Object -First 1
+        return $null -ne $seenVersion -and
+            ([string]$_.updatedAt -ne [string]$seenVersion.updatedAt -or
+                [string]$_.body -ne [string]$seenVersion.body)
+    })
+    if ($newStandaloneFeedback.Count -gt 0) {
+        return [pscustomobject]@{ status = "standalone_feedback"; reviewStartedObserved = $ReviewStartedObserved; approvalCandidateObserved = $false; newFeedback = $newStandaloneFeedback }
+    }
+
     $reviewRequestCutoff = if ($ReviewRequestedAt -eq [DateTimeOffset]::MinValue) {
         [DateTimeOffset]::MinValue
     } else {
@@ -757,7 +777,7 @@ function Invoke-PrReviewWatcher {
         $state.approvalCandidateObserved = $outcome.approvalCandidateObserved
         Save-ReviewState -State $state -Path $StatePath
 
-        if ($outcome.status -in @("feedback", "approved", "head_changed", "pr_closed")) {
+        if ($outcome.status -in @("feedback", "standalone_feedback", "approved", "head_changed", "pr_closed")) {
             [pscustomobject]@{
                 status = $outcome.status
                 repository = $state.repository

@@ -214,10 +214,10 @@ $filteredStaleReviewBody = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (
 Assert-Equal "waiting" $filteredStaleReviewBody.status "A review body submitted for another HEAD must not become feedback for the pushed HEAD."
 $preReviewIssueComment = [pscustomobject]@{ id = "pre-review-issue-comment"; kind = "issue_comment"; authorLogin = $reviewer; body = "Please fix this."; createdAt = $pushCompletedAt.AddSeconds(-1) }
 $filteredPreReviewIssueComment = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($expectedHeadReview, $preReviewIssueComment)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewHeadBoundary $pushCompletedAt.AddSeconds(-2) -ReviewStartedObserved $true -ApprovalCandidateObserved $false
-Assert-Equal "waiting" $filteredPreReviewIssueComment.status "An issue comment predating the submitted expected-HEAD review must not become feedback for that HEAD."
+Assert-Equal "standalone_feedback" $filteredPreReviewIssueComment.status "A new issue comment should wake a standalone audit without becoming pushed-HEAD feedback."
 $postReviewIssueComment = [pscustomobject]@{ id = "post-review-issue-comment"; kind = "issue_comment"; authorLogin = $reviewer; body = "Please fix this."; createdAt = $pushCompletedAt.AddSeconds(1) }
 $linkedPostReviewIssueComment = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($expectedHeadReview, $postReviewIssueComment)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewHeadBoundary $pushCompletedAt.AddSeconds(-2) -ReviewStartedObserved $true -ApprovalCandidateObserved $false
-Assert-Equal "waiting" $linkedPostReviewIssueComment.status "A SHA-less issue comment must remain outside pushed-HEAD watcher feedback and be handled by the standalone audit."
+Assert-Equal "standalone_feedback" $linkedPostReviewIssueComment.status "A SHA-less issue comment should wake the standalone audit regardless of review timing."
 $oldHeadFeedback = [pscustomobject]@{ id = "old-head-feedback"; kind = "thread_comment"; authorLogin = $reviewer; body = "Please fix this."; createdAt = $pushCompletedAt.AddSeconds(-1) }
 $filteredOldHeadFeedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($oldHeadFeedback)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewHeadBoundary $pushCompletedAt -ReviewStartedObserved $true -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $filteredOldHeadFeedback.status "Feedback predating the expected-HEAD review boundary must be ignored."
