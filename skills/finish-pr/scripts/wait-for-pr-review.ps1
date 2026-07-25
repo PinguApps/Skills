@@ -21,6 +21,9 @@ param(
     [Parameter(ParameterSetName = "Capture")]
     [string]$Hostname,
 
+    [Parameter(ParameterSetName = "Capture")]
+    [switch]$PreserveExistingReviewStart,
+
     [Parameter(Mandatory = $true, ParameterSetName = "Wait")]
     [string]$ExpectedHeadSha,
 
@@ -554,6 +557,21 @@ function Invoke-PrReviewWatcher {
 
         $snapshot = Get-PrReviewSnapshot -Repository $Repository -Number $PrNumber -Hostname $Hostname
         $normalizedReviewer = Normalize-ReviewerLogin $ReviewerLogin
+        $existingReviewStartReactions = @($snapshot.reactions | Where-Object {
+            (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
+            $_.content -eq "eyes" -and
+            -not [string]::IsNullOrWhiteSpace([string]$_.createdAt)
+        })
+        $existingReviewBoundary = if ($PreserveExistingReviewStart -and
+            $existingReviewStartReactions.Count -gt 0) {
+            $earliestExistingReviewStart = [DateTimeOffset]($existingReviewStartReactions |
+                ForEach-Object { [DateTimeOffset]$_.createdAt } |
+                Sort-Object |
+                Select-Object -First 1)
+            $earliestExistingReviewStart.ToString("o")
+        } else {
+            $null
+        }
         $viewerArgs = @("api")
         if (-not [string]::IsNullOrWhiteSpace($routing.hostname)) {
             $viewerArgs += @("--hostname", $routing.hostname)
@@ -578,10 +596,11 @@ function Invoke-PrReviewWatcher {
                     body = [string]$_.body
                 }
             })
-            reviewStartedObserved = $false
+            reviewStartedObserved = [bool]$PreserveExistingReviewStart -and
+                $existingReviewStartReactions.Count -gt 0
             approvalCandidateObserved = $false
             expectedHeadReactionsCaptured = $false
-            reviewHeadBoundary = $null
+            reviewHeadBoundary = $existingReviewBoundary
         }
         Save-ReviewState -State $state -Path $StatePath
 

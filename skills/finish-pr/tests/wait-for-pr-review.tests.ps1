@@ -252,10 +252,26 @@ try {
     $StatePath = $baselinePath
     $PrNumber = 25
     $ReviewerLogin = $reviewer
+    $PreserveExistingReviewStart = $false
     Invoke-PrReviewWatcher | Out-Null
     $capturedBaseline = Get-Content -Raw -LiteralPath $baselinePath | ConvertFrom-Json -Depth 100
     Assert-Equal $false $capturedBaseline.reviewStartedObserved "Baseline capture should not treat a pre-existing start reaction as evidence for the next HEAD."
     Assert-Equal "github.example" $capturedBaseline.hostname "Repository inference should preserve the URL authority."
+}
+finally {
+    Remove-Item -LiteralPath $baselinePath -ErrorAction SilentlyContinue
+}
+
+try {
+    $CaptureBaseline = $true
+    $StatePath = $baselinePath
+    $PrNumber = 25
+    $ReviewerLogin = $reviewer
+    $PreserveExistingReviewStart = $true
+    Invoke-PrReviewWatcher | Out-Null
+    $ongoingReviewBaseline = Get-Content -Raw -LiteralPath $baselinePath | ConvertFrom-Json -Depth 100
+    Assert-Equal $true $ongoingReviewBaseline.reviewStartedObserved "No-push capture should preserve an existing review-start reaction when requested."
+    Assert-Equal ([DateTimeOffset]"2026-01-01T00:00:00Z") ([DateTimeOffset]$ongoingReviewBaseline.reviewHeadBoundary) "No-push capture should preserve the ongoing review boundary."
 }
 finally {
     Remove-Item -LiteralPath $baselinePath -ErrorAction SilentlyContinue

@@ -362,6 +362,7 @@ $reviewRound++
 $reviewState = Join-Path $runStateDirectory ("review-round-{0}.json" -f $reviewRound)
 pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -CaptureBaseline `
+  -PreserveExistingReviewStart `
   -StatePath $reviewState `
   -PrNumber $prNumber `
   -Repository $baseRepository `
