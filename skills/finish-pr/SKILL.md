@@ -279,7 +279,22 @@ After all replies:
 If no push is needed, do not trust an existing PR-body reaction because reactions are not linked to commit SHAs. Capture a reviewer baseline for the current HEAD, request a fresh review after that baseline, and run the same watcher against the unchanged HEAD:
 
 ```powershell
+$expectedHeadSha = (git rev-parse HEAD).Trim()
+$reviewRound++
+$reviewState = Join-Path $runStateDirectory ("review-round-{0}.json" -f $reviewRound)
+pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
+  -CaptureBaseline `
+  -StatePath $reviewState `
+  -PrNumber $prNumber `
+  -Repository $baseRepository `
+  -ReviewerLogin "<discovered-codex-login>"
 gh pr comment $prNumber --repo $baseRepository --body "@codex review"
+pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
+  -Wait `
+  -StatePath $reviewState `
+  -ExpectedHeadSha $expectedHeadSha `
+  -TimeoutMinutes 25 `
+  -PollSeconds 20
 ```
 
 Only feedback or a stable 👍 produced after this baseline is head-linked evidence. Process new feedback normally; never accept a reaction already present at baseline as approval for the current HEAD.
