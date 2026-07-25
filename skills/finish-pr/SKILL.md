@@ -276,7 +276,13 @@ After all replies:
 
 7. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → wait.
 
-If no push is needed, still verify that a current 👍 from the discovered Codex identity exists on the PR body and that no later Codex feedback requires action. An old approval cannot satisfy a newer pushed HEAD.
+If no push is needed, do not trust an existing PR-body reaction because reactions are not linked to commit SHAs. Capture a reviewer baseline for the current HEAD, request a fresh review after that baseline, and run the same watcher against the unchanged HEAD:
+
+```powershell
+gh pr comment $prNumber --repo $baseRepository --body "@codex review"
+```
+
+Only feedback or a stable 👍 produced after this baseline is head-linked evidence. Process new feedback normally; never accept a reaction already present at baseline as approval for the current HEAD.
 
 Bound convergence to five pushed review rounds or two hours overall. Stop earlier for approval, timeout, closure, unexpected head movement, or a genuine blocker.
 
