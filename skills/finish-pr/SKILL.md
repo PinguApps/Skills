@@ -377,7 +377,7 @@ After all replies:
 
 8. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → automatic-review grace period → wait.
 
-If no push is needed, never post `@codex review`: the fallback is only permitted after this run pushes a new HEAD. If the PR already has a Codex 👍, the HEAD has remained unchanged since the run began, and there is no later unaddressed Codex feedback, accept that stable reaction during the final audit. Otherwise wait read-only for an already-running review and stop on timeout without posting a trigger.
+If no push is needed, never post `@codex review`: the fallback is only permitted after this run pushes a new HEAD. A pre-existing Codex 👍 is not sufficient by itself, even when the HEAD remained unchanged during this run. Accept it only when the same Codex identity has a submitted review whose `commit_id` equals the current HEAD and the reaction was created at or after that review, or when retained run evidence already records that exact SHA linkage. Also require no later unaddressed Codex feedback. Otherwise wait read-only for an already-running review and stop on timeout without posting a trigger.
 
 ```powershell
 $expectedHeadSha = (git rev-parse HEAD).Trim()
@@ -402,7 +402,7 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
 
 The unchanged-HEAD path deliberately has no new request-time cutoff. The captured IDs exclude old reactions, while the preserved 👀 boundary links any later 👍 to the ongoing review and allows a reaction created during baseline capture to be observed.
 
-After a push, a fresh 👀 observed with the expected HEAD establishes the review boundary. Only feedback or a stable 👍 at or after that boundary is head-linked evidence; the pre-push timestamp alone is insufficient. Without a push, an existing 👍 is acceptable only under the unchanged-HEAD and no-later-pushback rule above. Never use the fallback comment without a preceding push from this run.
+After a push, a fresh 👀 observed with the expected HEAD establishes the review boundary. Only feedback tied to that HEAD or a stable 👍 at or after a submitted expected-HEAD review is head-linked evidence; the pre-push timestamp and reaction alone are insufficient. Without a push, apply the same submitted-review or retained-evidence linkage rule above. Never use the fallback comment without a preceding push from this run.
 
 Bound convergence to five pushed review rounds or two hours overall. Stop earlier for approval, timeout, closure, unexpected head movement, or a genuine blocker.
 
