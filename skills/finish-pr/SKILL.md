@@ -374,15 +374,16 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -Repository $baseRepository `
   -Hostname $githubHostname `
   -ReviewerLogin $codexReviewerLogin
-$reviewRequestedAt = [DateTimeOffset]::UtcNow
 pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -Wait `
   -StatePath $reviewState `
   -ExpectedHeadSha $expectedHeadSha `
-  -ReviewRequestedAt $reviewRequestedAt `
+  -ReviewRequestedAt ([DateTimeOffset]::MinValue) `
   -TimeoutMinutes 25 `
   -PollSeconds 20
 ```
+
+The unchanged-HEAD path deliberately has no new request-time cutoff. The captured IDs exclude old reactions, while the preserved 👀 boundary links any later 👍 to the ongoing review and allows a reaction created during baseline capture to be observed.
 
 After a push, a fresh 👀 observed with the expected HEAD establishes the review boundary. Only feedback or a stable 👍 at or after that boundary is head-linked evidence; the pre-push timestamp alone is insufficient. Without a push, an existing 👍 is acceptable only under the unchanged-HEAD and no-later-pushback rule above. Never use the fallback comment without a preceding push from this run.
 
