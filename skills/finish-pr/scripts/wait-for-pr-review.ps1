@@ -399,7 +399,7 @@ function Resolve-ReviewOutcome {
             return $false
         }
 
-        if ($_.kind -eq "thread_comment" -and
+        if ($_.kind -in @("thread_comment", "review") -and
             -not [string]::IsNullOrWhiteSpace([string]$_.headSha) -and
             $_.headSha -ne $ExpectedSha) {
             return $false
