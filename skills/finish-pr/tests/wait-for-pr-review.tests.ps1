@@ -34,6 +34,7 @@ $baseline = [pscustomobject]@{
     seenFeedbackIds = @("old-comment")
 }
 $reviewer = "example-codex-reviewer"
+Assert-Equal "example-codex-reviewer" (Normalize-ReviewerLogin "Example-Codex-Reviewer[BOT]") "Reviewer normalization should strip bot suffixes case-insensitively."
 
 $waiting = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $waiting.status "A review without new signals should wait."

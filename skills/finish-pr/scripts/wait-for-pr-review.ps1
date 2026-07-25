@@ -54,7 +54,7 @@ function Normalize-ReviewerLogin {
         return ""
     }
 
-    return ($Login.Trim() -replace '\[bot\]$', '').ToLowerInvariant()
+    return $Login.Trim().ToLowerInvariant() -replace '\[bot\]$', ''
 }
 
 function Expand-PaginatedItems {
