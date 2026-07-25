@@ -20,9 +20,6 @@ param(
     [Parameter(Mandatory = $true, ParameterSetName = "Wait")]
     [string]$ExpectedHeadSha,
 
-    [Parameter(Mandatory = $true, ParameterSetName = "Wait")]
-    [DateTimeOffset]$PushedAt,
-
     [Parameter(ParameterSetName = "Wait")]
     [ValidateRange(1, 120)]
     [int]$TimeoutMinutes = 25,
@@ -68,25 +65,6 @@ function Expand-PaginatedItems {
             $item
         }
     }
-}
-
-function Test-ReactionPredatesPush {
-    param(
-        [Parameter(Mandatory = $true)]$Reaction,
-        [Parameter(Mandatory = $true)][DateTimeOffset]$PushCompletedAt
-    )
-
-    if ($null -eq $Reaction.createdAt) {
-        return $true
-    }
-
-    try {
-        $createdAt = [DateTimeOffset]$Reaction.createdAt
-    } catch {
-        return $true
-    }
-
-    return $createdAt -le $PushCompletedAt
 }
 
 function Get-PrReviewSnapshot {
@@ -255,8 +233,7 @@ function Initialize-ExpectedHeadReactionBaseline {
         [Parameter(Mandatory = $true)]$State,
         [Parameter(Mandatory = $true)]$Snapshot,
         [Parameter(Mandatory = $true)][string]$ExpectedSha,
-        [Parameter(Mandatory = $true)][string]$Reviewer,
-        [Parameter(Mandatory = $true)][DateTimeOffset]$PushCompletedAt
+        [Parameter(Mandatory = $true)][string]$Reviewer
     )
 
     $alreadyInitialized = $State.PSObject.Properties.Name -contains "expectedHeadReactionsCaptured" -and
@@ -266,12 +243,6 @@ function Initialize-ExpectedHeadReactionBaseline {
     }
 
     $normalizedReviewer = Normalize-ReviewerLogin $Reviewer
-    $prePushReactionIds = @($Snapshot.reactions |
-        Where-Object { Test-ReactionPredatesPush -Reaction $_ -PushCompletedAt $PushCompletedAt } |
-        ForEach-Object { $_.id } |
-        Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    $combinedReactionIds = @($State.seenReactionIds) + $prePushReactionIds
-    $State.seenReactionIds = @($combinedReactionIds | Sort-Object -Unique)
     $State.reviewStartedObserved = [bool]$State.reviewStartedObserved -or @($Snapshot.reactions | Where-Object {
         (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
         $_.content -eq "eyes"
@@ -384,7 +355,7 @@ function Invoke-PrReviewWatcher {
         if (Update-BaselineHeadReactionObservations -State $state -Snapshot $snapshot) {
             Save-ReviewState -State $state -Path $StatePath
         }
-        if (Initialize-ExpectedHeadReactionBaseline -State $state -Snapshot $snapshot -ExpectedSha $ExpectedHeadSha -Reviewer $state.reviewerLogin -PushCompletedAt $PushedAt) {
+        if (Initialize-ExpectedHeadReactionBaseline -State $state -Snapshot $snapshot -ExpectedSha $ExpectedHeadSha -Reviewer $state.reviewerLogin) {
             Save-ReviewState -State $state -Path $StatePath
         }
         $outcome = Resolve-ReviewOutcome `

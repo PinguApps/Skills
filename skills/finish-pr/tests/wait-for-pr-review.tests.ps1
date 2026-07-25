@@ -3,8 +3,7 @@ $ErrorActionPreference = "Stop"
 . "$PSScriptRoot\..\scripts\wait-for-pr-review.ps1" `
     -Wait `
     -StatePath "unused-test-state.json" `
-    -ExpectedHeadSha "unused-test-sha" `
-    -PushedAt ([DateTimeOffset]::UtcNow)
+    -ExpectedHeadSha "unused-test-sha"
 
 function Assert-Equal {
     param($Expected, $Actual, [string]$Message)
@@ -108,30 +107,17 @@ $racedApprovalState = [pscustomobject]@{
     reviewStartedObserved = $false
     approvalCandidateObserved = $false
 }
-$racedApprovalSnapshot = New-Snapshot -Reactions @($eyes, $thumb)
 $pushCompletedAt = [DateTimeOffset]::UtcNow
-$initialized = Initialize-ExpectedHeadReactionBaseline -State $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -PushCompletedAt $pushCompletedAt
+$earlyExpectedHeadThumb = [pscustomobject]@{ id = "early-expected-head-thumb"; content = "+1"; authorLogin = $reviewer; createdAt = $pushCompletedAt.AddSeconds(-1) }
+$racedApprovalSnapshot = New-Snapshot -Reactions @($eyes, $earlyExpectedHeadThumb)
+$initialized = Initialize-ExpectedHeadReactionBaseline -State $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer
 Assert-Equal $true $initialized "The expected head should refresh the reaction baseline once."
 Assert-Equal $true $racedApprovalState.reviewStartedObserved "The refreshed baseline should preserve a review start reaction."
-Assert-Equal 3 $racedApprovalState.seenReactionIds.Count "The refreshed baseline should preserve old reactions and consume reactions that raced the push."
+Assert-Equal 1 $racedApprovalState.seenReactionIds.Count "Expected-head initialization should preserve only reactions observed on the baseline head."
 $racedApproval = Resolve-ReviewOutcome -Baseline $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $racedApprovalState.reviewStartedObserved -ApprovalCandidateObserved $false
-Assert-Equal "waiting" $racedApproval.status "An approval present before the pushed head was observed must not approve it."
-$initializedAgain = Initialize-ExpectedHeadReactionBaseline -State $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -PushCompletedAt $pushCompletedAt
+Assert-Equal "approval_candidate" $racedApproval.status "An unseen approval first observed with the expected head should remain eligible even if it predates local push completion."
+$initializedAgain = Initialize-ExpectedHeadReactionBaseline -State $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer
 Assert-Equal $false $initializedAgain "The expected-head reaction baseline should initialize only once."
-
-$prePushEyes = [pscustomobject]@{ id = "pre-push-eyes"; content = "eyes"; authorLogin = $reviewer; createdAt = $pushCompletedAt.AddSeconds(-1) }
-$postPushThumb = [pscustomobject]@{ id = "post-push-thumb"; content = "+1"; authorLogin = $reviewer; createdAt = $pushCompletedAt.AddSeconds(1) }
-$postPushApprovalState = [pscustomobject]@{
-    seenReactionIds = @()
-    seenFeedbackIds = @()
-    reviewStartedObserved = $false
-    approvalCandidateObserved = $false
-}
-$postPushApprovalSnapshot = New-Snapshot -Reactions @($prePushEyes, $postPushThumb)
-$null = Initialize-ExpectedHeadReactionBaseline -State $postPushApprovalState -Snapshot $postPushApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -PushCompletedAt $pushCompletedAt
-Assert-Equal 1 $postPushApprovalState.seenReactionIds.Count "Expected-head initialization should consume only pre-push reactions."
-$postPushApproval = Resolve-ReviewOutcome -Baseline $postPushApprovalState -Snapshot $postPushApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $postPushApprovalState.reviewStartedObserved -ApprovalCandidateObserved $false
-Assert-Equal "approval_candidate" $postPushApproval.status "A post-push approval should remain visible after expected-head initialization."
 
 $propagationState = [pscustomobject]@{
     baselineHeadSha = "old-sha"
@@ -147,7 +133,7 @@ $propagationUpdated = Update-BaselineHeadReactionObservations -State $propagatio
 Assert-Equal $true $propagationUpdated "Reactions observed while the baseline head is current should update the baseline."
 Assert-Equal 2 $propagationState.seenReactionIds.Count "The baseline should retain newly observed old-head reactions."
 $newHeadAfterPropagation = New-Snapshot -HeadSha "new-sha" -Reactions @($propagationThumb)
-$null = Initialize-ExpectedHeadReactionBaseline -State $propagationState -Snapshot $newHeadAfterPropagation -ExpectedSha "new-sha" -Reviewer $reviewer -PushCompletedAt $pushCompletedAt
+$null = Initialize-ExpectedHeadReactionBaseline -State $propagationState -Snapshot $newHeadAfterPropagation -ExpectedSha "new-sha" -Reviewer $reviewer
 $stalePropagationApproval = Resolve-ReviewOutcome -Baseline $propagationState -Snapshot $newHeadAfterPropagation -ExpectedSha "new-sha" -Reviewer $reviewer -BaselineSha "old-sha" -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $stalePropagationApproval.status "A reaction first observed on the baseline head must not approve the expected head."
 

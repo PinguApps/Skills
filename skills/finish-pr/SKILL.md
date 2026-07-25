@@ -247,11 +247,10 @@ After all replies:
      -ReviewerLogin "<discovered-codex-login>"
    ```
 
-4. Push without force and record the exact HEAD and push completion time:
+4. Push without force and record the exact HEAD:
 
    ```powershell
    git push $headPushUrl "HEAD:refs/heads/$($pr.headRefName)"
-   $pushedAt = [DateTimeOffset]::UtcNow
    $expectedHeadSha = git rev-parse HEAD
    ```
 
@@ -259,11 +258,10 @@ After all replies:
 
    ```powershell
    pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
-     -Wait `
-     -StatePath $reviewState `
-     -ExpectedHeadSha $expectedHeadSha `
-     -PushedAt $pushedAt `
-     -TimeoutMinutes 25 `
+      -Wait `
+      -StatePath $reviewState `
+      -ExpectedHeadSha $expectedHeadSha `
+      -TimeoutMinutes 25 `
      -PollSeconds 20
    ```
 
