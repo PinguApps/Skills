@@ -98,6 +98,7 @@ query($owner:String!, $name:String!, $number:Int!, $after:String) {
               body
               author {
                 login
+                __typename
               }
               createdAt
               updatedAt
@@ -165,6 +166,7 @@ query($threadId:ID!, $after:String) {
           body
           author {
             login
+            __typename
           }
           createdAt
           updatedAt

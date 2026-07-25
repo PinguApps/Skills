@@ -44,7 +44,7 @@ $expandedReactions = @(Expand-PaginatedItems $reactionPages)
 Assert-Equal 2 $expandedReactions.Count "Paginated reaction pages should flatten into one collection."
 Assert-Equal "page-two" $expandedReactions[1].id "Paginated reactions should preserve later pages."
 
-$eyes = [pscustomobject]@{ id = "new-eyes"; content = "eyes"; authorLogin = "example-codex-reviewer[bot]" }
+$eyes = [pscustomobject]@{ id = "new-eyes"; content = "eyes"; authorLogin = "example-codex-reviewer[bot]"; authorType = "Organization" }
 $started = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($eyes)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $started.status "Seeing eyes should keep waiting."
 Assert-Equal $true $started.reviewStartedObserved "Seeing eyes should record that review started."
@@ -272,7 +272,7 @@ $hostQualifiedRouting = Resolve-RepositoryRouting -Repository "ghe.example/examp
 Assert-Equal "ghe.example" $hostQualifiedRouting.hostname "A host-qualified repository should supply the API hostname."
 Assert-Equal "example-owner/example-repository" $hostQualifiedRouting.apiRepository "API routing should strip the hostname from the repository path."
 Assert-Equal "ghe.example/example-owner/example-repository" $hostQualifiedRouting.selector "The CLI selector should retain the hostname."
-Assert-Equal $true (Test-CodexReviewerEvidence -Login "chatgpt-codex-connector") "A recognizable Codex service login should establish identity evidence."
-Assert-Equal $false (Test-CodexReviewerEvidence -Login "example-human") "An arbitrary human login should not establish Codex identity evidence."
+Assert-Equal $true (Test-CodexReviewerEvidence -Login "chatgpt-codex-connector" -AuthorType "Organization") "A recognizable non-user Codex service identity should establish evidence."
+Assert-Equal $false (Test-CodexReviewerEvidence -Login "human-codex-reviewer" -AuthorType "User") "A user-controlled Codex-like login should not establish identity evidence."
 
 Write-Output "All wait-for-pr-review tests passed."

@@ -71,12 +71,12 @@ function Normalize-ReviewerLogin {
 function Test-CodexReviewerEvidence {
     param(
         [AllowNull()][string]$Login,
-        [AllowNull()][string]$Body
+        [AllowNull()][string]$AuthorType
     )
 
     $normalizedLogin = Normalize-ReviewerLogin $Login
-    return $normalizedLogin -match '(?i)(?:^|[-_])codex(?:$|[-_])' -or
-        [string]$Body -match '(?i)\bCodex Review\b'
+    return $normalizedLogin -match '(?i)(?:^|[-_])codex(?:$|[-_])' -and
+        $AuthorType -in @("App", "Bot", "Organization")
 }
 
 function Find-NewReviewerCandidates {
@@ -102,7 +102,7 @@ function Find-NewReviewerCandidates {
         $Snapshot.reactions | Where-Object {
             $_.id -notin @($Baseline.seenReactionIds) -and
             $_.content -in @("eyes", "+1") -and
-            (Test-CodexReviewerEvidence -Login $_.authorLogin) -and
+            (Test-CodexReviewerEvidence -Login $_.authorLogin -AuthorType $_.authorType) -and
             ($cutoff -eq [DateTimeOffset]::MinValue -or
                 (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
                     [DateTimeOffset]$_.createdAt -ge $cutoff))
@@ -111,7 +111,7 @@ function Find-NewReviewerCandidates {
         $Snapshot.feedbackItems | Where-Object {
             $_.id -notin @($Baseline.seenFeedbackIds) -and
             (Test-ActionableFeedbackItem $_) -and
-            (Test-CodexReviewerEvidence -Login $_.authorLogin -Body $_.body) -and
+            (Test-CodexReviewerEvidence -Login $_.authorLogin -AuthorType $_.authorType) -and
             ($cutoff -eq [DateTimeOffset]::MinValue -or
                 (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
                     [DateTimeOffset]$_.createdAt -ge $cutoff))
@@ -244,6 +244,7 @@ function Get-PrReviewSnapshot {
                 id = [string]$comment.id
                 kind = "thread_comment"
                 authorLogin = [string]$comment.author.login
+                authorType = [string]$comment.author.__typename
                 body = [string]$comment.body
                 url = [string]$comment.url
                 createdAt = $comment.createdAt
@@ -258,6 +259,7 @@ function Get-PrReviewSnapshot {
             id = [string]$comment.node_id
             kind = "issue_comment"
             authorLogin = [string]$comment.user.login
+            authorType = [string]$comment.user.type
             body = [string]$comment.body
             url = [string]$comment.html_url
             createdAt = $comment.created_at
@@ -271,6 +273,7 @@ function Get-PrReviewSnapshot {
             id = [string]$review.node_id
             kind = "review"
             authorLogin = [string]$review.user.login
+            authorType = [string]$review.user.type
             body = [string]$review.body
             url = [string]$review.html_url
             createdAt = $review.submitted_at
@@ -285,6 +288,7 @@ function Get-PrReviewSnapshot {
             id = [string]$reaction.id
             content = [string]$reaction.content
             authorLogin = [string]$reaction.user.login
+            authorType = [string]$reaction.user.type
             createdAt = $reaction.created_at
         }
     }

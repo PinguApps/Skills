@@ -64,7 +64,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 7. Identify the Codex reviewer login from existing Codex-authored review comments, reviews, or PR-body reactions. Normalize an optional `[bot]` suffix. Never assume a fixed login.
    - If one identity is established, retain it for the run.
    - If multiple identities are plausible and approval identity changes the outcome, ask the user.
-   - If no candidate exists, leave `-ReviewerLogin` empty when capturing the pre-push baseline. The watcher may bootstrap only from a unique fresh author with recognizable Codex service identity evidence, such as a Codex-marked service login or standard Codex review marker; never promote an arbitrary human author merely because it is unique. Ask the user if identity remains uncertain or multiple plausible identities appear. Use the same 30-second 👀 grace period and fallback rule from step 6: post `@codex review` only when this run pushed and no fresh review-start signal appeared. If no push is needed and no identity exists, stop rather than posting a review request.
+   - If no candidate exists, leave `-ReviewerLogin` empty when capturing the pre-push baseline. The watcher may bootstrap only from a unique fresh actor whose login is Codex-marked and whose GitHub actor type is non-user service metadata (`App`, `Bot`, or `Organization`); never trust author-controlled comment text or promote an arbitrary human author merely because it is unique. Ask the user if identity remains uncertain or multiple plausible identities appear. Use the same 30-second 👀 grace period and fallback rule from step 6: post `@codex review` only when this run pushed and no fresh review-start signal appeared. If no push is needed and no identity exists, stop rather than posting a review request.
 8. Resolve the authenticated GitHub viewer login. Treat comments from that login, or another agent login established unambiguously by the conversation/PR history, as agent responses.
 9. Resolve the base and head repositories independently from PR metadata:
    - derive the base repository from the PR URL;
@@ -102,6 +102,12 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    git merge-base --is-ancestor $remoteHeadSha $localHeadSha
    $localContainsRemoteHead = $LASTEXITCODE -eq 0
 
+   if ($localContainsRemoteHead -and $localHeadSha -ne $remoteHeadSha) {
+     $initialLocalAheadCommits = git log --oneline "$remoteHeadSha..$localHeadSha"
+     # Validate and record every commit against the recovered user intent and full PR diff.
+     # Stop for confirmation if any commit is unrelated, unfinished, or ambiguous.
+   }
+
    if (-not $localContainsRemoteHead) {
      git merge-base --is-ancestor $localHeadSha $remoteHeadSha
      $canFastForward = $LASTEXITCODE -eq 0 -and -not (git status --porcelain)
@@ -113,7 +119,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    }
    ```
 
-   Continue only when local `HEAD` matches or contains the fetched PR head. A clean checkout that is merely behind may be fast-forwarded; stop on divergence or unsafe local changes.
+   Continue only when local `HEAD` matches the fetched PR head, is safely fast-forwarded to it, or every initially local-ahead commit was explicitly validated as intended PR work from conversation and repository evidence. Record those commits as pre-existing push scope; stop for confirmation on any uncertainty. Never silently publish local-ahead commits.
 11. Create one unique state directory outside the repository and retain it for the full run:
 
    ```powershell
@@ -262,7 +268,7 @@ After all replies:
 ## 6. Push and converge with Codex
 
 1. Confirm the worktree contains no uncommitted changes created by this run.
-2. Review commits after the starting SHA, then fetch the exact PR head before pushing:
+2. Review commits after the starting SHA and every validated commit that was already local-ahead at invocation, then fetch the exact PR head before pushing:
 
    ```powershell
    git log --oneline <starting-sha>..HEAD

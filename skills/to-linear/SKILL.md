@@ -26,10 +26,10 @@ Never infer the destination. Every ticket in the run uses the confirmed team and
 
 `CONTEXT.md` may exist. If present, read it fully and treat its domain language, boundaries, and decisions as authoritative while interpreting `PLAN.md`. Plan only work supported by `PLAN.md`, interpreted through `CONTEXT.md`; do not invent scope. Also read applicable `AGENTS.md`, referenced sources, relevant ADRs, designs, code, and tests when they affect ticket accuracy. Ask about material contradictions rather than choosing silently.
 
-After destination confirmation and before drafting, list the project's milestones and all its team issues, following pagination and including completed or archived issues where available. Compare milestone scope and issue titles, descriptions, acceptance criteria, and status with the plan:
+After destination confirmation and before drafting, list the project's milestones and every issue whose team and project both match the confirmed destination, following pagination and including completed or archived issues where available. Search same-team issues in other projects only to surface possible cross-project overlap; never reuse them in this run. Compare in-project milestone scope and issue titles, descriptions, acceptance criteria, and status with the plan:
 
 - Reuse existing milestones that match a planned phase.
-- Reuse existing issues that already cover planned work; do not duplicate them.
+- Reuse existing issues that already cover planned work only when their team and project both match the confirmed destination; do not duplicate them.
 - Narrow or omit proposed work that partially overlaps, and explain the overlap during review.
 - Do not modify, rename, or close existing issues unless the user explicitly approves it.
 
