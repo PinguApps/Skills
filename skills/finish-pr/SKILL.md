@@ -31,7 +31,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 - Preserve unrelated worktree changes. Commit only changes made during this run.
 - Resolve conflicts before failed checks, and failed checks before review feedback. Later evidence may require revisiting an earlier phase.
 - Prefer the smallest correct change. Add focused tests for behavioural or regression-prone fixes.
-- Use exactly one focused, unsquashed commit per action-required PR feedback thread. Never combine multiple threads into one commit, even when they are related.
+- Use exactly one focused, unsquashed commit per action-required PR feedback thread whose disposition produces a change. Never combine multiple threads into one commit, even when they are related. A justified disagreement requires a reply but no commit.
 - Never rebase, force-push, merge the pull request on GitHub, close, approve, or mark the PR ready for review unless the user explicitly requested that separate action. The conflict-resolution workflow may merge the latest base commit into the PR branch.
 - Never resolve or unresolve a review thread. Do not call `resolveReviewThread`, `unresolveReviewThread`, or an equivalent.
 - Reply directly to review threads, one at a time. Never create replies concurrently.
@@ -227,13 +227,13 @@ For each action-required thread:
 
    Keep unrelated staged changes staged. Stop if a fix path had any pre-existing staged, unstaged, or untracked change and the new hunks cannot be isolated safely at patch level.
 
-4. Create exactly one commit for the thread before moving to the next thread:
+4. If the disposition produces a change, create exactly one commit for the thread before moving to the next thread:
 
    ```powershell
    git commit --only -m "fix(pr): address <thread summary>" -- <exact-thread-fix-paths>
    ```
 
-   Do not amend, squash, or combine thread commits. If an earlier thread's change completely satisfies a later thread and no distinct file change remains, create an explicit traceability commit with `--allow-empty` for that later thread rather than merging their commit history.
+   Do not amend, squash, or combine thread commits. If an earlier thread's change completely satisfies a later agreed thread and no distinct file change remains, create an explicit traceability commit with `--allow-empty` for that later thread rather than merging their commit history. Do not create a commit for a justified disagreement.
 
 5. Reply directly to the thread after evaluating it and creating any relevant commit:
 
@@ -256,7 +256,7 @@ For each action-required thread:
    No code change made.
    ```
 
-6. Record the one-to-one thread ID → commit SHA mapping, disposition, verification, and returned comment ID.
+6. Record the one-to-one thread ID → commit SHA mapping for changed dispositions, plus every disposition, verification, and returned comment ID. Record `no commit — disagreement` for justified disagreements.
 
 The reply helper refuses to mutate when the authenticated user already has a pending review. It submits a review created by the reply and verifies `state != PENDING` plus a non-null `submittedAt`. A helper failure is blocking; a returned comment URL alone is not proof of submission.
 
