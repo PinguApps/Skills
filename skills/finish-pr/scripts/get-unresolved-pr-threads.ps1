@@ -110,6 +110,9 @@ query($owner:String!, $name:String!, $number:Int!, $after:String) {
                 id
                 state
                 submittedAt
+                commit {
+                  oid
+                }
               }
             }
           }
@@ -178,6 +181,9 @@ query($threadId:ID!, $after:String) {
             id
             state
             submittedAt
+            commit {
+              oid
+            }
           }
         }
       }

@@ -277,6 +277,7 @@ function Get-PrReviewSnapshot {
                 createdAt = $comment.createdAt
                 updatedAt = $comment.updatedAt
                 threadId = [string]$thread.id
+                headSha = [string]$comment.pullRequestReview.commit.oid
             }
         }
     }
@@ -307,6 +308,7 @@ function Get-PrReviewSnapshot {
             updatedAt = $review.submitted_at
             reviewState = ([string]$review.state).ToUpperInvariant()
             threadId = $null
+            headSha = [string]$review.commit_id
         }
     }
 
@@ -397,6 +399,12 @@ function Resolve-ReviewOutcome {
             return $false
         }
 
+        if ($_.kind -eq "thread_comment" -and
+            -not [string]::IsNullOrWhiteSpace([string]$_.headSha) -and
+            $_.headSha -ne $ExpectedSha) {
+            return $false
+        }
+
         if ($feedbackCutoff -ne [DateTimeOffset]::MinValue) {
             $feedbackTimestampValue = if (-not [string]::IsNullOrWhiteSpace([string]$_.updatedAt)) {
                 $_.updatedAt
@@ -447,11 +455,30 @@ function Resolve-ReviewOutcome {
     } else {
         [DateTimeOffset]::MaxValue
     }
+    $expectedHeadReviews = @($Snapshot.feedbackItems | Where-Object {
+        $_.kind -eq "review" -and
+        (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
+        $_.id -notin $seenFeedbackIds -and
+        $_.headSha -eq $ExpectedSha -and
+        -not [string]::IsNullOrWhiteSpace([string]$_.createdAt)
+    })
+    $approvalRequiresHeadLinkedReview = $ReviewHeadBoundary -ne [DateTimeOffset]::MinValue
+    $headLinkedReviewCutoff = if ($expectedHeadReviews.Count -gt 0) {
+        $earliestExpectedHeadReview = $expectedHeadReviews |
+            ForEach-Object { ConvertTo-ReviewTimestamp $_.createdAt } |
+            Sort-Object |
+            Select-Object -First 1
+        $earliestExpectedHeadReview.AddTicks(-($earliestExpectedHeadReview.Ticks % [TimeSpan]::TicksPerSecond))
+    } else {
+        [DateTimeOffset]::MaxValue
+    }
     $hasThumbsUp = @($newReviewerReactions | Where-Object {
         $_.content -eq "+1" -and
         ($approvalCutoff -eq [DateTimeOffset]::MinValue -or
             (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
-                [DateTimeOffset]$_.createdAt -ge $approvalCutoff))
+                [DateTimeOffset]$_.createdAt -ge $approvalCutoff)) -and
+        (-not $approvalRequiresHeadLinkedReview -or
+            [DateTimeOffset]$_.createdAt -ge $headLinkedReviewCutoff)
     }).Count -gt 0
     $started = $ReviewStartedObserved -or $hasEyes
 
