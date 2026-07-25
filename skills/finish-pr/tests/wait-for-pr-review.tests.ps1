@@ -19,12 +19,11 @@ function New-Snapshot {
         [string]$HeadSha = "new-sha",
         [string]$State = "OPEN",
         [array]$Reactions = @(),
-        [array]$FeedbackItems = @(),
-        [AllowNull()]$ObservedAt = $null
+        [array]$FeedbackItems = @()
     )
 
     return [pscustomobject]@{
-        pullRequest = [pscustomobject]@{ headSha = $HeadSha; state = $State; observedAt = $ObservedAt }
+        pullRequest = [pscustomobject]@{ headSha = $HeadSha; state = $State }
         reactions = $Reactions
         feedbackItems = $FeedbackItems
     }
@@ -299,15 +298,10 @@ Assert-Equal $true $lateEyesInitialized "A later poll should establish a missing
 Assert-Equal "2026-01-01T00:00:00.0000000+00:00" $lateEyesState.reviewHeadBoundary "The later fresh eyes timestamp should become the review boundary."
 Assert-Equal $true $lateEyesState.reviewHeadBoundaryTrusted "A fresh eyes reaction after expected-HEAD observation should create a trusted boundary."
 
-$observedExpectedHeadAt = [DateTimeOffset]"2026-01-01T00:00:00.500Z"
-$preObservationEyes = [pscustomobject]@{ id = "pre-observation-eyes"; content = "eyes"; authorLogin = $reviewer; createdAt = "2026-01-01T00:00:00Z" }
-$postObservationEyes = [pscustomobject]@{ id = "post-observation-eyes"; content = "eyes"; authorLogin = $reviewer; createdAt = "2026-01-01T00:00:01Z" }
-$observedHeadState = [pscustomobject]@{ seenReactionIds = @(); reviewStartedObserved = $false; approvalCandidateObserved = $false; expectedHeadReactionsCaptured = $false; reviewHeadBoundary = $null; reviewHeadBoundaryTrusted = $false }
-$null = Initialize-ExpectedHeadReactionBaseline -State $observedHeadState -Snapshot (New-Snapshot -Reactions @($preObservationEyes) -ObservedAt $observedExpectedHeadAt) -ExpectedSha "new-sha" -Reviewer $reviewer
-Assert-Equal $false $observedHeadState.reviewHeadBoundaryTrusted "An eyes reaction predating observed expected HEAD must not establish a trusted boundary."
-$trustedBoundaryCaptured = Initialize-ExpectedHeadReactionBaseline -State $observedHeadState -Snapshot (New-Snapshot -Reactions @($postObservationEyes) -ObservedAt $observedExpectedHeadAt.AddSeconds(1)) -ExpectedSha "new-sha" -Reviewer $reviewer
-Assert-Equal $true $trustedBoundaryCaptured "A later eyes reaction should establish the trusted expected-HEAD boundary."
-Assert-Equal $true $observedHeadState.reviewHeadBoundaryTrusted "The watcher should trust an eyes reaction created after expected HEAD was observed."
+$firstExpectedHeadEyesState = [pscustomobject]@{ seenReactionIds = @(); reviewStartedObserved = $false; approvalCandidateObserved = $false; expectedHeadReactionsCaptured = $false; reviewHeadBoundary = $null; reviewHeadBoundaryTrusted = $false }
+$firstExpectedHeadEyesCaptured = Initialize-ExpectedHeadReactionBaseline -State $firstExpectedHeadEyesState -Snapshot (New-Snapshot -Reactions @($eyes)) -ExpectedSha "new-sha" -Reviewer $reviewer
+Assert-Equal $true $firstExpectedHeadEyesCaptured "Eyes already present in the first expected-HEAD snapshot should establish the review boundary."
+Assert-Equal $true $firstExpectedHeadEyesState.reviewHeadBoundaryTrusted "First-snapshot eyes absent from the pre-push baseline should be retained as pushed-review evidence."
 
 $staleEyesState = [pscustomobject]@{
     seenReactionIds = @("old-eyes")
