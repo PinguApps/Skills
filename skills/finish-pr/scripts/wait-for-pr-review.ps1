@@ -383,6 +383,23 @@ function Resolve-ReviewOutcome {
         @()
     }
     $seenReactionIds = @($Baseline.seenReactionIds)
+    $expectedHeadReviews = @($Snapshot.feedbackItems | Where-Object {
+        $_.kind -eq "review" -and
+        (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
+        ($_.id -notin $seenFeedbackIds -or
+            $_.id -in @($Baseline.preservedExpectedHeadReviewIds)) -and
+        $_.headSha -eq $ExpectedSha -and
+        -not [string]::IsNullOrWhiteSpace([string]$_.createdAt)
+    })
+    $headLinkedReviewCutoff = if ($expectedHeadReviews.Count -gt 0) {
+        $earliestExpectedHeadReview = $expectedHeadReviews |
+            ForEach-Object { ConvertTo-ReviewTimestamp $_.createdAt } |
+            Sort-Object |
+            Select-Object -First 1
+        $earliestExpectedHeadReview.AddTicks(-($earliestExpectedHeadReview.Ticks % [TimeSpan]::TicksPerSecond))
+    } else {
+        [DateTimeOffset]::MaxValue
+    }
     $feedbackCutoff = if ($ReviewHeadBoundary -ne [DateTimeOffset]::MinValue) {
         $ReviewHeadBoundary.AddTicks(-($ReviewHeadBoundary.Ticks % [TimeSpan]::TicksPerSecond))
     } elseif ($ReviewRequestedAt -eq [DateTimeOffset]::MinValue) {
@@ -402,6 +419,12 @@ function Resolve-ReviewOutcome {
         if ($_.kind -in @("thread_comment", "review") -and
             -not [string]::IsNullOrWhiteSpace([string]$_.headSha) -and
             $_.headSha -ne $ExpectedSha) {
+            return $false
+        }
+
+        if ($_.kind -eq "issue_comment" -and
+            ([string]::IsNullOrWhiteSpace([string]$_.createdAt) -or
+                (ConvertTo-ReviewTimestamp $_.createdAt) -lt $headLinkedReviewCutoff)) {
             return $false
         }
 
@@ -453,23 +476,6 @@ function Resolve-ReviewOutcome {
         $ReviewHeadBoundary.AddTicks(-($ReviewHeadBoundary.Ticks % [TimeSpan]::TicksPerSecond))
     } elseif ($ReviewRequestedAt -eq [DateTimeOffset]::MinValue) {
         [DateTimeOffset]::MinValue
-    } else {
-        [DateTimeOffset]::MaxValue
-    }
-    $expectedHeadReviews = @($Snapshot.feedbackItems | Where-Object {
-        $_.kind -eq "review" -and
-        (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
-        ($_.id -notin $seenFeedbackIds -or
-            $_.id -in @($Baseline.preservedExpectedHeadReviewIds)) -and
-        $_.headSha -eq $ExpectedSha -and
-        -not [string]::IsNullOrWhiteSpace([string]$_.createdAt)
-    })
-    $headLinkedReviewCutoff = if ($expectedHeadReviews.Count -gt 0) {
-        $earliestExpectedHeadReview = $expectedHeadReviews |
-            ForEach-Object { ConvertTo-ReviewTimestamp $_.createdAt } |
-            Sort-Object |
-            Select-Object -First 1
-        $earliestExpectedHeadReview.AddTicks(-($earliestExpectedHeadReview.Ticks % [TimeSpan]::TicksPerSecond))
     } else {
         [DateTimeOffset]::MaxValue
     }
