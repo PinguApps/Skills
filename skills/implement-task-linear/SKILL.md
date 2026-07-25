@@ -36,7 +36,7 @@ Accept an issue identifier supplied with the invocation or in the conversation, 
 
 Use the Linear MCP server in the same style as `to-linear`:
 
-1. Fetch the target issue, including its full description, status, labels, project, team, parent, sub-issues, and native relations when available.
+1. Fetch the target issue itself, including its full description, status, labels, team, project, and relation identifiers. Do not dereference a parent, sub-issue, or native relation, and do not use embedded related-issue content, before the target's exact team and project IDs establish scope.
 2. Establish the exact team/project scope described above.
 3. Fetch comments or attachments on the target only when they may contain requirements or decisions.
 4. Resolve the team's relevant workflow states, especially In Progress, In Review, and Backlog, by ID. If a required state is ambiguous or missing, report that rather than guessing.
