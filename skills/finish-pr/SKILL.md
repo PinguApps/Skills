@@ -146,7 +146,9 @@ Run this before CI or feedback:
    ```
 
 2. Investigate locally when GitHub reports `CONFLICTING`, `DIRTY`, or `UNKNOWN`, or when the probe reports conflicts.
-3. If conflicts exist and unrelated local changes are safe, merge the latest base into the PR branch:
+3. If conflicts exist, check the initial worktree baseline before merging. A normal merge requires a clean index: if any pre-existing staged change remains, stop before mutation and tell the user to commit or stash it, or request explicit permission to isolate and restore the index. Do not use `--autostash` on user work without that permission.
+
+   If the index is clean and unrelated local changes are safe, merge the latest base into the PR branch:
 
    ```powershell
    git merge --no-ff $baseCommit
