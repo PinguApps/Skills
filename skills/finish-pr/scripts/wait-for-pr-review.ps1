@@ -72,7 +72,8 @@ function Find-NewReviewerCandidates {
     param(
         [Parameter(Mandatory = $true)]$Baseline,
         [Parameter(Mandatory = $true)]$Snapshot,
-        [DateTimeOffset]$NotBefore = [DateTimeOffset]::MinValue
+        [DateTimeOffset]$NotBefore = [DateTimeOffset]::MinValue,
+        [string]$ExcludedLogin
     )
 
     $cutoff = if ($NotBefore -eq [DateTimeOffset]::MinValue) {
@@ -95,8 +96,12 @@ function Find-NewReviewerCandidates {
         } | ForEach-Object { Normalize-ReviewerLogin $_.authorLogin }
     )
 
+    $normalizedExcludedLogin = Normalize-ReviewerLogin $ExcludedLogin
     return @($candidateLogins |
-        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Where-Object {
+            -not [string]::IsNullOrWhiteSpace($_) -and
+            $_ -ne $normalizedExcludedLogin
+        } |
         Sort-Object -Unique)
 }
 
@@ -440,12 +445,19 @@ function Invoke-PrReviewWatcher {
 
         $snapshot = Get-PrReviewSnapshot -Repository $Repository -Number $PrNumber -Hostname $Hostname
         $normalizedReviewer = Normalize-ReviewerLogin $ReviewerLogin
+        $viewerArgs = @("api")
+        if (-not [string]::IsNullOrWhiteSpace($routing.hostname)) {
+            $viewerArgs += @("--hostname", $routing.hostname)
+        }
+        $viewerArgs += "user"
+        $viewer = Invoke-GhJson $viewerArgs
         $state = [pscustomobject]@{
             version = 1
             repository = $Repository
             hostname = $Hostname
             prNumber = $PrNumber
             reviewerLogin = $normalizedReviewer
+            agentLogin = Normalize-ReviewerLogin $viewer.login
             capturedAt = [DateTimeOffset]::UtcNow.ToString("o")
             baselineHeadSha = $snapshot.pullRequest.headSha
             seenReactionIds = @($snapshot.reactions | ForEach-Object { $_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
@@ -489,7 +501,7 @@ function Invoke-PrReviewWatcher {
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         $snapshot = Get-PrReviewSnapshot -Repository $state.repository -Number ([int]$state.prNumber) -Hostname ([string]$state.hostname)
         if ([string]::IsNullOrWhiteSpace([string]$state.reviewerLogin)) {
-            $candidates = @(Find-NewReviewerCandidates -Baseline $state -Snapshot $snapshot -NotBefore $ReviewRequestedAt)
+            $candidates = @(Find-NewReviewerCandidates -Baseline $state -Snapshot $snapshot -NotBefore $ReviewRequestedAt -ExcludedLogin ([string]$state.agentLogin))
             if ($candidates.Count -gt 1) {
                 [pscustomobject]@{
                     status = "reviewer_ambiguous"

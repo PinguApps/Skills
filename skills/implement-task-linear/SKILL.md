@@ -125,7 +125,7 @@ When the current implementation also satisfies another scoped issue:
 1. Read that issue fully and verify every acceptance criterion against the repository.
 2. Confirm its team and project IDs still match the target.
 3. Add a concise cross-reference or relation to the implemented target when supported.
-4. Move it to the resolved In Review state, never directly to Done.
+4. Move it to the resolved In Review state only when its current state is earlier. Preserve In Review, completed, cancelled, archived, and any other terminal or further-along state; never reopen or regress it.
 5. Record the issue identifier, evidence, and transition in the final response.
 
 Do not transition an issue merely because its title appears similar. Partial coverage should be documented or narrowed only when evidence supports the edit; otherwise leave its status unchanged.
@@ -137,7 +137,7 @@ Before declaring completion:
 1. Re-fetch the target and every mutated related issue.
 2. Reconfirm the team/project boundary.
 3. Verify repository changes and test results against each target acceptance criterion.
-4. Move the target to In Review only when all required work is implemented and verified. Otherwise leave it In Progress, or use a resolved blocked state if appropriate, and explain why.
+4. When all required work is implemented and verified, move the target to In Review only if its current state is earlier. Preserve In Review, completed, cancelled, archived, and any other terminal or further-along state. Otherwise leave it In Progress, or use a resolved blocked state if appropriate, and explain why.
 5. Correct any Linear mutation mismatch before reporting.
 
 End with a concise handoff containing:

@@ -76,11 +76,11 @@ Use two or three labels where useful. Agent tickets normally use `Agent`, one ty
 
 ### 6. Publish and verify
 
-After the final overlap recheck, create missing milestones in approved chronological order, then create issues milestone-by-milestone and ascending by title number. Assign every issue to its milestone and the confirmed `team`, `project`, resolved Backlog `state`, and approved `labels`. Add native `blockedBy` relationships using existing or already-created identifiers. Never use prose instead of native relations.
+After the final overlap recheck, create missing milestones in approved chronological order, then create issues milestone-by-milestone and ascending by title number. Assign each newly created issue to its milestone and the confirmed `team`, `project`, resolved Backlog `state`, and approved `labels`. Preserve every reused issue's existing state, milestone, project, labels, and relations unless the reviewed proposal explicitly listed each intended mutation and the user approved it. Add approved native `blockedBy` relationships using existing or already-created identifiers. Never use prose instead of native relations.
 
 Use Linear's native milestone/issue reordering capability when available. Otherwise creation order plus numeric titles is the source of truth; verify the returned order and clearly report any manual Linear reorder still required. Never invent milestone target dates merely to force ordering.
 
-Do not assign, delegate, or add issues to a cycle unless asked. Verify milestone assignment and every issue's title, team, project, Backlog state, labels, and blockers. Confirm agent tickets have `Agent`, human tickets do not, and every blocker is earlier. Correct mismatches before reporting identifiers and URLs.
+Do not assign, delegate, or add issues to a cycle unless asked. For newly created issues, verify milestone assignment, title, team, project, Backlog state, labels, and blockers. For reused issues, verify identity and approved mutations without normalizing unapproved metadata. Confirm new agent tickets have `Agent`, new human tickets do not, and every newly created or explicitly approved blocker is earlier. Correct in-scope mismatches before reporting identifiers and URLs.
 
 End with plain text `Milestone order: <first> → <second> → <third>` followed by issue identifiers/URLs in that same milestone and ascending-number order.
 

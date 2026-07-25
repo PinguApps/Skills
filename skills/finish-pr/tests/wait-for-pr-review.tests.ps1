@@ -51,6 +51,9 @@ Assert-Equal $true $started.reviewStartedObserved "Seeing eyes should record tha
 $bootstrapCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($eyes)))
 Assert-Equal 1 $bootstrapCandidates.Count "A unique fresh review-start reaction should bootstrap one reviewer."
 Assert-Equal $reviewer $bootstrapCandidates[0] "Reviewer bootstrap should normalize the fresh reaction author."
+$fallbackRequest = [pscustomobject]@{ id = "fallback-request"; kind = "issue_comment"; authorLogin = "example-agent"; body = "@codex review" }
+$fallbackCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($fallbackRequest)) -ExcludedLogin "example-agent")
+Assert-Equal 0 $fallbackCandidates.Count "Reviewer bootstrap should exclude the authenticated fallback requester."
 
 $comment = [pscustomobject]@{ id = "new-comment"; kind = "thread_comment"; authorLogin = $reviewer; body = "Please fix this." }
 $feedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($comment)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $false
@@ -227,11 +230,14 @@ finally {
     Remove-Item -LiteralPath $baselinePath -ErrorAction SilentlyContinue
 }
 
-$script:CapturedGhArgs = @()
+$script:CapturedGhCalls = @()
 function Invoke-GhJson {
     param([string[]]$GhArgs)
-    $script:CapturedGhArgs = $GhArgs
-    return [pscustomobject]@{ number = 25 }
+    $script:CapturedGhCalls += ,@($GhArgs)
+    if ($GhArgs[0] -eq "pr") {
+        return [pscustomobject]@{ number = 25 }
+    }
+    return [pscustomobject]@{ login = "example-agent" }
 }
 
 try {
@@ -242,7 +248,8 @@ try {
     $Hostname = "ghe.example"
     $ReviewerLogin = $reviewer
     Invoke-PrReviewWatcher | Out-Null
-    Assert-Equal "pr view --repo ghe.example/example-owner/example-repository --json number" ($script:CapturedGhArgs -join " ") "PR discovery should retain the supplied hostname."
+    $prDiscoveryCall = @($script:CapturedGhCalls | Where-Object { $_[0] -eq "pr" })[0]
+    Assert-Equal "pr view --repo ghe.example/example-owner/example-repository --json number" ($prDiscoveryCall -join " ") "PR discovery should retain the supplied hostname."
 }
 finally {
     Remove-Item -LiteralPath $baselinePath -ErrorAction SilentlyContinue

@@ -51,8 +51,8 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    gh pr view --json number,title,url,body,author,headRefName,headRefOid,headRepository,headRepositoryOwner,isCrossRepository,baseRefName,baseRefOid,mergeable,mergeStateStatus,reviews,comments
    ```
 
-3. Record the starting SHA and existing worktree changes. Never include pre-existing changes in this run's commits.
-   Record staged paths separately with `git diff --cached --name-only`. Later commits must use an exact pathspec and must not consume these pre-existing index entries.
+3. Record the starting SHA and every existing changed path, separating staged, unstaged, and untracked changes. Never include pre-existing changes in this run's commits.
+   A feedback fix must not touch a path that had any pre-existing change unless the user's work can be isolated safely at patch level. Otherwise stop and ask the user; an exact pathspec alone does not isolate same-file content.
 4. If the current branch has no PR, inspect `gh pr status`. Switch or check out a PR only when the mapping is unambiguous and local changes are safe; otherwise ask the user.
 5. Reconstruct the intended change from, in priority order:
    - explicit user instructions and this conversation;
@@ -219,7 +219,7 @@ For each action-required item:
    git diff --cached
    ```
 
-   If unrelated changes were already staged, keep them staged but commit the fix with an exact pathspec. Stop if a fix overlaps pre-existing staged changes in the same path and cannot be isolated safely.
+   Keep unrelated staged changes staged. Stop if a fix path had any pre-existing staged, unstaged, or untracked change and the new hunks cannot be isolated safely at patch level.
 
 4. Commit before moving to an independent item:
 
