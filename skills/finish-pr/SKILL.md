@@ -31,7 +31,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 - Preserve unrelated worktree changes. Commit only changes made during this run.
 - Resolve conflicts before failed checks, and failed checks before review feedback. Later evidence may require revisiting an earlier phase.
 - Prefer the smallest correct change. Add focused tests for behavioural or regression-prone fixes.
-- Use one focused commit per independent conflict/check/feedback fix where practical.
+- Use exactly one focused, unsquashed commit per action-required PR feedback thread. Never combine multiple threads into one commit, even when they are related.
 - Never rebase, force-push, merge the pull request on GitHub, close, approve, or mark the PR ready for review unless the user explicitly requested that separate action. The conflict-resolution workflow may merge the latest base commit into the PR branch.
 - Never resolve or unresolve a review thread. Do not call `resolveReviewThread`, `unresolveReviewThread`, or an equivalent.
 - Reply directly to review threads, one at a time. Never create replies concurrently.
@@ -202,7 +202,7 @@ For each unresolved thread, read all paginated comments in chronological order a
 - **Action required:** there is reviewer feedback after the agent's latest submitted response, the agent has never responded, or its latest response exists only in a pending review.
 - **Superseded/non-actionable:** the later conversation explicitly withdraws, answers, or supersedes the point. Reply only if the thread still needs an agent acknowledgement; avoid duplicating an existing agent response.
 
-Within action-required threads, identify each distinct feedback item. Judge it against the user's intent, conversation history, repository rules, linked requirements, PR scope, current code, conventions, and tests:
+Within action-required threads, identify each distinct feedback item. Judge it against the user's intent, conversation history, repository rules, linked requirements, PR scope, current code, conventions, and tests. The thread is the commit boundary: group all work required by one thread into that thread's single commit, but never include another thread's work.
 
 - Agree when it identifies a real bug, missed requirement, broken invariant, missing test, misleading behaviour, or scoped maintainability problem.
 - Disagree when it conflicts with requirements, established intent, repository invariants, or would produce a worse/out-of-scope design.
@@ -212,9 +212,9 @@ Do not skip outdated unresolved threads; determine whether their feedback still 
 
 ## 5. Fix and reply
 
-For each action-required item:
+For each action-required thread:
 
-1. Make the smallest complete fix and focused test.
+1. Make the smallest complete fix for every actionable item in that thread, with focused tests.
 2. Run the narrowest meaningful verification.
 3. Inspect and stage only files for that item:
 
@@ -227,11 +227,13 @@ For each action-required item:
 
    Keep unrelated staged changes staged. Stop if a fix path had any pre-existing staged, unstaged, or untracked change and the new hunks cannot be isolated safely at patch level.
 
-4. Commit before moving to an independent item:
+4. Create exactly one commit for the thread before moving to the next thread:
 
    ```powershell
-   git commit --only -m "fix(pr): address <feedback summary>" -- <exact-fix-paths>
+   git commit --only -m "fix(pr): address <thread summary>" -- <exact-thread-fix-paths>
    ```
+
+   Do not amend, squash, or combine thread commits. If an earlier thread's change completely satisfies a later thread and no distinct file change remains, create an explicit traceability commit with `--allow-empty` for that later thread rather than merging their commit history.
 
 5. Reply directly to the thread after evaluating it and creating any relevant commit:
 
@@ -254,7 +256,7 @@ For each action-required item:
    No code change made.
    ```
 
-6. Record the thread ID, disposition, commit SHA if any, verification, and returned comment ID.
+6. Record the one-to-one thread ID → commit SHA mapping, disposition, verification, and returned comment ID.
 
 The reply helper refuses to mutate when the authenticated user already has a pending review. It submits a review created by the reply and verifies `state != PENDING` plus a non-null `submittedAt`. A helper failure is blocking; a returned comment URL alone is not proof of submission.
 
@@ -264,10 +266,11 @@ After all replies:
 2. Verify every reply created in this run belongs to a submitted review.
 3. Verify the authenticated user has no pending review on the PR, including reviews created before this run.
 4. For every thread ID present in the baseline, compare its `isResolved` value with the current value. Baseline resolution states must be unchanged; report external changes and never mutate them back. New thread IDs are expected during review convergence: classify them as additional feedback rather than treating their existence as a resolution mutation.
+5. If new action-required threads appeared during the batch, action each in its own commit and repeat the audit. Push only once the currently visible feedback set has been fully actioned or is awaiting reviewer response.
 
 ## 6. Push and converge with Codex
 
-1. Confirm the worktree contains no uncommitted changes created by this run.
+1. Confirm the worktree contains no uncommitted changes created by this run. Do not push individual thread commits as they are created; batch-push all unsquashed thread commits only after the feedback audit is clear for the time being.
 2. Review commits after the starting SHA and every validated commit that was already local-ahead at invocation, then fetch the exact PR head before pushing:
 
    ```powershell
