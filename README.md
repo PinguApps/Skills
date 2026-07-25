@@ -4,6 +4,18 @@ Opinionated skills I use in my setup each day.
 
 ## Skills
 
+### [test-changes](skills/test-changes/)
+
+Explains how to manually inspect and test the work just completed in the current
+conversation.
+
+The skill:
+
+- Starts with what is already visible before asking you to run anything.
+- Gives copyable PowerShell commands for any required setup or server.
+- Maps every changed surface to exact actions, expected results, and failure signs.
+- Separates confirmed state from inferred expectations and testing limitations.
+
 ### [implement-task-linear](skills/implement-task-linear/)
 
 Implements a Linear issue end to end in the current repository.

@@ -2,6 +2,7 @@
 name: implement-task-linear
 description: Implement a Linear issue end to end in the current repository: load the issue, inspect same-team-and-project context, reconcile Linear with the codebase, make and verify the required changes, and update or create tightly related Linear issues when justified. Use whenever the user asks to implement, complete, pick up, or work on a Linear issue.
 compatibility: Requires a connected Linear MCP server and repository read/write tools.
+disable-model-invocation: true
 ---
 
 # Implement Task from Linear
