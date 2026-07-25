@@ -116,6 +116,7 @@ Capture every thread's read-only resolution baseline outside the repository:
 
 ```powershell
 $threadBaseline = Join-Path ([IO.Path]::GetTempPath()) "finish-pr-$prNumber-thread-resolution.json"
+$threadSnapshot = Join-Path ([IO.Path]::GetTempPath()) "finish-pr-$prNumber-unresolved.json"
 pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -All |
   Set-Content -Encoding utf8 $threadBaseline
 
