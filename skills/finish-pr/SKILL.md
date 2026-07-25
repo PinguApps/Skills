@@ -374,7 +374,7 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -PollSeconds 20
 ```
 
-After a push, only feedback or a stable 👍 produced after the pre-push boundary is head-linked evidence. Without a push, an existing 👍 is acceptable only under the unchanged-HEAD and no-later-pushback rule above. Never use the fallback comment without a preceding push from this run.
+After a push, a fresh 👀 observed with the expected HEAD establishes the review boundary. Only feedback or a stable 👍 at or after that boundary is head-linked evidence; the pre-push timestamp alone is insufficient. Without a push, an existing 👍 is acceptable only under the unchanged-HEAD and no-later-pushback rule above. Never use the fallback comment without a preceding push from this run.
 
 Bound convergence to five pushed review rounds or two hours overall. Stop earlier for approval, timeout, closure, unexpected head movement, or a genuine blocker.
 

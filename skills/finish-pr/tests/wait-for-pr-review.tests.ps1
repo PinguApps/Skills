@@ -169,7 +169,12 @@ $racedApproval = Resolve-ReviewOutcome -Baseline $racedApprovalState -Snapshot $
 Assert-Equal "waiting" $racedApproval.status "A thumbs-up predating the review request must not approve the expected head."
 $sameSecondThumb = [pscustomobject]@{ id = "same-second-thumb"; content = "+1"; authorLogin = $reviewer; createdAt = $pushCompletedAt.AddTicks(-($pushCompletedAt.Ticks % [TimeSpan]::TicksPerSecond)) }
 $sameSecondApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewStartedObserved $false -ApprovalCandidateObserved $false
-Assert-Equal "approval_candidate" $sameSecondApproval.status "A thumbs-up rounded to the request's whole second should remain eligible."
+Assert-Equal "waiting" $sameSecondApproval.status "A thumbs-up without fresh expected-HEAD review-start evidence must remain ineligible."
+$headLinkedApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewHeadBoundary $pushCompletedAt -ReviewStartedObserved $true -ApprovalCandidateObserved $false
+Assert-Equal "approval_candidate" $headLinkedApproval.status "A thumbs-up at the fresh expected-HEAD review boundary should remain eligible."
+$oldHeadFeedback = [pscustomobject]@{ id = "old-head-feedback"; kind = "thread_comment"; authorLogin = $reviewer; body = "Please fix this."; createdAt = $pushCompletedAt.AddSeconds(-1) }
+$filteredOldHeadFeedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($oldHeadFeedback)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewHeadBoundary $pushCompletedAt -ReviewStartedObserved $true -ApprovalCandidateObserved $false
+Assert-Equal "waiting" $filteredOldHeadFeedback.status "Feedback predating the expected-HEAD review boundary must be ignored."
 $initializedAgain = Initialize-ExpectedHeadReactionBaseline -State $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer
 Assert-Equal $false $initializedAgain "The expected-head reaction baseline should initialize only once."
 
