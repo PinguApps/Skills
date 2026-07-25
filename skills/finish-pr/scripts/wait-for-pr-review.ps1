@@ -551,7 +551,9 @@ function Initialize-ExpectedHeadReactionBaseline {
             $State | Add-Member -NotePropertyName reviewHeadBoundary -NotePropertyValue $reviewHeadBoundary
         }
     }
-    $State.approvalCandidateObserved = $false
+    if (-not $alreadyInitialized) {
+        $State.approvalCandidateObserved = $false
+    }
 
     if ($State.PSObject.Properties.Name -contains "expectedHeadReactionsCaptured") {
         $State.expectedHeadReactionsCaptured = $true

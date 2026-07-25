@@ -272,6 +272,16 @@ $unchangedApproval = Resolve-ReviewOutcome -Baseline $unchangedHeadState -Snapsh
 Assert-Equal "waiting" $unchangedApproval.status "A fresh unchanged-HEAD thumbs-up without a head-linked review must remain ineligible."
 $linkedUnchangedApproval = Resolve-ReviewOutcome -Baseline $unchangedHeadState -Snapshot (New-Snapshot -HeadSha "new-sha" -Reactions @($unchangedHeadThumb) -FeedbackItems @($positiveReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -BaselineSha "new-sha" -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $linkedUnchangedApproval.status "A fresh unchanged-HEAD thumbs-up should become eligible when a submitted review links it to that HEAD."
+$missedEyesCandidateState = [pscustomobject]@{
+    seenReactionIds = @()
+    reviewStartedObserved = $true
+    approvalCandidateObserved = $true
+    expectedHeadReactionsCaptured = $true
+    reviewHeadBoundary = $null
+}
+$reinitializedWithoutEyes = Initialize-ExpectedHeadReactionBaseline -State $missedEyesCandidateState -Snapshot (New-Snapshot -FeedbackItems @($positiveReview)) -ExpectedSha "new-sha" -Reviewer $reviewer
+Assert-Equal $false $reinitializedWithoutEyes "A poll without delayed eyes should not reinitialize expected-HEAD evidence."
+Assert-Equal $true $missedEyesCandidateState.approvalCandidateObserved "Repeated polling without eyes must preserve the approval candidate."
 
 $lateEyesState = [pscustomobject]@{
     seenReactionIds = @()
