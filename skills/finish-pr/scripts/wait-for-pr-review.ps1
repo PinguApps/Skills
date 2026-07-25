@@ -512,7 +512,8 @@ function Resolve-ReviewOutcome {
 
         $reactionTimestamp = ConvertTo-ReviewTimestamp $_.createdAt
         $linkedByReview = $reactionTimestamp -ge $headLinkedReviewCutoff
-        $linkedByTrustedStart = $ReviewHeadBoundaryTrusted -and
+        $linkedByTrustedStart = $ReviewRequestedAt -ne [DateTimeOffset]::MinValue -and
+            $ReviewHeadBoundaryTrusted -and
             $ReviewHeadBoundary -ne [DateTimeOffset]::MinValue -and
             $reactionTimestamp -ge $approvalCutoff
         return $linkedByReview -or $linkedByTrustedStart

@@ -190,6 +190,8 @@ $headLinkedApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-S
 Assert-Equal "approval_candidate" $headLinkedApproval.status "A thumbs-up at the fresh expected-HEAD review boundary should remain eligible."
 $trustedStartApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewHeadBoundary $pushCompletedAt -ReviewHeadBoundaryTrusted $true -ReviewStartedObserved $true -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $trustedStartApproval.status "A thumbs-up after a trusted expected-HEAD review start should approve without a submitted review."
+$noPushReactionApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewHeadBoundary $pushCompletedAt -ReviewHeadBoundaryTrusted $true -ReviewStartedObserved $true -ApprovalCandidateObserved $false
+Assert-Equal "waiting" $noPushReactionApproval.status "An unchanged-HEAD run must not accept reaction-only approval without submitted review evidence."
 $preservedReviewBaseline = [pscustomobject]@{
     seenReactionIds = @("old-thumb")
     seenFeedbackIds = @("expected-head-review")
