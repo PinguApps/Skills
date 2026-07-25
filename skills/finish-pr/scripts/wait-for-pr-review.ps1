@@ -243,6 +243,7 @@ function Get-PrReviewSnapshot {
         "pr", "view", $Number.ToString(), "--repo", $routing.selector,
         "--json", "number,url,state,headRefOid"
     )
+    $headObservedAt = [DateTimeOffset]::UtcNow
     $apiPrefix = @("api")
     if (-not [string]::IsNullOrWhiteSpace($routing.hostname)) {
         $apiPrefix += @("--hostname", $routing.hostname)
@@ -341,6 +342,7 @@ function Get-PrReviewSnapshot {
             url = [string]$pr.url
             state = [string]$pr.state
             headSha = [string]$pr.headRefOid
+            observedAt = $headObservedAt
         }
         reactions = @($reactionItems | Where-Object { $null -ne $_ })
         feedbackItems = @($feedbackItems | Where-Object { $null -ne $_ })
@@ -356,6 +358,7 @@ function Resolve-ReviewOutcome {
         [string]$BaselineSha = "",
         [DateTimeOffset]$ReviewRequestedAt = [DateTimeOffset]::MinValue,
         [DateTimeOffset]$ReviewHeadBoundary = [DateTimeOffset]::MinValue,
+        [bool]$ReviewHeadBoundaryTrusted,
         [bool]$ReviewStartedObserved,
         [bool]$ApprovalCandidateObserved
     )
@@ -504,12 +507,17 @@ function Resolve-ReviewOutcome {
         [DateTimeOffset]::MaxValue
     }
     $hasThumbsUp = @($newReviewerReactions | Where-Object {
-        $_.content -eq "+1" -and
-        ($approvalCutoff -eq [DateTimeOffset]::MinValue -or
-            (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
-                [DateTimeOffset]$_.createdAt -ge $approvalCutoff)) -and
-        -not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
-        (ConvertTo-ReviewTimestamp $_.createdAt) -ge $headLinkedReviewCutoff
+        if ($_.content -ne "+1" -or
+            [string]::IsNullOrWhiteSpace([string]$_.createdAt)) {
+            return $false
+        }
+
+        $reactionTimestamp = ConvertTo-ReviewTimestamp $_.createdAt
+        $linkedByReview = $reactionTimestamp -ge $headLinkedReviewCutoff
+        $linkedByTrustedStart = $ReviewHeadBoundaryTrusted -and
+            $ReviewHeadBoundary -ne [DateTimeOffset]::MinValue -and
+            $reactionTimestamp -ge $approvalCutoff
+        return $linkedByReview -or $linkedByTrustedStart
     }).Count -gt 0
     $started = $ReviewStartedObserved -or $hasEyes -or $expectedHeadReviews.Count -gt 0
 
@@ -542,16 +550,39 @@ function Initialize-ExpectedHeadReactionBaseline {
         return $false
     }
 
+    if (-not ($State.PSObject.Properties.Name -contains "expectedHeadObservedAt") -or
+        [string]::IsNullOrWhiteSpace([string]$State.expectedHeadObservedAt)) {
+        $observedAt = if ($null -ne $Snapshot.pullRequest.observedAt) {
+            (ConvertTo-ReviewTimestamp $Snapshot.pullRequest.observedAt).ToString("o")
+        } else {
+            [DateTimeOffset]::MinValue.ToString("o")
+        }
+        if ($State.PSObject.Properties.Name -contains "expectedHeadObservedAt") {
+            $State.expectedHeadObservedAt = $observedAt
+        } else {
+            $State | Add-Member -NotePropertyName expectedHeadObservedAt -NotePropertyValue $observedAt
+        }
+    }
+
     $normalizedReviewer = Normalize-ReviewerLogin $Reviewer
     $reviewRequestCutoff = if ($ReviewRequestedAt -eq [DateTimeOffset]::MinValue) {
         [DateTimeOffset]::MinValue
     } else {
         $ReviewRequestedAt.AddTicks(-($ReviewRequestedAt.Ticks % [TimeSpan]::TicksPerSecond))
     }
+    $expectedHeadObservedAt = ConvertTo-ReviewTimestamp $State.expectedHeadObservedAt
+    $expectedHeadObservationRemainder = $expectedHeadObservedAt.Ticks % [TimeSpan]::TicksPerSecond
+    $expectedHeadObservationCutoff = if ($expectedHeadObservationRemainder -eq 0) {
+        $expectedHeadObservedAt
+    } else {
+        $expectedHeadObservedAt.AddTicks([TimeSpan]::TicksPerSecond - $expectedHeadObservationRemainder)
+    }
     $freshEyes = @($Snapshot.reactions | Where-Object {
         (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
         $_.content -eq "eyes" -and
         $_.id -notin @($State.seenReactionIds) -and
+        (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
+            (ConvertTo-ReviewTimestamp $_.createdAt) -ge $expectedHeadObservationCutoff) -and
         ($reviewRequestCutoff -eq [DateTimeOffset]::MinValue -or
             (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
                 [DateTimeOffset]$_.createdAt -ge $reviewRequestCutoff))
@@ -569,6 +600,11 @@ function Initialize-ExpectedHeadReactionBaseline {
             $State.reviewHeadBoundary = $reviewHeadBoundary
         } else {
             $State | Add-Member -NotePropertyName reviewHeadBoundary -NotePropertyValue $reviewHeadBoundary
+        }
+        if ($State.PSObject.Properties.Name -contains "reviewHeadBoundaryTrusted") {
+            $State.reviewHeadBoundaryTrusted = $true
+        } else {
+            $State | Add-Member -NotePropertyName reviewHeadBoundaryTrusted -NotePropertyValue $true
         }
     }
     if (-not $alreadyInitialized) {
@@ -706,6 +742,7 @@ function Invoke-PrReviewWatcher {
             approvalCandidateObserved = $false
             expectedHeadReactionsCaptured = $false
             reviewHeadBoundary = $existingReviewBoundary
+            reviewHeadBoundaryTrusted = $false
             preservedExpectedHeadReviewIds = $preservedExpectedHeadReviewIds
             preservedApprovalReactionIds = $preservedApprovalReactionIds
         }
@@ -770,6 +807,7 @@ function Invoke-PrReviewWatcher {
             -BaselineSha $state.baselineHeadSha `
             -ReviewRequestedAt $ReviewRequestedAt `
             -ReviewHeadBoundary $(if ([string]::IsNullOrWhiteSpace([string]$state.reviewHeadBoundary)) { [DateTimeOffset]::MinValue } else { [DateTimeOffset]$state.reviewHeadBoundary }) `
+            -ReviewHeadBoundaryTrusted ([bool]$state.reviewHeadBoundaryTrusted) `
             -ReviewStartedObserved ([bool]$state.reviewStartedObserved) `
             -ApprovalCandidateObserved ([bool]$state.approvalCandidateObserved)
 

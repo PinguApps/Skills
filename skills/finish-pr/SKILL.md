@@ -403,7 +403,7 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
 
 The unchanged-HEAD path deliberately has no new request-time cutoff. The captured IDs exclude old reactions, while the preserved 👀 boundary links any later 👍 to the ongoing review and allows a reaction created during baseline capture to be observed.
 
-After a push, a fresh 👀 observed with the expected HEAD establishes the review boundary. Only feedback tied to that HEAD or a stable 👍 at or after a submitted expected-HEAD review is head-linked evidence; the pre-push timestamp and reaction alone are insufficient. Without a push, apply the same submitted-review or retained-evidence linkage rule above. Never use the fallback comment without a preceding push from this run.
+After a push, a 👀 created after the watcher has observed the expected HEAD establishes a trusted review boundary. A later stable 👍 is sufficient approval even when Codex reports no submitted review, which is its normal no-findings path. Feedback-bearing reviews may instead provide exact-HEAD linkage through their submitted review metadata. Without a push, apply the submitted-review or retained-evidence linkage rule above. Never use the fallback comment without a preceding push from this run.
 
 Bound convergence to five pushed review rounds or two hours overall. Stop earlier for approval, timeout, closure, unexpected head movement, or a genuine blocker.
 
