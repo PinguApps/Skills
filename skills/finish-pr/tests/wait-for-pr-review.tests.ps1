@@ -217,6 +217,7 @@ function Invoke-GhJson {
     return [pscustomobject]@{
         owner = [pscustomobject]@{ login = "example-owner" }
         name = "example-repository"
+        url = "https://github.example/example-owner/example-repository"
     }
 }
 function Get-PrReviewSnapshot {
@@ -231,6 +232,7 @@ try {
     Invoke-PrReviewWatcher | Out-Null
     $capturedBaseline = Get-Content -Raw -LiteralPath $baselinePath | ConvertFrom-Json -Depth 100
     Assert-Equal $false $capturedBaseline.reviewStartedObserved "Baseline capture should not treat a pre-existing start reaction as evidence for the next HEAD."
+    Assert-Equal "github.example" $capturedBaseline.hostname "Repository inference should preserve the URL authority."
 }
 finally {
     Remove-Item -LiteralPath $baselinePath -ErrorAction SilentlyContinue

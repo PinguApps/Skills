@@ -190,7 +190,8 @@ function Get-PrReviewSnapshot {
     param(
         [Parameter(Mandatory = $true)][string]$Repository,
         [Parameter(Mandatory = $true)][int]$Number,
-        [string]$Hostname
+        [string]$Hostname,
+        [ValidateRange(1, 3)][int]$Attempt = 1
     )
 
     $routing = Resolve-RepositoryRouting -Repository $Repository -Hostname $Hostname
@@ -267,6 +268,18 @@ function Get-PrReviewSnapshot {
             authorLogin = [string]$reaction.user.login
             createdAt = $reaction.created_at
         }
+    }
+
+    $verifiedPr = Invoke-GhJson @(
+        "pr", "view", $Number.ToString(), "--repo", $routing.selector,
+        "--json", "headRefOid"
+    )
+    if ($verifiedPr.headRefOid -ne $pr.headRefOid) {
+        if ($Attempt -ge 3) {
+            throw "Pull request HEAD changed repeatedly while collecting a review snapshot."
+        }
+
+        return Get-PrReviewSnapshot -Repository $Repository -Number $Number -Hostname $Hostname -Attempt ($Attempt + 1)
     }
 
     return [pscustomobject]@{
@@ -448,8 +461,9 @@ function Save-ReviewState {
 function Invoke-PrReviewWatcher {
     if ($CaptureBaseline) {
         if ([string]::IsNullOrWhiteSpace($Repository)) {
-            $repo = Invoke-GhJson @("repo", "view", "--json", "owner,name")
-            $script:Repository = "$($repo.owner.login)/$($repo.name)"
+            $repo = Invoke-GhJson @("repo", "view", "--json", "owner,name,url")
+            $script:Hostname = ([uri]$repo.url).Authority
+            $script:Repository = "$Hostname/$($repo.owner.login)/$($repo.name)"
         }
         $routing = Resolve-RepositoryRouting -Repository $Repository -Hostname $Hostname
         $script:Repository = $routing.selector

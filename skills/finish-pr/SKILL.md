@@ -257,7 +257,7 @@ After all replies:
 1. Re-fetch all threads with `-All`.
 2. Verify every reply created in this run belongs to a submitted review.
 3. Verify the authenticated user has no pending review on the PR, including reviews created before this run.
-4. Compare all thread IDs and `isResolved` values with the baseline. They must be unchanged. If external state changed, report it; never mutate it back.
+4. For every thread ID present in the baseline, compare its `isResolved` value with the current value. Baseline resolution states must be unchanged; report external changes and never mutate them back. New thread IDs are expected during review convergence: classify them as additional feedback rather than treating their existence as a resolution mutation.
 
 ## 6. Push and converge with Codex
 
