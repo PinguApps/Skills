@@ -63,6 +63,16 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 6. Inspect the complete PR diff before evaluating conflicts, CI, or feedback.
 7. Identify the Codex reviewer login from existing Codex-authored review comments, reviews, or PR-body reactions. Normalize an optional `[bot]` suffix. Never assume a fixed login. If multiple identities are plausible and approval identity changes the outcome, ask the user.
 8. Resolve the authenticated GitHub viewer login. Treat comments from that login, or another agent login established unambiguously by the conversation/PR history, as agent responses.
+9. Create one unique state directory outside the repository and retain it for the full run:
+
+   ```powershell
+   $runStateDirectory = Join-Path ([IO.Path]::GetTempPath()) (
+     "finish-pr-{0}-{1}" -f $prNumber, [guid]::NewGuid().ToString("N")
+   )
+   New-Item -ItemType Directory -Path $runStateDirectory | Out-Null
+   ```
+
+   Store every baseline, snapshot, and watcher-state file for this run inside this directory so concurrent runs cannot overwrite one another.
 
 ## 2. Resolve merge conflicts
 
@@ -115,8 +125,8 @@ Resolve the loaded skill's directory, then use its bundled helpers by absolute p
 Capture every thread's read-only resolution baseline outside the repository:
 
 ```powershell
-$threadBaseline = Join-Path ([IO.Path]::GetTempPath()) "finish-pr-$prNumber-thread-resolution.json"
-$threadSnapshot = Join-Path ([IO.Path]::GetTempPath()) "finish-pr-$prNumber-unresolved.json"
+$threadBaseline = Join-Path $runStateDirectory "thread-resolution.json"
+$threadSnapshot = Join-Path $runStateDirectory "unresolved-threads.json"
 pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -All |
   Set-Content -Encoding utf8 $threadBaseline
 
@@ -201,10 +211,11 @@ After all replies:
    git status --short --branch
    ```
 
-3. If there are commits to push, capture a reviewer baseline immediately before pushing:
+3. If there are commits to push, increment `$reviewRound` and capture a reviewer baseline immediately before pushing:
 
    ```powershell
-   $reviewState = Join-Path ([IO.Path]::GetTempPath()) "finish-pr-$prNumber-review.json"
+   $reviewRound++
+   $reviewState = Join-Path $runStateDirectory ("review-round-{0}.json" -f $reviewRound)
    pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
      -CaptureBaseline `
      -StatePath $reviewState `
