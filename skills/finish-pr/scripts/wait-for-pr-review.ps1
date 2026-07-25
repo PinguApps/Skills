@@ -118,6 +118,7 @@ function Get-PrReviewSnapshot {
                 body = [string]$comment.body
                 url = [string]$comment.url
                 createdAt = $comment.createdAt
+                updatedAt = $comment.updatedAt
                 threadId = [string]$thread.id
             }
         }
@@ -131,6 +132,7 @@ function Get-PrReviewSnapshot {
             body = [string]$comment.body
             url = [string]$comment.url
             createdAt = $comment.createdAt
+            updatedAt = $comment.updatedAt
             threadId = $null
         }
     }
@@ -143,6 +145,7 @@ function Get-PrReviewSnapshot {
             body = [string]$review.body
             url = [string]$pr.url
             createdAt = $review.submittedAt
+            updatedAt = $review.updatedAt
             threadId = $null
         }
     }
@@ -197,10 +200,28 @@ function Resolve-ReviewOutcome {
 
     $normalizedReviewer = Normalize-ReviewerLogin $Reviewer
     $seenFeedbackIds = @($Baseline.seenFeedbackIds)
+    $seenFeedbackVersions = if ($Baseline.PSObject.Properties.Name -contains "seenFeedbackVersions") {
+        @($Baseline.seenFeedbackVersions)
+    } else {
+        @()
+    }
     $seenReactionIds = @($Baseline.seenReactionIds)
     $newFeedback = @($Snapshot.feedbackItems | Where-Object {
-        (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
-        $_.id -notin $seenFeedbackIds
+        if ((Normalize-ReviewerLogin $_.authorLogin) -ne $normalizedReviewer) {
+            return $false
+        }
+
+        if ($_.id -notin $seenFeedbackIds) {
+            return $true
+        }
+
+        $seenVersion = $seenFeedbackVersions | Where-Object id -eq $_.id | Select-Object -First 1
+        if ($null -eq $seenVersion) {
+            return $false
+        }
+
+        return [string]$_.updatedAt -ne [string]$seenVersion.updatedAt -or
+            [string]$_.body -ne [string]$seenVersion.body
     })
 
     if ($newFeedback.Count -gt 0) {
@@ -322,6 +343,13 @@ function Invoke-PrReviewWatcher {
             baselineHeadSha = $snapshot.pullRequest.headSha
             seenReactionIds = @($snapshot.reactions | ForEach-Object { $_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
             seenFeedbackIds = @($snapshot.feedbackItems | ForEach-Object { $_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            seenFeedbackVersions = @($snapshot.feedbackItems | ForEach-Object {
+                [pscustomobject]@{
+                    id = [string]$_.id
+                    updatedAt = $_.updatedAt
+                    body = [string]$_.body
+                }
+            })
             reviewStartedObserved = $reviewStartedObserved
             approvalCandidateObserved = $false
             expectedHeadReactionsCaptured = $false

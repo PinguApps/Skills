@@ -54,6 +54,24 @@ $feedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -F
 Assert-Equal "feedback" $feedback.status "A new reviewer comment should return feedback."
 Assert-Equal 1 $feedback.newFeedback.Count "New feedback should be returned."
 
+$editedFeedbackBaseline = [pscustomobject]@{
+    seenReactionIds = @()
+    seenFeedbackIds = @("edited-comment")
+    seenFeedbackVersions = @(
+        [pscustomobject]@{ id = "edited-comment"; updatedAt = "2026-01-01T00:00:00Z"; body = "Original feedback." }
+    )
+}
+$editedComment = [pscustomobject]@{
+    id = "edited-comment"
+    kind = "thread_comment"
+    authorLogin = $reviewer
+    body = "Updated feedback."
+    updatedAt = "2026-01-01T00:01:00Z"
+}
+$editedFeedback = Resolve-ReviewOutcome -Baseline $editedFeedbackBaseline -Snapshot (New-Snapshot -FeedbackItems @($editedComment)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $false
+Assert-Equal "feedback" $editedFeedback.status "An edited baseline comment should return feedback."
+Assert-Equal 1 $editedFeedback.newFeedback.Count "Edited feedback should be returned once."
+
 $thumb = [pscustomobject]@{ id = "new-thumb"; content = "+1"; authorLogin = "example-codex-reviewer[bot]" }
 $candidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $candidate.status "A thumbs-up should become an approval candidate even when no eyes reaction was sampled."
