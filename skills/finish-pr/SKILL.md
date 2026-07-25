@@ -146,10 +146,10 @@ Capture every thread's read-only resolution baseline outside the repository:
 ```powershell
 $threadBaseline = Join-Path $runStateDirectory "thread-resolution.json"
 $threadSnapshot = Join-Path $runStateDirectory "unresolved-threads.json"
-pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -All |
+pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -Repository $baseRepository -All |
   Set-Content -Encoding utf8 $threadBaseline
 
-pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber |
+pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -Repository $baseRepository |
   Set-Content -Encoding utf8 $threadSnapshot
 ```
 
@@ -243,6 +243,7 @@ After all replies:
      -CaptureBaseline `
      -StatePath $reviewState `
      -PrNumber $prNumber `
+     -Repository $baseRepository `
      -ReviewerLogin "<discovered-codex-login>"
    ```
 

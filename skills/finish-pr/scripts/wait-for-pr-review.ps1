@@ -14,6 +14,9 @@ param(
     [Parameter(Mandatory = $true, ParameterSetName = "Capture")]
     [string]$ReviewerLogin,
 
+    [Parameter(ParameterSetName = "Capture")]
+    [string]$Repository,
+
     [Parameter(Mandatory = $true, ParameterSetName = "Wait")]
     [string]$ExpectedHeadSha,
 
@@ -93,7 +96,7 @@ function Get-PrReviewSnapshot {
     )
 
     $pr = Invoke-GhJson @(
-        "pr", "view", $Number.ToString(),
+        "pr", "view", $Number.ToString(), "--repo", $Repository,
         "--json", "number,url,state,headRefOid,comments,reviews"
     )
     $reactionPages = Invoke-GhJson @(
@@ -102,7 +105,7 @@ function Get-PrReviewSnapshot {
     $reactions = @(Expand-PaginatedItems $reactionPages)
 
     $threadScript = Join-Path $PSScriptRoot "get-unresolved-pr-threads.ps1"
-    $threadJson = & $threadScript -PrNumber $Number -All
+    $threadJson = & $threadScript -PrNumber $Number -Repository $Repository -All
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to fetch pull request review threads."
     }
@@ -321,14 +324,16 @@ function Save-ReviewState {
 
 function Invoke-PrReviewWatcher {
     if ($CaptureBaseline) {
-        $repo = Invoke-GhJson @("repo", "view", "--json", "owner,name")
-        $repository = "$($repo.owner.login)/$($repo.name)"
+        if ([string]::IsNullOrWhiteSpace($Repository)) {
+            $repo = Invoke-GhJson @("repo", "view", "--json", "owner,name")
+            $script:Repository = "$($repo.owner.login)/$($repo.name)"
+        }
         if ($PrNumber -le 0) {
-            $pr = Invoke-GhJson @("pr", "view", "--json", "number")
+            $pr = Invoke-GhJson @("pr", "view", "--repo", $Repository, "--json", "number")
             $script:PrNumber = [int]$pr.number
         }
 
-        $snapshot = Get-PrReviewSnapshot -Repository $repository -Number $PrNumber
+        $snapshot = Get-PrReviewSnapshot -Repository $Repository -Number $PrNumber
         $normalizedReviewer = Normalize-ReviewerLogin $ReviewerLogin
         $reviewStartedObserved = @($snapshot.reactions | Where-Object {
             (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
@@ -336,7 +341,7 @@ function Invoke-PrReviewWatcher {
         }).Count -gt 0
         $state = [pscustomobject]@{
             version = 1
-            repository = $repository
+            repository = $Repository
             prNumber = $PrNumber
             reviewerLogin = $normalizedReviewer
             capturedAt = [DateTimeOffset]::UtcNow.ToString("o")
@@ -359,7 +364,7 @@ function Invoke-PrReviewWatcher {
         [pscustomobject]@{
             status = "baseline_captured"
             statePath = $StatePath
-            repository = $repository
+            repository = $Repository
             prNumber = $PrNumber
             reviewerLogin = $state.reviewerLogin
             headSha = $state.baselineHeadSha

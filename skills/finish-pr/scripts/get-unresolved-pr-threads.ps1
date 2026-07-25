@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [int]$PrNumber,
+    [string]$Repository,
     [switch]$All
 )
 
@@ -22,14 +23,27 @@ function Invoke-GhJson {
     return $json | ConvertFrom-Json -Depth 100
 }
 
-$repo = Invoke-GhJson @("repo", "view", "--json", "owner,name")
-$owner = $repo.owner.login
-$name = $repo.name
+if ([string]::IsNullOrWhiteSpace($Repository)) {
+    $repo = Invoke-GhJson @("repo", "view", "--json", "owner,name")
+    $owner = [string]$repo.owner.login
+    $name = [string]$repo.name
+    $Repository = "$owner/$name"
+} else {
+    $repositoryParts = $Repository.Split("/", 2)
+    if ($repositoryParts.Count -ne 2 -or
+        [string]::IsNullOrWhiteSpace($repositoryParts[0]) -or
+        [string]::IsNullOrWhiteSpace($repositoryParts[1])) {
+        throw "-Repository must use the owner/name format."
+    }
+
+    $owner = $repositoryParts[0]
+    $name = $repositoryParts[1]
+}
 
 if ($PrNumber -gt 0) {
-    $pr = Invoke-GhJson @("pr", "view", $PrNumber.ToString(), "--json", "number,title,url,headRefName,baseRefName")
+    $pr = Invoke-GhJson @("pr", "view", $PrNumber.ToString(), "--repo", $Repository, "--json", "number,title,url,headRefName,baseRefName")
 } else {
-    $pr = Invoke-GhJson @("pr", "view", "--json", "number,title,url,headRefName,baseRefName")
+    $pr = Invoke-GhJson @("pr", "view", "--repo", $Repository, "--json", "number,title,url,headRefName,baseRefName")
     $PrNumber = [int]$pr.number
 }
 
@@ -170,7 +184,7 @@ $unresolvedThreads = @($threads | Where-Object { -not $_.isResolved })
 $selectedThreads = if ($All) { @($threads) } else { $unresolvedThreads }
 
 [pscustomobject]@{
-    repository = "$owner/$name"
+    repository = $Repository
     pullRequest = $pr
     unresolvedCount = $unresolvedThreads.Count
     threads = $selectedThreads
