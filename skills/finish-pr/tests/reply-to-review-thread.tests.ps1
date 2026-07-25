@@ -1,71 +1,52 @@
 $ErrorActionPreference = "Stop"
 
-$global:GhMockCalls = 0
+$global:GhMockCalls = @()
 function global:gh {
-    $global:GhMockCalls++
+    $global:GhMockCalls += ,@($args)
     $global:LASTEXITCODE = 0
 
-    if ($global:GhMockCalls -eq 1) {
-        return '{"data":{"viewer":{"login":"example-agent"},"node":{"pullRequest":{"id":"pull-request-1","reviews":{"pageInfo":{"hasNextPage":true,"endCursor":"page-1"},"nodes":[{"id":"other-review","state":"PENDING","author":{"login":"someone-else"}}]}}}}}'
-    }
-
-    if ($global:GhMockCalls -eq 2) {
-        return '{"data":{"node":{"reviews":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"id":"viewer-review","state":"PENDING","author":{"login":"example-agent"}}]}}}}'
-    }
-
-    throw "Reply mutation should not run when a later pending-review page belongs to the viewer."
-}
-
-try {
-    & "$PSScriptRoot\..\scripts\reply-to-review-thread.ps1" -ThreadId "thread-1" -Body "test"
-    throw "Expected the helper to reject the existing pending review."
-}
-catch {
-    if ($_.Exception.Message -notlike "Refusing to reply while an existing pending review*") {
-        throw
-    }
-
-    if ($global:GhMockCalls -ne 2) {
-        throw "Expected two pending-review page calls, got $global:GhMockCalls."
-    }
-}
-finally {
-    Remove-Item Function:\global:gh -ErrorAction SilentlyContinue
-    Remove-Variable GhMockCalls -Scope Global -ErrorAction SilentlyContinue
-}
-
-$global:GhMockCalls = 0
-function global:gh {
-    $global:GhMockCalls++
-    $global:LASTEXITCODE = 0
-
-    switch ($global:GhMockCalls) {
+    switch ($global:GhMockCalls.Count) {
         1 {
-            return '{"data":{"viewer":{"login":"example-agent"},"node":{"pullRequest":{"id":"pull-request-1","reviews":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}'
+            return '{"data":{"node":{"pullRequest":{"number":25,"repository":{"nameWithOwner":"example-owner/example-repository"}},"comments":{"nodes":[{"databaseId":101}]}}}}'
         }
         2 {
-            return '{"data":{"addPullRequestReviewThreadReply":{"comment":{"id":"reply-1","url":"https://example.test/reply-1","pullRequestReview":{"id":"viewer-review","state":"PENDING","submittedAt":null}}}}}'
+            return '{"node_id":"reply-1","html_url":"https://example.test/reply-1"}'
         }
         3 {
-            return '{"data":{"viewer":{"login":"example-agent"},"node":{"id":"viewer-review","state":"PENDING","body":"","author":{"login":"example-agent"},"comments":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"concurrent-comment"},{"id":"reply-1"}]}}}}'
+            return '{"data":{"node":{"id":"reply-1","url":"https://example.test/reply-1","pullRequestReview":{"id":"review-1","state":"COMMENTED","submittedAt":"2026-01-01T00:00:00Z"}}}}'
         }
         default {
-            throw "The helper must not submit a concurrent pending review."
+            throw "Unexpected gh call."
         }
     }
 }
 
 try {
-    & "$PSScriptRoot\..\scripts\reply-to-review-thread.ps1" -ThreadId "thread-1" -Body "test"
-    throw "Expected the helper to reject the concurrent pending review."
-}
-catch {
-    if ($_.Exception.Message -notlike "Refusing to submit review*because it contains content other than reply*") {
-        throw
+    $result = & "$PSScriptRoot\..\scripts\reply-to-review-thread.ps1" `
+        -ThreadId "thread-1" `
+        -Hostname "github.example" `
+        -Body "test reply" |
+      ConvertFrom-Json -Depth 20
+
+    if (-not $result.verifiedSubmitted -or $result.review.state -ne "COMMENTED") {
+        throw "Expected a verified submitted reply."
     }
 
-    if ($global:GhMockCalls -ne 3) {
-        throw "Expected the helper to stop after the pending-review safety query, got $global:GhMockCalls calls."
+    if ($global:GhMockCalls.Count -ne 3) {
+        throw "Expected context, reply, and verification calls."
+    }
+
+    $replyCall = $global:GhMockCalls[1] -join " "
+    if ($replyCall -notmatch '--hostname github\.example' -or
+        $replyCall -notmatch '-X POST' -or
+        $replyCall -notmatch 'repos/example-owner/example-repository/pulls/25/comments/101/replies' -or
+        $replyCall -notmatch 'body=test reply') {
+        throw "The helper did not use the atomic single-comment reply endpoint: $replyCall"
+    }
+
+    $allCalls = $global:GhMockCalls | ForEach-Object { $_ -join " " }
+    if (($allCalls -join [Environment]::NewLine) -match 'submitPullRequestReview') {
+        throw "The helper must not submit a shared pending review."
     }
 }
 finally {

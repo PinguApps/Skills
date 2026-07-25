@@ -18,58 +18,55 @@ if ($PSCmdlet.ParameterSetName -eq "File") {
     $Body = Get-Content -Raw -LiteralPath $BodyFile
 }
 
-function Invoke-GhGraphQl {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Query,
+function Invoke-GhJson {
+    param([Parameter(Mandatory = $true)][string[]]$GhArgs)
 
-        [Parameter(Mandatory = $true)]
-        [hashtable]$Variables
-    )
-
-    $ghArgs = @("api")
+    $args = @("api")
     if (-not [string]::IsNullOrWhiteSpace($Hostname)) {
-        $ghArgs += @("--hostname", $Hostname)
+        $args += @("--hostname", $Hostname)
     }
-    $ghArgs += @("graphql", "-f", "query=$Query")
-    foreach ($entry in $Variables.GetEnumerator()) {
-        $ghArgs += @("-f", "$($entry.Key)=$($entry.Value)")
-    }
+    $args += $GhArgs
 
-    $output = & gh @ghArgs 2>&1
+    $output = & gh @args 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw ($output -join [Environment]::NewLine)
     }
 
     $json = $output -join [Environment]::NewLine
     if ([string]::IsNullOrWhiteSpace($json)) {
-        throw "GitHub returned an empty GraphQL response."
+        throw "GitHub returned an empty JSON response."
     }
 
     return $json | ConvertFrom-Json -Depth 100
 }
 
-$pendingReviewQuery = @'
+function Invoke-GhGraphQl {
+    param(
+        [Parameter(Mandatory = $true)][string]$Query,
+        [Parameter(Mandatory = $true)][hashtable]$Variables
+    )
+
+    $ghArgs = @("graphql", "-f", "query=$Query")
+    foreach ($entry in $Variables.GetEnumerator()) {
+        $ghArgs += @("-f", "$($entry.Key)=$($entry.Value)")
+    }
+
+    return Invoke-GhJson -GhArgs $ghArgs
+}
+
+$threadContextQuery = @'
 query($threadId:ID!) {
-  viewer {
-    login
-  }
   node(id:$threadId) {
     ... on PullRequestReviewThread {
       pullRequest {
-        id
-        reviews(first:100, states:PENDING) {
-          pageInfo {
-            hasNextPage
-            endCursor
-          }
-          nodes {
-            id
-            state
-            author {
-              login
-            }
-          }
+        number
+        repository {
+          nameWithOwner
+        }
+      }
+      comments(first:1) {
+        nodes {
+          databaseId
         }
       }
     }
@@ -77,151 +74,28 @@ query($threadId:ID!) {
 }
 '@
 
-$pendingReviewResult = Invoke-GhGraphQl -Query $pendingReviewQuery -Variables @{
+$threadContext = Invoke-GhGraphQl -Query $threadContextQuery -Variables @{
     threadId = $ThreadId
 }
-$viewerLogin = $pendingReviewResult.data.viewer.login
-$pullRequest = $pendingReviewResult.data.node.pullRequest
+$thread = $threadContext.data.node
+$pullRequest = $thread.pullRequest
+$rootComment = @($thread.comments.nodes) | Select-Object -First 1
 
-if ([string]::IsNullOrWhiteSpace($viewerLogin) -or $null -eq $pullRequest) {
+if ($null -eq $pullRequest -or
+    [string]::IsNullOrWhiteSpace([string]$pullRequest.repository.nameWithOwner) -or
+    [int]$pullRequest.number -le 0 -or
+    [long]$rootComment.databaseId -le 0) {
     throw "GitHub returned no verifiable pull request context for review thread $ThreadId."
 }
 
-$pendingReviews = @($pullRequest.reviews.nodes)
-$pendingReviewAfter = $pullRequest.reviews.pageInfo.endCursor
-$pendingReviewPageQuery = @'
-query($pullRequestId:ID!, $after:String) {
-  node(id:$pullRequestId) {
-    ... on PullRequest {
-      reviews(first:100, after:$after, states:PENDING) {
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-        nodes {
-          id
-          state
-          author {
-            login
-          }
-        }
-      }
-    }
-  }
-}
-'@
+$reply = Invoke-GhJson -GhArgs @(
+    "-X", "POST",
+    "repos/$($pullRequest.repository.nameWithOwner)/pulls/$($pullRequest.number)/comments/$($rootComment.databaseId)/replies",
+    "-f", "body=$Body"
+)
 
-while ($pullRequest.reviews.pageInfo.hasNextPage) {
-    $pendingReviewPageResult = Invoke-GhGraphQl -Query $pendingReviewPageQuery -Variables @{
-        pullRequestId = $pullRequest.id
-        after = $pendingReviewAfter
-    }
-    $pendingReviewPage = $pendingReviewPageResult.data.node.reviews
-    $pendingReviews += @($pendingReviewPage.nodes)
-    $pullRequest.reviews.pageInfo = $pendingReviewPage.pageInfo
-    $pendingReviewAfter = $pendingReviewPage.pageInfo.endCursor
-}
-
-$existingPendingReviews = @($pendingReviews | Where-Object { $_.author.login -eq $viewerLogin })
-if ($existingPendingReviews.Count -gt 0) {
-    $reviewIds = $existingPendingReviews.id -join ", "
-    throw "Refusing to reply while an existing pending review belongs to $viewerLogin ($reviewIds). Submit or discard it first."
-}
-
-$query = @'
-mutation($threadId:ID!, $body:String!) {
-  addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$threadId, body:$body}) {
-    comment {
-      id
-      url
-      pullRequestReview {
-        id
-        state
-        submittedAt
-      }
-    }
-  }
-}
-'@
-
-$result = Invoke-GhGraphQl -Query $query -Variables @{
-    threadId = $ThreadId
-    body = $Body
-}
-$comment = $result.data.addPullRequestReviewThreadReply.comment
-
-if ($null -eq $comment -or $null -eq $comment.pullRequestReview) {
+if ([string]::IsNullOrWhiteSpace([string]$reply.node_id)) {
     throw "GitHub created no verifiable pull request review comment."
-}
-
-$submittedPendingReview = $false
-if ($comment.pullRequestReview.state -eq "PENDING") {
-    $pendingReviewSafetyQuery = @'
-query($reviewId:ID!) {
-  viewer {
-    login
-  }
-  node(id:$reviewId) {
-    ... on PullRequestReview {
-      id
-      state
-      body
-      author {
-        login
-      }
-      comments(first:2) {
-        pageInfo {
-          hasNextPage
-        }
-        nodes {
-          id
-        }
-      }
-    }
-  }
-}
-'@
-
-    $pendingReviewSafetyResult = Invoke-GhGraphQl -Query $pendingReviewSafetyQuery -Variables @{
-        reviewId = $comment.pullRequestReview.id
-    }
-    $pendingReview = $pendingReviewSafetyResult.data.node
-    $pendingReviewComments = @($pendingReview.comments.nodes)
-
-    if ($null -eq $pendingReview -or
-        $pendingReview.id -ne $comment.pullRequestReview.id -or
-        $pendingReview.author.login -ne $viewerLogin) {
-        throw "Refusing to submit review $($comment.pullRequestReview.id) because its ownership could not be verified."
-    }
-
-    if ($pendingReview.state -eq "PENDING" -and
-        (-not [string]::IsNullOrWhiteSpace([string]$pendingReview.body) -or
-            [bool]$pendingReview.comments.pageInfo.hasNextPage -or
-            $pendingReviewComments.Count -ne 1 -or
-            $pendingReviewComments[0].id -ne $comment.id)) {
-        throw "Refusing to submit review $($pendingReview.id) because it contains content other than reply $($comment.id)."
-    }
-
-    if ($pendingReview.state -ne "PENDING") {
-        $comment.pullRequestReview.state = $pendingReview.state
-    } else {
-        $submitQuery = @'
-mutation($reviewId:ID!) {
-  submitPullRequestReview(input:{pullRequestReviewId:$reviewId, event:COMMENT}) {
-    pullRequestReview {
-      id
-      state
-      submittedAt
-    }
-  }
-}
-'@
-
-        $null = Invoke-GhGraphQl -Query $submitQuery -Variables @{
-            reviewId = $comment.pullRequestReview.id
-        }
-        $submittedPendingReview = $true
-    }
 }
 
 $verifyQuery = @'
@@ -241,7 +115,7 @@ query($commentId:ID!) {
 '@
 
 $verification = Invoke-GhGraphQl -Query $verifyQuery -Variables @{
-    commentId = $comment.id
+    commentId = $reply.node_id
 }
 $verifiedComment = $verification.data.node
 
@@ -249,7 +123,7 @@ if ($null -eq $verifiedComment -or
     $null -eq $verifiedComment.pullRequestReview -or
     $verifiedComment.pullRequestReview.state -eq "PENDING" -or
     $null -eq $verifiedComment.pullRequestReview.submittedAt) {
-    throw "Review reply $($comment.id) is still pending or could not be verified as submitted."
+    throw "Review reply $($reply.node_id) is still pending or could not be verified as submitted."
 }
 
 [pscustomobject]@{
@@ -258,6 +132,6 @@ if ($null -eq $verifiedComment -or
         url = $verifiedComment.url
     }
     review = $verifiedComment.pullRequestReview
-    submittedPendingReview = $submittedPendingReview
+    submittedPendingReview = $false
     verifiedSubmitted = $true
 } | ConvertTo-Json -Depth 10
