@@ -1,6 +1,6 @@
 ---
 name: to-linear
-description: Turns PLAN.md and project context into ordered, non-overlapping Linear milestones and tickets for agent and human work, with native dependencies, Backlog status, and focused labels. Use when the user asks to create a Linear implementation backlog from a project plan.
+description: Turns PLAN.md and project context into ordered, non-overlapping Linear milestones and tickets for agent and human work, with native dependencies, Backlog status, and focused labels.
 disable-model-invocation: true
 ---
 
