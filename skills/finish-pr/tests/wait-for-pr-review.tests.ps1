@@ -185,6 +185,14 @@ $preservedReviewBaseline = [pscustomobject]@{
 }
 $preservedReviewApproval = Resolve-ReviewOutcome -Baseline $preservedReviewBaseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb) -FeedbackItems @($expectedHeadReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewHeadBoundary $pushCompletedAt -ReviewStartedObserved $true -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $preservedReviewApproval.status "A current-HEAD review captured during a no-push baseline must remain eligible to link a later thumbs-up."
+$preservedApprovalBaseline = [pscustomobject]@{
+    seenReactionIds = @("same-second-thumb")
+    preservedApprovalReactionIds = @("same-second-thumb")
+    seenFeedbackIds = @("expected-head-review")
+    preservedExpectedHeadReviewIds = @("expected-head-review")
+}
+$preservedBaselineApproval = Resolve-ReviewOutcome -Baseline $preservedApprovalBaseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb) -FeedbackItems @($expectedHeadReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewHeadBoundary $pushCompletedAt -ReviewStartedObserved $true -ApprovalCandidateObserved $false
+Assert-Equal "approval_candidate" $preservedBaselineApproval.status "A baseline thumbs-up already linked to a current-HEAD review must remain eligible."
 $oldHeadReview = [pscustomobject]@{ id = "old-head-review"; kind = "review"; authorLogin = $reviewer; body = ""; reviewState = "COMMENTED"; headSha = "old-sha"; createdAt = $sameSecondThumb.createdAt }
 $staleReactionApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($sameSecondThumb) -FeedbackItems @($oldHeadReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewHeadBoundary $pushCompletedAt -ReviewStartedObserved $true -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $staleReactionApproval.status "A reaction without a submitted expected-HEAD review must not approve the pushed HEAD."
@@ -286,7 +294,13 @@ function Get-PrReviewSnapshot {
         headSha = "new-sha"
         createdAt = "2026-01-01T00:00:01Z"
     }
-    return New-Snapshot -Reactions @($eyes) -FeedbackItems @($capturedExpectedHeadReview)
+    $capturedApproval = [pscustomobject]@{
+        id = "captured-approval"
+        content = "+1"
+        authorLogin = $reviewer
+        createdAt = "2026-01-01T00:00:02Z"
+    }
+    return New-Snapshot -Reactions @($eyes, $capturedApproval) -FeedbackItems @($capturedExpectedHeadReview)
 }
 
 try {
@@ -315,6 +329,7 @@ try {
     Assert-Equal $true $ongoingReviewBaseline.reviewStartedObserved "No-push capture should preserve an existing review-start reaction when requested."
     Assert-Equal ([DateTimeOffset]"2026-01-01T00:00:00Z") ([DateTimeOffset]$ongoingReviewBaseline.reviewHeadBoundary) "No-push capture should preserve the ongoing review boundary."
     Assert-Equal "captured-expected-head-review" @($ongoingReviewBaseline.preservedExpectedHeadReviewIds)[0] "No-push capture should retain a current-HEAD review observed after the preserved start boundary."
+    Assert-Equal "captured-approval" @($ongoingReviewBaseline.preservedApprovalReactionIds)[0] "No-push capture should retain an approval already linked to a current-HEAD review."
 }
 finally {
     Remove-Item -LiteralPath $baselinePath -ErrorAction SilentlyContinue

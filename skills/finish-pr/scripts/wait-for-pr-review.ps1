@@ -442,7 +442,8 @@ function Resolve-ReviewOutcome {
     }
     $newReviewerReactions = @($Snapshot.reactions | Where-Object {
         (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
-        $_.id -notin $seenReactionIds -and
+        ($_.id -notin $seenReactionIds -or
+            $_.id -in @($Baseline.preservedApprovalReactionIds)) -and
         ($reviewRequestCutoff -eq [DateTimeOffset]::MinValue -or
             (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
                 [DateTimeOffset]$_.createdAt -ge $reviewRequestCutoff))
@@ -618,13 +619,27 @@ function Invoke-PrReviewWatcher {
         } else {
             $null
         }
-        $preservedExpectedHeadReviewIds = if (-not [string]::IsNullOrWhiteSpace([string]$existingReviewBoundary)) {
+        $currentHeadReviews = if ($PreserveExistingReviewStart) {
             @($snapshot.feedbackItems | Where-Object {
                 $_.kind -eq "review" -and
                 (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
                 $_.headSha -eq $snapshot.pullRequest.headSha -and
+                -not [string]::IsNullOrWhiteSpace([string]$_.createdAt)
+            })
+        } else {
+            @()
+        }
+        $preservedExpectedHeadReviewIds = @($currentHeadReviews | ForEach-Object { $_.id })
+        $preservedApprovalReactionIds = if ($currentHeadReviews.Count -gt 0) {
+            $earliestCurrentHeadReview = $currentHeadReviews |
+                ForEach-Object { ConvertTo-ReviewTimestamp $_.createdAt } |
+                Sort-Object |
+                Select-Object -First 1
+            @($snapshot.reactions | Where-Object {
+                (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
+                $_.content -eq "+1" -and
                 -not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
-                (ConvertTo-ReviewTimestamp $_.createdAt) -ge [DateTimeOffset]$existingReviewBoundary
+                (ConvertTo-ReviewTimestamp $_.createdAt) -ge $earliestCurrentHeadReview
             } | ForEach-Object { $_.id })
         } else {
             @()
@@ -659,6 +674,7 @@ function Invoke-PrReviewWatcher {
             expectedHeadReactionsCaptured = $false
             reviewHeadBoundary = $existingReviewBoundary
             preservedExpectedHeadReviewIds = $preservedExpectedHeadReviewIds
+            preservedApprovalReactionIds = $preservedApprovalReactionIds
         }
         Save-ReviewState -State $state -Path $StatePath
 
