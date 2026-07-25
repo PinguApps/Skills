@@ -190,6 +190,16 @@ Assert-Equal $false $unchangedBaselineUpdated "Expected-head reactions must not 
 $unchangedApproval = Resolve-ReviewOutcome -Baseline $unchangedHeadState -Snapshot $unchangedHeadSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -BaselineSha "new-sha" -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $unchangedApproval.status "A fresh first-poll thumbs-up should approve an unchanged expected head after confirmation."
 
+$staleEyesState = [pscustomobject]@{
+    seenReactionIds = @("old-eyes")
+    reviewStartedObserved = $false
+    approvalCandidateObserved = $false
+    expectedHeadReactionsCaptured = $false
+}
+$staleEyesSnapshot = New-Snapshot -Reactions @([pscustomobject]@{ id = "old-eyes"; content = "eyes"; authorLogin = $reviewer; createdAt = $pushCompletedAt.AddMinutes(-1) })
+$null = Initialize-ExpectedHeadReactionBaseline -State $staleEyesState -Snapshot $staleEyesSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt
+Assert-Equal $false $staleEyesState.reviewStartedObserved "A baseline eyes reaction must not satisfy the automatic-review grace period."
+
 $baselinePath = Join-Path ([IO.Path]::GetTempPath()) "finish-pr-wait-review-baseline-test.json"
 function Invoke-GhJson {
     return [pscustomobject]@{
@@ -208,7 +218,7 @@ try {
     $ReviewerLogin = $reviewer
     Invoke-PrReviewWatcher | Out-Null
     $capturedBaseline = Get-Content -Raw -LiteralPath $baselinePath | ConvertFrom-Json -Depth 100
-    Assert-Equal $true $capturedBaseline.reviewStartedObserved "Baseline capture should preserve an existing reviewer start reaction."
+    Assert-Equal $false $capturedBaseline.reviewStartedObserved "Baseline capture should not treat a pre-existing start reaction as evidence for the next HEAD."
 }
 finally {
     Remove-Item -LiteralPath $baselinePath -ErrorAction SilentlyContinue
@@ -234,5 +244,10 @@ try {
 finally {
     Remove-Item -LiteralPath $baselinePath -ErrorAction SilentlyContinue
 }
+
+$hostQualifiedRouting = Resolve-RepositoryRouting -Repository "ghe.example/example-owner/example-repository"
+Assert-Equal "ghe.example" $hostQualifiedRouting.hostname "A host-qualified repository should supply the API hostname."
+Assert-Equal "example-owner/example-repository" $hostQualifiedRouting.apiRepository "API routing should strip the hostname from the repository path."
+Assert-Equal "ghe.example/example-owner/example-repository" $hostQualifiedRouting.selector "The CLI selector should retain the hostname."
 
 Write-Output "All wait-for-pr-review tests passed."

@@ -32,7 +32,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 - Resolve conflicts before failed checks, and failed checks before review feedback. Later evidence may require revisiting an earlier phase.
 - Prefer the smallest correct change. Add focused tests for behavioural or regression-prone fixes.
 - Use one focused commit per independent conflict/check/feedback fix where practical.
-- Never rebase, force-push, merge, close, approve, or mark the PR ready for review unless the user explicitly requested that separate action.
+- Never rebase, force-push, merge the pull request on GitHub, close, approve, or mark the PR ready for review unless the user explicitly requested that separate action. The conflict-resolution workflow may merge the latest base commit into the PR branch.
 - Never resolve or unresolve a review thread. Do not call `resolveReviewThread`, `unresolveReviewThread`, or an equivalent.
 - Reply directly to review threads, one at a time. Never create replies concurrently.
 - Continue autonomously through new Codex feedback after pushes, within the convergence bounds below.
@@ -63,7 +63,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 7. Identify the Codex reviewer login from existing Codex-authored review comments, reviews, or PR-body reactions. Normalize an optional `[bot]` suffix. Never assume a fixed login.
    - If one identity is established, retain it for the run.
    - If multiple identities are plausible and approval identity changes the outcome, ask the user.
-   - If no candidate exists, mark reviewer bootstrap as required. After step 9 resolves the exact base repository and PR number—but before calling a helper that requires `-ReviewerLogin`—record current PR review/comment/reaction IDs and current HEAD, request `@codex review`, then poll read-only PR state for a bounded period. Attribute only new events produced in response to that request. A fresh 👍 directly proves approval for the recorded HEAD; fresh feedback establishes the Codex identity and must be handled; a fresh review-start reaction establishes the identity for the normal baseline/watcher flow. Stop if no identity or terminal signal appears within the review timeout.
+   - If no candidate exists, mark reviewer bootstrap as required. After step 9 resolves the exact base repository and PR number, observe reviewer events produced automatically after a new push from this run. Use the same 30-second 👀 grace period and fallback rule from step 6: post `@codex review` only when this run pushed and no fresh review-start signal appeared. A fresh 👍 proves approval for the pushed HEAD; fresh feedback establishes the Codex identity and must be handled; a fresh review-start reaction establishes the identity for the normal watcher flow. If no push is needed and no identity exists, stop rather than posting a review request.
 8. Resolve the authenticated GitHub viewer login. Treat comments from that login, or another agent login established unambiguously by the conversation/PR history, as agent responses.
 9. Resolve the base and head repositories independently from PR metadata:
    - derive the base repository from the PR URL;
@@ -154,7 +154,10 @@ Run this before CI or feedback:
 
    ```powershell
    gh pr checks $prNumber --repo $baseRepository --json bucket,completedAt,description,event,link,name,startedAt,state,workflow
+   gh pr checks $prNumber --repo $baseRepository --required --json bucket,completedAt,description,event,link,name,startedAt,state,workflow
    ```
+
+   Use the second query to distinguish required checks from optional checks. Treat “no required checks reported” as an empty required set, not a failure.
 
 2. For each failure, retrieve the actual logs before editing:
 
@@ -290,16 +293,29 @@ After all replies:
    $expectedHeadSha = git rev-parse HEAD
    ```
 
-5. Request Codex review for the pushed HEAD unless repository configuration explicitly verifies that every push triggers review automatically. Do not infer automatic review from earlier activity:
+5. After pushing, record the push-completion time and allow approximately 30 seconds for automatic review to start:
 
    ```powershell
    $reviewRequestedAt = [DateTimeOffset]::UtcNow
+   pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
+     -Wait `
+     -StatePath $reviewState `
+     -ExpectedHeadSha $expectedHeadSha `
+     -ReviewRequestedAt $reviewRequestedAt `
+     -ReviewStartGraceSeconds 30 `
+     -TimeoutMinutes 25 `
+     -PollSeconds 10
+   ```
+
+   If this returns `review_not_started`, and only then, request review once for that pushed HEAD:
+
+   ```powershell
    gh pr comment $prNumber --repo $baseRepository --body "@codex review"
    ```
 
-   Request once per pushed HEAD, after the push and before waiting.
+   Do not post the fallback comment when a fresh 👀, feedback, or approval appeared during the grace period.
 
-6. Wait for Codex using the bundled watcher:
+6. If the grace-period watcher returned `review_not_started`, resume the bundled watcher against the same baseline:
 
    ```powershell
    pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
@@ -316,13 +332,14 @@ After all replies:
 7. Handle its terminal result:
    - `feedback`: fetch all feedback for context, but action only IDs in `newFeedback`. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response.
    - `approved`: the same Codex identity produced the stable 👍 signal. Re-fetch checks, PR-body reactions, PR-level feedback, and threads once; finish only if the full definition of done still holds.
+   - `review_not_started`: post the single fallback `@codex review` comment, then resume step 6.
    - `timeout`: report that Codex did not reach a terminal state; do not claim readiness.
    - `head_changed`: fetch and inspect the new state. Stop when another actor's push makes continued mutation unsafe.
    - `pr_closed`: stop and report the PR state.
 
-8. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → request review → wait.
+8. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → automatic-review grace period → wait.
 
-If no push is needed, do not trust an existing PR-body reaction because reactions are not linked to commit SHAs. Capture a reviewer baseline for the current HEAD, request a fresh review after that baseline, and run the same watcher against the unchanged HEAD:
+If no push is needed, never post `@codex review`: the fallback is only permitted after this run pushes a new HEAD. Capture a reviewer baseline for the current HEAD and run the watcher read-only:
 
 ```powershell
 $expectedHeadSha = (git rev-parse HEAD).Trim()
@@ -336,7 +353,6 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -Hostname $githubHostname `
   -ReviewerLogin "<discovered-codex-login>"
 $reviewRequestedAt = [DateTimeOffset]::UtcNow
-gh pr comment $prNumber --repo $baseRepository --body "@codex review"
 pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -Wait `
   -StatePath $reviewState `
@@ -346,7 +362,7 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -PollSeconds 20
 ```
 
-Only feedback or a stable 👍 produced after this baseline is head-linked evidence. Process new feedback normally; never accept a reaction already present at baseline as approval for the current HEAD.
+Only feedback or a stable 👍 produced after this baseline is head-linked evidence. Process new feedback normally; never accept a reaction already present at baseline as approval for the current HEAD, and never use the fallback comment without a preceding push from this run.
 
 Bound convergence to five pushed review rounds or two hours overall. Stop earlier for approval, timeout, closure, unexpected head movement, or a genuine blocker.
 
@@ -357,6 +373,7 @@ Re-fetch rather than relying on cached state:
 - PR head, mergeability, and base;
 - latest base commit and a fresh local `git merge-tree --write-tree --messages HEAD <base-commit>` conflict probe;
 - all checks;
+- required checks queried separately with `gh pr checks --required`;
 - PR-body reactions from the discovered Codex identity;
 - PR-level reviews/comments;
 - all review threads and reply submission states;
