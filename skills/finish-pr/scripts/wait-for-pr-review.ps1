@@ -389,6 +389,7 @@ function Resolve-ReviewOutcome {
         ($_.id -notin $seenFeedbackIds -or
             $_.id -in @($Baseline.preservedExpectedHeadReviewIds)) -and
         $_.headSha -eq $ExpectedSha -and
+        $_.reviewState -notin @("DISMISSED", "PENDING") -and
         -not [string]::IsNullOrWhiteSpace([string]$_.createdAt)
     })
     $headLinkedReviewCutoff = if ($expectedHeadReviews.Count -gt 0) {
@@ -634,6 +635,7 @@ function Invoke-PrReviewWatcher {
                 $_.kind -eq "review" -and
                 (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
                 $_.headSha -eq $snapshot.pullRequest.headSha -and
+                $_.reviewState -notin @("DISMISSED", "PENDING") -and
                 -not [string]::IsNullOrWhiteSpace([string]$_.createdAt)
             })
         } else {
