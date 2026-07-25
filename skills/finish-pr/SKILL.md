@@ -31,7 +31,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 - Preserve unrelated worktree changes. Commit only changes made during this run.
 - Resolve conflicts before failed checks, and failed checks before review feedback. Later evidence may require revisiting an earlier phase.
 - Prefer the smallest correct change. Add focused tests for behavioural or regression-prone fixes.
-- Use exactly one focused, unsquashed commit per action-required PR feedback thread whose disposition produces a change. Never combine multiple threads into one commit, even when they are related. A justified disagreement requires a reply but no commit.
+- Use exactly one focused, unsquashed commit per action-required PR feedback unit whose disposition produces a change: one review thread or one standalone PR-level feedback item. Never combine multiple units into one commit, even when they are related. A justified disagreement requires a reply but no commit.
 - Never rebase, force-push, merge the pull request on GitHub, close, approve, or mark the PR ready for review unless the user explicitly requested that separate action. The conflict-resolution workflow may merge the latest base commit into the PR branch.
 - Never resolve or unresolve a review thread. Do not call `resolveReviewThread`, `unresolveReviewThread`, or an equivalent.
 - Reply directly to review threads, one at a time. Never create replies concurrently.
@@ -210,6 +210,8 @@ For each unresolved thread, read all paginated comments in chronological order a
 
 Within action-required threads, identify each distinct feedback item. Judge it against the user's intent, conversation history, repository rules, linked requirements, PR scope, current code, conventions, and tests. The thread is the commit boundary: group all work required by one thread into that thread's single commit, but never include another thread's work.
 
+Classify actionable PR-level review bodies and issue comments with the same rules. Each standalone feedback item is its own commit boundary; never combine it with a review thread or another standalone item. Track it by feedback ID and permalink because it has no review-thread ID.
+
 - Agree when it identifies a real bug, missed requirement, broken invariant, missing test, misleading behaviour, or scoped maintainability problem.
 - Disagree when it conflicts with requirements, established intent, repository invariants, or would produce a worse/out-of-scope design.
 - When uncertain, make a small scoped correctness fix if evidence supports it. Otherwise explain the uncertainty and why no change was made.
@@ -218,7 +220,7 @@ Do not skip outdated unresolved threads; determine whether their feedback still 
 
 ## 5. Fix and reply
 
-For each action-required thread:
+For each action-required review thread or standalone feedback item:
 
 1. Make the smallest complete fix for every actionable item in that thread, with focused tests.
 2. Run the narrowest meaningful verification.
@@ -233,15 +235,15 @@ For each action-required thread:
 
    Keep unrelated staged changes staged. Stop if a fix path had any pre-existing staged, unstaged, or untracked change and the new hunks cannot be isolated safely at patch level.
 
-4. If the disposition produces a change, create exactly one commit for the thread before moving to the next thread:
+4. If the disposition produces a change, create exactly one commit for the feedback unit before moving to the next unit:
 
    ```powershell
    git commit --only -m "fix(pr): address <thread summary>" -- <exact-thread-fix-paths>
    ```
 
-   Do not amend, squash, or combine thread commits. If an earlier thread's change completely satisfies a later agreed thread and no distinct file change remains, create an explicit traceability commit with `--allow-empty` for that later thread rather than merging their commit history. Do not create a commit for a justified disagreement.
+   Do not amend, squash, or combine feedback commits. If an earlier unit's change completely satisfies a later agreed unit and no distinct file change remains, create an explicit traceability commit with `--allow-empty` for that later unit rather than merging their commit history. Do not create a commit for a justified disagreement.
 
-5. Reply directly to the thread after evaluating it and creating any relevant commit:
+5. For review-thread feedback, reply directly to the thread after evaluating it and creating any relevant commit:
 
    ```powershell
    $body = @"
@@ -251,6 +253,19 @@ For each action-required thread:
    "@
    pwsh <skill-directory>/scripts/reply-to-review-thread.ps1 -ThreadId "<thread-id>" -Hostname $githubHostname -Body $body
    ```
+
+   For standalone feedback, post a PR-level reply that links the exact feedback permalink:
+
+   ```powershell
+   $body = @"
+   Regarding [this feedback](<feedback-permalink>): agreed. I fixed this in commit <sha> by <specific change>.
+
+   Verification: <command and result>.
+   "@
+   gh pr comment $prNumber --repo $baseRepository --body $body
+   ```
+
+   Use the same PR-level path for a standalone justified disagreement, retaining the feedback permalink and the disagreement wording below.
 
    For a justified disagreement:
 
@@ -262,17 +277,17 @@ For each action-required thread:
    No code change made.
    ```
 
-6. Record the one-to-one thread ID → commit SHA mapping for changed dispositions, plus every disposition, verification, and returned comment ID. Record `no commit — disagreement` for justified disagreements.
+6. Record the one-to-one feedback-unit ID → commit SHA mapping for changed dispositions, plus every disposition, verification, and returned comment ID. Use the thread ID for review threads and the feedback ID for standalone items. Record `no commit — disagreement` for justified disagreements.
 
 The reply helper refuses to mutate when the authenticated user already has a pending review. It submits a review created by the reply and verifies `state != PENDING` plus a non-null `submittedAt`. A helper failure is blocking; a returned comment URL alone is not proof of submission.
 
 After all replies:
 
-1. Re-fetch all threads with `-All`.
+1. Re-fetch all threads with `-All`, plus PR-level reviews and issue comments.
 2. Verify every reply created in this run belongs to a submitted review.
 3. Verify the authenticated user has no pending review on the PR, including reviews created before this run.
 4. For every thread ID present in the baseline, compare its `isResolved` value with the current value. Baseline resolution states must be unchanged; report external changes and never mutate them back. New thread IDs are expected during review convergence: classify them as additional feedback rather than treating their existence as a resolution mutation.
-5. If new action-required threads appeared during the batch, action each in its own commit and repeat the audit. Push only once the currently visible feedback set has been fully actioned or is awaiting reviewer response.
+5. If new action-required review threads or standalone feedback items appeared during the batch, action each in its own commit and repeat the audit. Push only once the currently visible feedback set has been fully actioned or is awaiting reviewer response.
 
 ## 6. Push and converge with Codex
 
