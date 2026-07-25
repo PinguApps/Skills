@@ -69,8 +69,9 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    - retain the exact `headRefName`.
 
    ```powershell
-   $pr = gh pr view --json url,headRefName,headRefOid,headRepository,headRepositoryOwner |
+   $pr = gh pr view --json number,url,headRefName,headRefOid,headRepository,headRepositoryOwner |
      ConvertFrom-Json
+   $prNumber = [int]$pr.number
    $prUri = [uri]$pr.url
    $pathSegments = $prUri.AbsolutePath.Trim("/").Split("/")
    $baseRepository = "$($pathSegments[0])/$($pathSegments[1])"
