@@ -156,7 +156,56 @@ if ($null -eq $comment -or $null -eq $comment.pullRequestReview) {
 
 $submittedPendingReview = $false
 if ($comment.pullRequestReview.state -eq "PENDING") {
-    $submitQuery = @'
+    $pendingReviewSafetyQuery = @'
+query($reviewId:ID!) {
+  viewer {
+    login
+  }
+  node(id:$reviewId) {
+    ... on PullRequestReview {
+      id
+      state
+      body
+      author {
+        login
+      }
+      comments(first:2) {
+        pageInfo {
+          hasNextPage
+        }
+        nodes {
+          id
+        }
+      }
+    }
+  }
+}
+'@
+
+    $pendingReviewSafetyResult = Invoke-GhGraphQl -Query $pendingReviewSafetyQuery -Variables @{
+        reviewId = $comment.pullRequestReview.id
+    }
+    $pendingReview = $pendingReviewSafetyResult.data.node
+    $pendingReviewComments = @($pendingReview.comments.nodes)
+
+    if ($null -eq $pendingReview -or
+        $pendingReview.id -ne $comment.pullRequestReview.id -or
+        $pendingReview.author.login -ne $viewerLogin) {
+        throw "Refusing to submit review $($comment.pullRequestReview.id) because its ownership could not be verified."
+    }
+
+    if ($pendingReview.state -eq "PENDING" -and
+        (-not [string]::IsNullOrWhiteSpace([string]$pendingReview.body) -or
+            [bool]$pendingReview.comments.pageInfo.hasNextPage -or
+            $pendingReviewComments.Count -ne 1 -or
+            $pendingReviewComments[0].id -ne $comment.id)) {
+        throw "Refusing to submit review $($pendingReview.id) because it contains content other than reply $($comment.id)."
+    }
+
+    if ($pendingReview.state -ne "PENDING") {
+        $comment.pullRequestReview.state = $pendingReview.state
+    } else {
+        $submitQuery = @'
 mutation($reviewId:ID!) {
   submitPullRequestReview(input:{pullRequestReviewId:$reviewId, event:COMMENT}) {
     pullRequestReview {
@@ -168,10 +217,11 @@ mutation($reviewId:ID!) {
 }
 '@
 
-    $null = Invoke-GhGraphQl -Query $submitQuery -Variables @{
-        reviewId = $comment.pullRequestReview.id
+        $null = Invoke-GhGraphQl -Query $submitQuery -Variables @{
+            reviewId = $comment.pullRequestReview.id
+        }
+        $submittedPendingReview = $true
     }
-    $submittedPendingReview = $true
 }
 
 $verifyQuery = @'
