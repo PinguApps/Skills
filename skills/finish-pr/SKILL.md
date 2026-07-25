@@ -177,7 +177,13 @@ Run this before CI or feedback:
 
 3. For non-Actions checks, inspect the provider link or available check details.
 4. Fix the root cause, not merely the symptom. Work from the clearest upstream failure outward because one failure may cascade into others.
-5. Run the closest local equivalent, stage only that fix, and make a focused commit. Record the check, cause, SHA, and verification.
+5. Run the closest local equivalent, inspect the initial worktree baseline, and stage only that fix. Commit with an exact pathspec so pre-existing staged changes remain outside the CI commit:
+
+   ```powershell
+   git commit --only -m "fix(ci): address <failed check>" -- <exact-ci-fix-paths>
+   ```
+
+   If a CI fix path had pre-existing staged, unstaged, or untracked changes, stop unless the new hunks can be isolated safely at patch level. Record the check, cause, SHA, and verification.
 6. If a failure is external, flaky, permission-related, or not repository-fixable, capture evidence. Retry only when safe and supported; do not change code to appease an unrelated failure.
 
 ## 4. Fetch and classify feedback
