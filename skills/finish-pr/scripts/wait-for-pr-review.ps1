@@ -11,7 +11,8 @@ param(
 
     [int]$PrNumber,
 
-    [Parameter(Mandatory = $true, ParameterSetName = "Capture")]
+    [Parameter(ParameterSetName = "Capture")]
+    [AllowEmptyString()]
     [string]$ReviewerLogin,
 
     [Parameter(ParameterSetName = "Capture")]
@@ -65,6 +66,38 @@ function Normalize-ReviewerLogin {
     }
 
     return $Login.Trim().ToLowerInvariant() -replace '\[bot\]$', ''
+}
+
+function Find-NewReviewerCandidates {
+    param(
+        [Parameter(Mandatory = $true)]$Baseline,
+        [Parameter(Mandatory = $true)]$Snapshot,
+        [DateTimeOffset]$NotBefore = [DateTimeOffset]::MinValue
+    )
+
+    $cutoff = if ($NotBefore -eq [DateTimeOffset]::MinValue) {
+        [DateTimeOffset]::MinValue
+    } else {
+        $NotBefore.AddTicks(-($NotBefore.Ticks % [TimeSpan]::TicksPerSecond))
+    }
+    $candidateLogins = @(
+        $Snapshot.reactions | Where-Object {
+            $_.id -notin @($Baseline.seenReactionIds) -and
+            $_.content -in @("eyes", "+1") -and
+            ($cutoff -eq [DateTimeOffset]::MinValue -or
+                (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
+                    [DateTimeOffset]$_.createdAt -ge $cutoff))
+        } | ForEach-Object { Normalize-ReviewerLogin $_.authorLogin }
+
+        $Snapshot.feedbackItems | Where-Object {
+            $_.id -notin @($Baseline.seenFeedbackIds) -and
+            (Test-ActionableFeedbackItem $_)
+        } | ForEach-Object { Normalize-ReviewerLogin $_.authorLogin }
+    )
+
+    return @($candidateLogins |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Sort-Object -Unique)
 }
 
 function Test-ActionableFeedbackItem {
@@ -455,6 +488,25 @@ function Invoke-PrReviewWatcher {
 
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         $snapshot = Get-PrReviewSnapshot -Repository $state.repository -Number ([int]$state.prNumber) -Hostname ([string]$state.hostname)
+        if ([string]::IsNullOrWhiteSpace([string]$state.reviewerLogin)) {
+            $candidates = @(Find-NewReviewerCandidates -Baseline $state -Snapshot $snapshot -NotBefore $ReviewRequestedAt)
+            if ($candidates.Count -gt 1) {
+                [pscustomobject]@{
+                    status = "reviewer_ambiguous"
+                    repository = $state.repository
+                    prNumber = $state.prNumber
+                    expectedHeadSha = $ExpectedHeadSha
+                    actualHeadSha = $snapshot.pullRequest.headSha
+                    reviewerCandidates = $candidates
+                    newFeedback = @()
+                } | ConvertTo-Json -Depth 20
+                return
+            }
+            if ($candidates.Count -eq 1) {
+                $state.reviewerLogin = $candidates[0]
+                Save-ReviewState -State $state -Path $StatePath
+            }
+        }
         if (Initialize-ExpectedHeadReactionBaseline -State $state -Snapshot $snapshot -ExpectedSha $ExpectedHeadSha -Reviewer $state.reviewerLogin -ReviewRequestedAt $ReviewRequestedAt) {
             Save-ReviewState -State $state -Path $StatePath
         }

@@ -48,6 +48,9 @@ $eyes = [pscustomobject]@{ id = "new-eyes"; content = "eyes"; authorLogin = "exa
 $started = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($eyes)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "waiting" $started.status "Seeing eyes should keep waiting."
 Assert-Equal $true $started.reviewStartedObserved "Seeing eyes should record that review started."
+$bootstrapCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($eyes)))
+Assert-Equal 1 $bootstrapCandidates.Count "A unique fresh review-start reaction should bootstrap one reviewer."
+Assert-Equal $reviewer $bootstrapCandidates[0] "Reviewer bootstrap should normalize the fresh reaction author."
 
 $comment = [pscustomobject]@{ id = "new-comment"; kind = "thread_comment"; authorLogin = $reviewer; body = "Please fix this." }
 $feedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($comment)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $false

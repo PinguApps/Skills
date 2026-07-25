@@ -52,6 +52,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    ```
 
 3. Record the starting SHA and existing worktree changes. Never include pre-existing changes in this run's commits.
+   Record staged paths separately with `git diff --cached --name-only`. Later commits must use an exact pathspec and must not consume these pre-existing index entries.
 4. If the current branch has no PR, inspect `gh pr status`. Switch or check out a PR only when the mapping is unambiguous and local changes are safe; otherwise ask the user.
 5. Reconstruct the intended change from, in priority order:
    - explicit user instructions and this conversation;
@@ -63,7 +64,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 7. Identify the Codex reviewer login from existing Codex-authored review comments, reviews, or PR-body reactions. Normalize an optional `[bot]` suffix. Never assume a fixed login.
    - If one identity is established, retain it for the run.
    - If multiple identities are plausible and approval identity changes the outcome, ask the user.
-   - If no candidate exists, mark reviewer bootstrap as required. After step 9 resolves the exact base repository and PR number, observe reviewer events produced automatically after a new push from this run. Use the same 30-second 👀 grace period and fallback rule from step 6: post `@codex review` only when this run pushed and no fresh review-start signal appeared. A fresh 👍 proves approval for the pushed HEAD; fresh feedback establishes the Codex identity and must be handled; a fresh review-start reaction establishes the identity for the normal watcher flow. If no push is needed and no identity exists, stop rather than posting a review request.
+   - If no candidate exists, leave `-ReviewerLogin` empty when capturing the pre-push baseline. The watcher bootstraps from a unique author of fresh 👀/👍 or actionable feedback after the pushed-head boundary. Stop with `reviewer_ambiguous` if multiple identities appear. Use the same 30-second 👀 grace period and fallback rule from step 6: post `@codex review` only when this run pushed and no fresh review-start signal appeared. If no push is needed and no identity exists, stop rather than posting a review request.
 8. Resolve the authenticated GitHub viewer login. Treat comments from that login, or another agent login established unambiguously by the conversation/PR history, as agent responses.
 9. Resolve the base and head repositories independently from PR metadata:
    - derive the base repository from the PR URL;
@@ -96,6 +97,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    ```powershell
    git fetch $headPushUrl $pr.headRefName
    $remoteHeadSha = (git rev-parse FETCH_HEAD).Trim()
+   $lastObservedPrHeadSha = $remoteHeadSha
    $localHeadSha = (git rev-parse HEAD).Trim()
    git merge-base --is-ancestor $remoteHeadSha $localHeadSha
    $localContainsRemoteHead = $LASTEXITCODE -eq 0
@@ -217,10 +219,12 @@ For each action-required item:
    git diff --cached
    ```
 
+   If unrelated changes were already staged, keep them staged but commit the fix with an exact pathspec. Stop if a fix overlaps pre-existing staged changes in the same path and cannot be isolated safely.
+
 4. Commit before moving to an independent item:
 
    ```powershell
-   git commit -m "fix(pr): address <feedback summary>"
+   git commit --only -m "fix(pr): address <feedback summary>" -- <exact-fix-paths>
    ```
 
 5. Reply directly to the thread after evaluating it and creating any relevant commit:
@@ -270,7 +274,7 @@ After all replies:
    git status --short --branch
    ```
 
-   Stop if `$remoteHeadSha` and `$currentPrHeadSha` differ, or if the current PR head moved since this run's last observation. Use `$pushRequired`, not the starting-SHA commit range, to decide whether the PR head needs a push; the range is reporting context only.
+   Stop if `$remoteHeadSha` and `$currentPrHeadSha` differ, or if either differs from `$lastObservedPrHeadSha`. Never overwrite `$lastObservedPrHeadSha` with an unexpected remote value. Use `$pushRequired`, not the starting-SHA commit range, to decide whether the PR head needs a push; the range is reporting context only.
 
 3. If `$pushRequired`, increment `$reviewRound` and capture a reviewer baseline immediately before pushing:
 
@@ -283,20 +287,21 @@ After all replies:
      -PrNumber $prNumber `
      -Repository $baseRepository `
      -Hostname $githubHostname `
-     -ReviewerLogin "<discovered-codex-login>"
+     -ReviewerLogin $codexReviewerLogin
    ```
 
 4. Push without force and record the exact HEAD:
 
    ```powershell
+   $reviewRequestedAt = [DateTimeOffset]::UtcNow
    git push $headPushUrl "HEAD:refs/heads/$($pr.headRefName)"
    $expectedHeadSha = git rev-parse HEAD
+   $lastObservedPrHeadSha = $expectedHeadSha
    ```
 
 5. After pushing, record the push-completion time and allow approximately 30 seconds for automatic review to start:
 
    ```powershell
-   $reviewRequestedAt = [DateTimeOffset]::UtcNow
    pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
      -Wait `
      -StatePath $reviewState `
@@ -333,13 +338,14 @@ After all replies:
    - `feedback`: fetch all feedback for context, but action only IDs in `newFeedback`. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response.
    - `approved`: the same Codex identity produced the stable 👍 signal. Re-fetch checks, PR-body reactions, PR-level feedback, and threads once; finish only if the full definition of done still holds.
    - `review_not_started`: post the single fallback `@codex review` comment, then resume step 6.
+   - `reviewer_ambiguous`: stop and ask the user which fresh identity is Codex.
    - `timeout`: report that Codex did not reach a terminal state; do not claim readiness.
    - `head_changed`: fetch and inspect the new state. Stop when another actor's push makes continued mutation unsafe.
    - `pr_closed`: stop and report the PR state.
 
 8. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → automatic-review grace period → wait.
 
-If no push is needed, never post `@codex review`: the fallback is only permitted after this run pushes a new HEAD. Capture a reviewer baseline for the current HEAD and run the watcher read-only:
+If no push is needed, never post `@codex review`: the fallback is only permitted after this run pushes a new HEAD. If the PR already has a Codex 👍, the HEAD has remained unchanged since the run began, and there is no later unaddressed Codex feedback, accept that stable reaction during the final audit. Otherwise wait read-only for an already-running review and stop on timeout without posting a trigger.
 
 ```powershell
 $expectedHeadSha = (git rev-parse HEAD).Trim()
@@ -351,7 +357,7 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -PrNumber $prNumber `
   -Repository $baseRepository `
   -Hostname $githubHostname `
-  -ReviewerLogin "<discovered-codex-login>"
+  -ReviewerLogin $codexReviewerLogin
 $reviewRequestedAt = [DateTimeOffset]::UtcNow
 pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -Wait `
@@ -362,7 +368,7 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -PollSeconds 20
 ```
 
-Only feedback or a stable 👍 produced after this baseline is head-linked evidence. Process new feedback normally; never accept a reaction already present at baseline as approval for the current HEAD, and never use the fallback comment without a preceding push from this run.
+After a push, only feedback or a stable 👍 produced after the pre-push boundary is head-linked evidence. Without a push, an existing 👍 is acceptable only under the unchanged-HEAD and no-later-pushback rule above. Never use the fallback comment without a preceding push from this run.
 
 Bound convergence to five pushed review rounds or two hours overall. Stop earlier for approval, timeout, closure, unexpected head movement, or a genuine blocker.
 
