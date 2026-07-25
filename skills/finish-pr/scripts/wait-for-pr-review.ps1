@@ -17,8 +17,14 @@ param(
     [Parameter(ParameterSetName = "Capture")]
     [string]$Repository,
 
+    [Parameter(ParameterSetName = "Capture")]
+    [string]$Hostname,
+
     [Parameter(Mandatory = $true, ParameterSetName = "Wait")]
     [string]$ExpectedHeadSha,
+
+    [Parameter(Mandatory = $true, ParameterSetName = "Wait")]
+    [DateTimeOffset]$ReviewRequestedAt,
 
     [Parameter(ParameterSetName = "Wait")]
     [ValidateRange(1, 120)]
@@ -60,10 +66,6 @@ function Normalize-ReviewerLogin {
 function Test-ActionableFeedbackItem {
     param([Parameter(Mandatory = $true)]$Item)
 
-    if ($Item.kind -eq "thread_comment") {
-        return $true
-    }
-
     $body = [string]$Item.body
     if ([string]::IsNullOrWhiteSpace($body)) {
         return $false
@@ -71,7 +73,7 @@ function Test-ActionableFeedbackItem {
 
     $trimmedBody = $body.Trim()
     if ($Item.kind -eq "review") {
-        if ($Item.reviewState -in @("APPROVED", "DISMISSED", "PENDING")) {
+        if ($Item.reviewState -in @("DISMISSED", "PENDING")) {
             return $false
         }
 
@@ -96,20 +98,34 @@ function Expand-PaginatedItems {
 function Get-PrReviewSnapshot {
     param(
         [Parameter(Mandatory = $true)][string]$Repository,
-        [Parameter(Mandatory = $true)][int]$Number
+        [Parameter(Mandatory = $true)][int]$Number,
+        [string]$Hostname
     )
 
+    $repositorySelector = if ([string]::IsNullOrWhiteSpace($Hostname) -or
+        $Repository.StartsWith("$Hostname/", [StringComparison]::OrdinalIgnoreCase)) {
+        $Repository
+    } else {
+        "$Hostname/$Repository"
+    }
     $pr = Invoke-GhJson @(
-        "pr", "view", $Number.ToString(), "--repo", $Repository,
+        "pr", "view", $Number.ToString(), "--repo", $repositorySelector,
         "--json", "number,url,state,headRefOid,comments,reviews"
     )
-    $reactionPages = Invoke-GhJson @(
-        "api", "repos/$Repository/issues/$Number/reactions", "--paginate", "--slurp"
-    )
+    $apiRepository = $Repository
+    $reactionArgs = @("api")
+    if (-not [string]::IsNullOrWhiteSpace($Hostname)) {
+        $reactionArgs += @("--hostname", $Hostname)
+        if ($apiRepository.StartsWith("$Hostname/", [StringComparison]::OrdinalIgnoreCase)) {
+            $apiRepository = $apiRepository.Substring($Hostname.Length + 1)
+        }
+    }
+    $reactionArgs += @("repos/$apiRepository/issues/$Number/reactions", "--paginate", "--slurp")
+    $reactionPages = Invoke-GhJson $reactionArgs
     $reactions = @(Expand-PaginatedItems $reactionPages)
 
     $threadScript = Join-Path $PSScriptRoot "get-unresolved-pr-threads.ps1"
-    $threadJson = & $threadScript -PrNumber $Number -Repository $Repository -All
+    $threadJson = & $threadScript -PrNumber $Number -Repository $Repository -Hostname $Hostname -All
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to fetch pull request review threads."
     }
@@ -186,6 +202,7 @@ function Resolve-ReviewOutcome {
         [Parameter(Mandatory = $true)][string]$ExpectedSha,
         [Parameter(Mandatory = $true)][string]$Reviewer,
         [string]$BaselineSha = "",
+        [DateTimeOffset]$ReviewRequestedAt = [DateTimeOffset]::MinValue,
         [bool]$ReviewStartedObserved,
         [bool]$ApprovalCandidateObserved
     )
@@ -242,7 +259,10 @@ function Resolve-ReviewOutcome {
 
     $newReviewerReactions = @($Snapshot.reactions | Where-Object {
         (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
-        $_.id -notin $seenReactionIds
+        $_.id -notin $seenReactionIds -and
+        ($ReviewRequestedAt -eq [DateTimeOffset]::MinValue -or
+            (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
+                [DateTimeOffset]$_.createdAt -ge $ReviewRequestedAt))
     })
     $hasEyes = @($newReviewerReactions | Where-Object { $_.content -eq "eyes" }).Count -gt 0
     $hasThumbsUp = @($newReviewerReactions | Where-Object { $_.content -eq "+1" }).Count -gt 0
@@ -335,7 +355,7 @@ function Invoke-PrReviewWatcher {
             $script:PrNumber = [int]$pr.number
         }
 
-        $snapshot = Get-PrReviewSnapshot -Repository $Repository -Number $PrNumber
+        $snapshot = Get-PrReviewSnapshot -Repository $Repository -Number $PrNumber -Hostname $Hostname
         $normalizedReviewer = Normalize-ReviewerLogin $ReviewerLogin
         $reviewStartedObserved = @($snapshot.reactions | Where-Object {
             (Normalize-ReviewerLogin $_.authorLogin) -eq $normalizedReviewer -and
@@ -344,6 +364,7 @@ function Invoke-PrReviewWatcher {
         $state = [pscustomobject]@{
             version = 1
             repository = $Repository
+            hostname = $Hostname
             prNumber = $PrNumber
             reviewerLogin = $normalizedReviewer
             capturedAt = [DateTimeOffset]::UtcNow.ToString("o")
@@ -382,7 +403,7 @@ function Invoke-PrReviewWatcher {
     $deadline = [DateTimeOffset]::UtcNow.AddMinutes($TimeoutMinutes)
 
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
-        $snapshot = Get-PrReviewSnapshot -Repository $state.repository -Number ([int]$state.prNumber)
+        $snapshot = Get-PrReviewSnapshot -Repository $state.repository -Number ([int]$state.prNumber) -Hostname ([string]$state.hostname)
         if (Initialize-ExpectedHeadReactionBaseline -State $state -Snapshot $snapshot -ExpectedSha $ExpectedHeadSha -Reviewer $state.reviewerLogin) {
             Save-ReviewState -State $state -Path $StatePath
         }
@@ -395,6 +416,7 @@ function Invoke-PrReviewWatcher {
             -ExpectedSha $ExpectedHeadSha `
             -Reviewer $state.reviewerLogin `
             -BaselineSha $state.baselineHeadSha `
+            -ReviewRequestedAt $ReviewRequestedAt `
             -ReviewStartedObserved ([bool]$state.reviewStartedObserved) `
             -ApprovalCandidateObserved ([bool]$state.approvalCandidateObserved)
 

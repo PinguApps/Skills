@@ -3,6 +3,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ThreadId,
 
+    [string]$Hostname,
+
     [Parameter(Mandatory = $true, ParameterSetName = "Body")]
     [string]$Body,
 
@@ -25,7 +27,11 @@ function Invoke-GhGraphQl {
         [hashtable]$Variables
     )
 
-    $ghArgs = @("api", "graphql", "-f", "query=$Query")
+    $ghArgs = @("api")
+    if (-not [string]::IsNullOrWhiteSpace($Hostname)) {
+        $ghArgs += @("--hostname", $Hostname)
+    }
+    $ghArgs += @("graphql", "-f", "query=$Query")
     foreach ($entry in $Variables.GetEnumerator()) {
         $ghArgs += @("-f", "$($entry.Key)=$($entry.Value)")
     }

@@ -3,7 +3,8 @@ $ErrorActionPreference = "Stop"
 . "$PSScriptRoot\..\scripts\wait-for-pr-review.ps1" `
     -Wait `
     -StatePath "unused-test-state.json" `
-    -ExpectedHeadSha "unused-test-sha"
+    -ExpectedHeadSha "unused-test-sha" `
+    -ReviewRequestedAt ([DateTimeOffset]::MinValue)
 
 function Assert-Equal {
     param($Expected, $Actual, [string]$Message)
@@ -81,6 +82,14 @@ $positiveReview = [pscustomobject]@{
 }
 $positiveReviewCandidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb) -FeedbackItems @($positiveReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $positiveReviewCandidate.status "A non-actionable positive review should not suppress a simultaneous thumbs-up."
+$substantiveApprovedReview = [pscustomobject]@{
+    id = "substantive-approved-review"
+    kind = "review"
+    authorLogin = $reviewer
+    body = "Please still fix the hostname routing."
+    reviewState = "APPROVED"
+}
+Assert-Equal $true (Test-ActionableFeedbackItem $substantiveApprovedReview) "A substantive approved-review body should remain actionable."
 $acknowledgement = [pscustomobject]@{
     id = "acknowledgement"
     kind = "issue_comment"
@@ -88,6 +97,13 @@ $acknowledgement = [pscustomobject]@{
     body = "Looks good."
 }
 Assert-Equal $false (Test-ActionableFeedbackItem $acknowledgement) "A positive acknowledgement should not be actionable feedback."
+$threadAcknowledgement = [pscustomobject]@{
+    id = "thread-acknowledgement"
+    kind = "thread_comment"
+    authorLogin = $reviewer
+    body = "LGTM"
+}
+Assert-Equal $false (Test-ActionableFeedbackItem $threadAcknowledgement) "A positive thread acknowledgement should not be actionable feedback."
 
 $candidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $candidate.status "A thumbs-up should become an approval candidate even when no eyes reaction was sampled."
@@ -131,8 +147,8 @@ $initialized = Initialize-ExpectedHeadReactionBaseline -State $racedApprovalStat
 Assert-Equal $true $initialized "The expected head should refresh the reaction baseline once."
 Assert-Equal $true $racedApprovalState.reviewStartedObserved "The refreshed baseline should preserve a review start reaction."
 Assert-Equal 1 $racedApprovalState.seenReactionIds.Count "Expected-head initialization should preserve only reactions observed on the baseline head."
-$racedApproval = Resolve-ReviewOutcome -Baseline $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $racedApprovalState.reviewStartedObserved -ApprovalCandidateObserved $false
-Assert-Equal "approval_candidate" $racedApproval.status "An unseen approval first observed with the expected head should remain eligible even if it predates local push completion."
+$racedApproval = Resolve-ReviewOutcome -Baseline $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewRequestedAt $pushCompletedAt -ReviewStartedObserved $racedApprovalState.reviewStartedObserved -ApprovalCandidateObserved $false
+Assert-Equal "waiting" $racedApproval.status "A thumbs-up predating the review request must not approve the expected head."
 $initializedAgain = Initialize-ExpectedHeadReactionBaseline -State $racedApprovalState -Snapshot $racedApprovalSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer
 Assert-Equal $false $initializedAgain "The expected-head reaction baseline should initialize only once."
 

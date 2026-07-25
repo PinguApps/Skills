@@ -2,6 +2,7 @@
 param(
     [int]$PrNumber,
     [string]$Repository,
+    [string]$Hostname,
     [switch]$All
 )
 
@@ -24,26 +25,46 @@ function Invoke-GhJson {
 }
 
 if ([string]::IsNullOrWhiteSpace($Repository)) {
-    $repo = Invoke-GhJson @("repo", "view", "--json", "owner,name")
+    $repo = Invoke-GhJson @("repo", "view", "--json", "owner,name,url")
     $owner = [string]$repo.owner.login
     $name = [string]$repo.name
     $Repository = "$owner/$name"
+    if ([string]::IsNullOrWhiteSpace($Hostname)) {
+        $Hostname = ([uri]$repo.url).Authority
+    }
 } else {
-    $repositoryParts = $Repository.Split("/", 2)
-    if ($repositoryParts.Count -ne 2 -or
-        [string]::IsNullOrWhiteSpace($repositoryParts[0]) -or
-        [string]::IsNullOrWhiteSpace($repositoryParts[1])) {
-        throw "-Repository must use the owner/name format."
+    $repositoryParts = $Repository.Split("/")
+    if ($repositoryParts.Count -eq 3) {
+        if ([string]::IsNullOrWhiteSpace($Hostname)) {
+            $Hostname = $repositoryParts[0]
+        } elseif ($Hostname -ne $repositoryParts[0]) {
+            throw "-Hostname does not match the hostname in -Repository."
+        }
+        $owner = $repositoryParts[1]
+        $name = $repositoryParts[2]
+    } elseif ($repositoryParts.Count -eq 2) {
+        $owner = $repositoryParts[0]
+        $name = $repositoryParts[1]
+    } else {
+        throw "-Repository must use the owner/name or hostname/owner/name format."
     }
 
-    $owner = $repositoryParts[0]
-    $name = $repositoryParts[1]
+    if ([string]::IsNullOrWhiteSpace($owner) -or [string]::IsNullOrWhiteSpace($name)) {
+        throw "-Repository contains an empty owner or repository name."
+    }
+}
+
+$repositorySelector = if ([string]::IsNullOrWhiteSpace($Hostname) -or
+    $Repository.StartsWith("$Hostname/", [StringComparison]::OrdinalIgnoreCase)) {
+    $Repository
+} else {
+    "$Hostname/$Repository"
 }
 
 if ($PrNumber -gt 0) {
-    $pr = Invoke-GhJson @("pr", "view", $PrNumber.ToString(), "--repo", $Repository, "--json", "number,title,url,headRefName,baseRefName")
+    $pr = Invoke-GhJson @("pr", "view", $PrNumber.ToString(), "--repo", $repositorySelector, "--json", "number,title,url,headRefName,baseRefName")
 } else {
-    $pr = Invoke-GhJson @("pr", "view", "--repo", $Repository, "--json", "number,title,url,headRefName,baseRefName")
+    $pr = Invoke-GhJson @("pr", "view", "--repo", $repositorySelector, "--json", "number,title,url,headRefName,baseRefName")
     $PrNumber = [int]$pr.number
 }
 
@@ -103,7 +124,13 @@ $after = $null
 
 do {
     $ghArgs = @(
-        "api", "graphql",
+        "api"
+    )
+    if (-not [string]::IsNullOrWhiteSpace($Hostname)) {
+        $ghArgs += @("--hostname", $Hostname)
+    }
+    $ghArgs += @(
+        "graphql",
         "-f", "owner=$owner",
         "-f", "name=$name",
         "-F", "number=$PrNumber",
@@ -161,7 +188,13 @@ foreach ($thread in $threads) {
     $commentAfter = $thread.comments.pageInfo.endCursor
     while ($thread.comments.pageInfo.hasNextPage) {
         $commentArgs = @(
-            "api", "graphql",
+            "api"
+        )
+        if (-not [string]::IsNullOrWhiteSpace($Hostname)) {
+            $commentArgs += @("--hostname", $Hostname)
+        }
+        $commentArgs += @(
+            "graphql",
             "-f", "threadId=$($thread.id)",
             "-f", "query=$commentQuery"
         )

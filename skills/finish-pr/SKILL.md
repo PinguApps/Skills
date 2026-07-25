@@ -78,12 +78,14 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    $prNumber = [int]$pr.number
    $prUri = [uri]$pr.url
    $pathSegments = $prUri.AbsolutePath.Trim("/").Split("/")
-   $baseRepository = "$($pathSegments[0])/$($pathSegments[1])"
-   $baseMetadata = gh api --hostname $prUri.Host "repos/$baseRepository" |
+   $githubHostname = $prUri.Authority
+   $baseRepositoryName = "$($pathSegments[0])/$($pathSegments[1])"
+   $baseRepository = "$githubHostname/$baseRepositoryName"
+   $baseMetadata = gh api --hostname $githubHostname "repos/$baseRepositoryName" |
      ConvertFrom-Json
-   $headMetadata = gh api --hostname $prUri.Host "repos/$($pr.headRepository.nameWithOwner)" |
+   $headMetadata = gh api --hostname $githubHostname "repos/$($pr.headRepository.nameWithOwner)" |
      ConvertFrom-Json
-   gh auth setup-git --hostname $prUri.Host
+   gh auth setup-git --hostname $githubHostname
    $baseFetchUrl = [string]$baseMetadata.clone_url
    $headPushUrl = [string]$headMetadata.clone_url
    ```
@@ -176,10 +178,10 @@ Capture every thread's read-only resolution baseline outside the repository:
 ```powershell
 $threadBaseline = Join-Path $runStateDirectory "thread-resolution.json"
 $threadSnapshot = Join-Path $runStateDirectory "unresolved-threads.json"
-pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -Repository $baseRepository -All |
+pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -Repository $baseRepository -Hostname $githubHostname -All |
   Set-Content -Encoding utf8 $threadBaseline
 
-pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -Repository $baseRepository |
+pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -Repository $baseRepository -Hostname $githubHostname |
   Set-Content -Encoding utf8 $threadSnapshot
 ```
 
@@ -226,7 +228,7 @@ For each action-required item:
 
    Verification: <command and result>.
    "@
-   pwsh <skill-directory>/scripts/reply-to-review-thread.ps1 -ThreadId "<thread-id>" -Body $body
+   pwsh <skill-directory>/scripts/reply-to-review-thread.ps1 -ThreadId "<thread-id>" -Hostname $githubHostname -Body $body
    ```
 
    For a justified disagreement:
@@ -276,6 +278,7 @@ After all replies:
      -StatePath $reviewState `
      -PrNumber $prNumber `
      -Repository $baseRepository `
+     -Hostname $githubHostname `
      -ReviewerLogin "<discovered-codex-login>"
    ```
 
@@ -289,6 +292,7 @@ After all replies:
 5. Request Codex review for the pushed HEAD unless repository configuration explicitly verifies that every push triggers review automatically. Do not infer automatic review from earlier activity:
 
    ```powershell
+   $reviewRequestedAt = [DateTimeOffset]::UtcNow
    gh pr comment $prNumber --repo $baseRepository --body "@codex review"
    ```
 
@@ -301,6 +305,7 @@ After all replies:
       -Wait `
       -StatePath $reviewState `
       -ExpectedHeadSha $expectedHeadSha `
+      -ReviewRequestedAt $reviewRequestedAt `
       -TimeoutMinutes 25 `
      -PollSeconds 20
    ```
@@ -327,12 +332,15 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -StatePath $reviewState `
   -PrNumber $prNumber `
   -Repository $baseRepository `
+  -Hostname $githubHostname `
   -ReviewerLogin "<discovered-codex-login>"
+$reviewRequestedAt = [DateTimeOffset]::UtcNow
 gh pr comment $prNumber --repo $baseRepository --body "@codex review"
 pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -Wait `
   -StatePath $reviewState `
   -ExpectedHeadSha $expectedHeadSha `
+  -ReviewRequestedAt $reviewRequestedAt `
   -TimeoutMinutes 25 `
   -PollSeconds 20
 ```
@@ -346,6 +354,7 @@ Bound convergence to five pushed review rounds or two hours overall. Stop earlie
 Re-fetch rather than relying on cached state:
 
 - PR head, mergeability, and base;
+- latest base commit and a fresh local `git merge-tree --write-tree --messages HEAD <base-commit>` conflict probe;
 - all checks;
 - PR-body reactions from the discovered Codex identity;
 - PR-level reviews/comments;
