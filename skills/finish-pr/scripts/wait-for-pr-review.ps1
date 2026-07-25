@@ -132,12 +132,15 @@ function Test-ReviewStartGraceExpired {
         [int]$GraceSeconds,
         [bool]$ReviewStartedObserved,
         [DateTimeOffset]$SnapshotStartedAt,
-        [DateTimeOffset]$ReviewStartDeadline
+        [DateTimeOffset]$ReviewStartDeadline,
+        [string]$CurrentHeadSha,
+        [string]$ExpectedHeadSha
     )
 
     return $GraceSeconds -gt 0 -and
         -not $ReviewStartedObserved -and
-        $SnapshotStartedAt -ge $ReviewStartDeadline
+        $SnapshotStartedAt -ge $ReviewStartDeadline -and
+        $CurrentHeadSha -eq $ExpectedHeadSha
 }
 
 function Test-ActionableFeedbackItem {
@@ -611,7 +614,9 @@ function Invoke-PrReviewWatcher {
             -GraceSeconds $ReviewStartGraceSeconds `
             -ReviewStartedObserved $outcome.reviewStartedObserved `
             -SnapshotStartedAt $snapshotStartedAt `
-            -ReviewStartDeadline $reviewStartDeadline) {
+            -ReviewStartDeadline $reviewStartDeadline `
+            -CurrentHeadSha $snapshot.pullRequest.headSha `
+            -ExpectedHeadSha $ExpectedHeadSha) {
             [pscustomobject]@{
                 status = "review_not_started"
                 repository = $state.repository

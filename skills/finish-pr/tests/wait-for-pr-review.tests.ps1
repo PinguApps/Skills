@@ -63,8 +63,9 @@ $earlyCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (N
 Assert-Equal 0 $earlyCandidates.Count "Reviewer bootstrap should exclude feedback created before the pushed-head boundary."
 $propagatingCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -HeadSha "old-sha" -Reactions @($eyes)) -ExpectedHeadSha "new-sha")
 Assert-Equal 0 $propagatingCandidates.Count "Reviewer bootstrap should wait until the expected HEAD is visible."
-Assert-Equal $false (Test-ReviewStartGraceExpired -GraceSeconds 30 -ReviewStartedObserved $false -SnapshotStartedAt $bootstrapBoundary.AddSeconds(-1) -ReviewStartDeadline $bootstrapBoundary) "A snapshot started before the grace deadline must not trigger fallback."
-Assert-Equal $true (Test-ReviewStartGraceExpired -GraceSeconds 30 -ReviewStartedObserved $false -SnapshotStartedAt $bootstrapBoundary -ReviewStartDeadline $bootstrapBoundary) "A snapshot started at the grace deadline may trigger fallback."
+Assert-Equal $false (Test-ReviewStartGraceExpired -GraceSeconds 30 -ReviewStartedObserved $false -SnapshotStartedAt $bootstrapBoundary.AddSeconds(-1) -ReviewStartDeadline $bootstrapBoundary -CurrentHeadSha "new-sha" -ExpectedHeadSha "new-sha") "A snapshot started before the grace deadline must not trigger fallback."
+Assert-Equal $false (Test-ReviewStartGraceExpired -GraceSeconds 30 -ReviewStartedObserved $false -SnapshotStartedAt $bootstrapBoundary -ReviewStartDeadline $bootstrapBoundary -CurrentHeadSha "old-sha" -ExpectedHeadSha "new-sha") "The grace period must not expire while the baseline HEAD is still visible."
+Assert-Equal $true (Test-ReviewStartGraceExpired -GraceSeconds 30 -ReviewStartedObserved $false -SnapshotStartedAt $bootstrapBoundary -ReviewStartDeadline $bootstrapBoundary -CurrentHeadSha "new-sha" -ExpectedHeadSha "new-sha") "A post-deadline expected-HEAD snapshot may trigger fallback."
 
 $comment = [pscustomobject]@{ id = "new-comment"; kind = "thread_comment"; authorLogin = $reviewer; body = "Please fix this." }
 $feedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($comment)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $false
