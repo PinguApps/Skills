@@ -211,7 +211,7 @@ function Resolve-ReviewOutcome {
     $hasThumbsUp = @($newReviewerReactions | Where-Object { $_.content -eq "+1" }).Count -gt 0
     $started = $ReviewStartedObserved -or $hasEyes
 
-    if ($started -and $hasThumbsUp) {
+    if ($hasThumbsUp) {
         if ($ApprovalCandidateObserved) {
             return [pscustomobject]@{ status = "approved"; reviewStartedObserved = $true; approvalCandidateObserved = $true; newFeedback = @() }
         }

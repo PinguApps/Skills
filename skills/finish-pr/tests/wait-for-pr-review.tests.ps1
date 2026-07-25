@@ -55,10 +55,10 @@ Assert-Equal "feedback" $feedback.status "A new reviewer comment should return f
 Assert-Equal 1 $feedback.newFeedback.Count "New feedback should be returned."
 
 $thumb = [pscustomobject]@{ id = "new-thumb"; content = "+1"; authorLogin = "example-codex-reviewer[bot]" }
-$candidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $false
-Assert-Equal "approval_candidate" $candidate.status "Approval should require a confirmation poll."
-$approved = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $true
-Assert-Equal "approved" $approved.status "A stable approval signal should approve."
+$candidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
+Assert-Equal "approval_candidate" $candidate.status "A thumbs-up should become an approval candidate even when no eyes reaction was sampled."
+$approved = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $true
+Assert-Equal "approved" $approved.status "A stable thumbs-up should approve without requiring an eyes reaction."
 
 $retainedEyesCandidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($eyes, $thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $retainedEyesCandidate.status "A retained start reaction must not suppress approval."
