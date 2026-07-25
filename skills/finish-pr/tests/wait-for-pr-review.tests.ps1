@@ -90,13 +90,16 @@ $editedFeedback = Resolve-ReviewOutcome -Baseline $editedFeedbackBaseline -Snaps
 Assert-Equal "feedback" $editedFeedback.status "An edited baseline comment should return feedback."
 Assert-Equal 1 $editedFeedback.newFeedback.Count "Edited feedback should be returned once."
 
-$thumb = [pscustomobject]@{ id = "new-thumb"; content = "+1"; authorLogin = "example-codex-reviewer[bot]" }
+$approvalSignalAt = [DateTimeOffset]"2026-01-01T00:00:01Z"
+$thumb = [pscustomobject]@{ id = "new-thumb"; content = "+1"; authorLogin = "example-codex-reviewer[bot]"; createdAt = $approvalSignalAt }
 $positiveReview = [pscustomobject]@{
     id = "positive-review"
     kind = "review"
     authorLogin = $reviewer
     body = ""
     reviewState = "APPROVED"
+    headSha = "new-sha"
+    createdAt = $approvalSignalAt
 }
 $positiveReviewCandidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb) -FeedbackItems @($positiveReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $positiveReviewCandidate.status "A non-actionable positive review should not suppress a simultaneous thumbs-up."
@@ -123,14 +126,16 @@ $threadAcknowledgement = [pscustomobject]@{
 }
 Assert-Equal $false (Test-ActionableFeedbackItem $threadAcknowledgement) "A positive thread acknowledgement should not be actionable feedback."
 
-$candidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
-Assert-Equal "approval_candidate" $candidate.status "A thumbs-up should become an approval candidate even when no eyes reaction was sampled."
-$approved = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $true
-Assert-Equal "approved" $approved.status "A stable thumbs-up should approve without requiring an eyes reaction."
+$unlinkedCandidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
+Assert-Equal "waiting" $unlinkedCandidate.status "A thumbs-up without a submitted expected-HEAD review must remain ineligible."
+$candidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb) -FeedbackItems @($positiveReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $false
+Assert-Equal "approval_candidate" $candidate.status "A head-linked thumbs-up should become an approval candidate even when no eyes reaction was sampled."
+$approved = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($thumb) -FeedbackItems @($positiveReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $false -ApprovalCandidateObserved $true
+Assert-Equal "approved" $approved.status "A stable head-linked thumbs-up should approve without requiring an eyes reaction."
 
-$retainedEyesCandidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($eyes, $thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $false
+$retainedEyesCandidate = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($eyes, $thumb) -FeedbackItems @($positiveReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $false
 Assert-Equal "approval_candidate" $retainedEyesCandidate.status "A retained start reaction must not suppress approval."
-$retainedEyesApproved = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($eyes, $thumb)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $true
+$retainedEyesApproved = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Reactions @($eyes, $thumb) -FeedbackItems @($positiveReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -ReviewStartedObserved $true -ApprovalCandidateObserved $true
 Assert-Equal "approved" $retainedEyesApproved.status "A stable approval must complete while the start reaction remains."
 
 $staleThumb = [pscustomobject]@{ id = "old-thumb"; content = "+1"; authorLogin = $reviewer }
@@ -230,14 +235,16 @@ $unchangedHeadState = [pscustomobject]@{
     approvalCandidateObserved = $false
     expectedHeadReactionsCaptured = $false
 }
-$unchangedHeadThumb = [pscustomobject]@{ id = "fresh-unchanged-head-thumb"; content = "+1"; authorLogin = $reviewer }
+$unchangedHeadThumb = [pscustomobject]@{ id = "fresh-unchanged-head-thumb"; content = "+1"; authorLogin = $reviewer; createdAt = $approvalSignalAt }
 $unchangedHeadSnapshot = New-Snapshot -HeadSha "new-sha" -Reactions @($unchangedHeadThumb)
 $unchangedInitialized = Initialize-ExpectedHeadReactionBaseline -State $unchangedHeadState -Snapshot $unchangedHeadSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer
 Assert-Equal $true $unchangedInitialized "An unchanged expected head should initialize before baseline-head reaction updating."
 $unchangedBaselineUpdated = Update-BaselineHeadReactionObservations -State $unchangedHeadState -Snapshot $unchangedHeadSnapshot
 Assert-Equal $false $unchangedBaselineUpdated "Expected-head reactions must not be consumed as old-head baseline observations."
 $unchangedApproval = Resolve-ReviewOutcome -Baseline $unchangedHeadState -Snapshot $unchangedHeadSnapshot -ExpectedSha "new-sha" -Reviewer $reviewer -BaselineSha "new-sha" -ReviewStartedObserved $false -ApprovalCandidateObserved $false
-Assert-Equal "approval_candidate" $unchangedApproval.status "A fresh first-poll thumbs-up should approve an unchanged expected head after confirmation."
+Assert-Equal "waiting" $unchangedApproval.status "A fresh unchanged-HEAD thumbs-up without a head-linked review must remain ineligible."
+$linkedUnchangedApproval = Resolve-ReviewOutcome -Baseline $unchangedHeadState -Snapshot (New-Snapshot -HeadSha "new-sha" -Reactions @($unchangedHeadThumb) -FeedbackItems @($positiveReview)) -ExpectedSha "new-sha" -Reviewer $reviewer -BaselineSha "new-sha" -ReviewStartedObserved $false -ApprovalCandidateObserved $false
+Assert-Equal "approval_candidate" $linkedUnchangedApproval.status "A fresh unchanged-HEAD thumbs-up should become eligible when a submitted review links it to that HEAD."
 
 $lateEyesState = [pscustomobject]@{
     seenReactionIds = @()

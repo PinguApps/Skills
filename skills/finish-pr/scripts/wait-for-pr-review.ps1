@@ -463,7 +463,6 @@ function Resolve-ReviewOutcome {
         $_.headSha -eq $ExpectedSha -and
         -not [string]::IsNullOrWhiteSpace([string]$_.createdAt)
     })
-    $approvalRequiresHeadLinkedReview = $ReviewHeadBoundary -ne [DateTimeOffset]::MinValue
     $headLinkedReviewCutoff = if ($expectedHeadReviews.Count -gt 0) {
         $earliestExpectedHeadReview = $expectedHeadReviews |
             ForEach-Object { ConvertTo-ReviewTimestamp $_.createdAt } |
@@ -478,8 +477,8 @@ function Resolve-ReviewOutcome {
         ($approvalCutoff -eq [DateTimeOffset]::MinValue -or
             (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
                 [DateTimeOffset]$_.createdAt -ge $approvalCutoff)) -and
-        (-not $approvalRequiresHeadLinkedReview -or
-            [DateTimeOffset]$_.createdAt -ge $headLinkedReviewCutoff)
+        -not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
+        (ConvertTo-ReviewTimestamp $_.createdAt) -ge $headLinkedReviewCutoff
     }).Count -gt 0
     $started = $ReviewStartedObserved -or $hasEyes
 
