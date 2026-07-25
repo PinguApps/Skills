@@ -68,6 +68,17 @@ function Normalize-ReviewerLogin {
     return $Login.Trim().ToLowerInvariant() -replace '\[bot\]$', ''
 }
 
+function Test-CodexReviewerEvidence {
+    param(
+        [AllowNull()][string]$Login,
+        [AllowNull()][string]$Body
+    )
+
+    $normalizedLogin = Normalize-ReviewerLogin $Login
+    return $normalizedLogin -match '(?i)(?:^|[-_])codex(?:$|[-_])' -or
+        [string]$Body -match '(?i)\bCodex Review\b'
+}
+
 function Find-NewReviewerCandidates {
     param(
         [Parameter(Mandatory = $true)]$Baseline,
@@ -91,6 +102,7 @@ function Find-NewReviewerCandidates {
         $Snapshot.reactions | Where-Object {
             $_.id -notin @($Baseline.seenReactionIds) -and
             $_.content -in @("eyes", "+1") -and
+            (Test-CodexReviewerEvidence -Login $_.authorLogin) -and
             ($cutoff -eq [DateTimeOffset]::MinValue -or
                 (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
                     [DateTimeOffset]$_.createdAt -ge $cutoff))
@@ -99,6 +111,7 @@ function Find-NewReviewerCandidates {
         $Snapshot.feedbackItems | Where-Object {
             $_.id -notin @($Baseline.seenFeedbackIds) -and
             (Test-ActionableFeedbackItem $_) -and
+            (Test-CodexReviewerEvidence -Login $_.authorLogin -Body $_.body) -and
             ($cutoff -eq [DateTimeOffset]::MinValue -or
                 (-not [string]::IsNullOrWhiteSpace([string]$_.createdAt) -and
                     [DateTimeOffset]$_.createdAt -ge $cutoff))

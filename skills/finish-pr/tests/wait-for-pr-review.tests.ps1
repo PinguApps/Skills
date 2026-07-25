@@ -54,6 +54,9 @@ Assert-Equal $reviewer $bootstrapCandidates[0] "Reviewer bootstrap should normal
 $fallbackRequest = [pscustomobject]@{ id = "fallback-request"; kind = "issue_comment"; authorLogin = "example-agent"; body = "@codex review" }
 $fallbackCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($fallbackRequest)) -ExcludedLogin "example-agent")
 Assert-Equal 0 $fallbackCandidates.Count "Reviewer bootstrap should exclude the authenticated fallback requester."
+$humanFeedback = [pscustomobject]@{ id = "human-feedback"; kind = "issue_comment"; authorLogin = "example-human"; body = "Please fix this."; createdAt = [DateTimeOffset]::UtcNow }
+$humanCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($humanFeedback)))
+Assert-Equal 0 $humanCandidates.Count "Reviewer bootstrap should not promote an arbitrary human feedback author."
 $bootstrapBoundary = [DateTimeOffset]::UtcNow
 $earlyHumanComment = [pscustomobject]@{ id = "early-human-comment"; kind = "issue_comment"; authorLogin = "example-human"; body = "Please fix this."; createdAt = $bootstrapBoundary.AddSeconds(-1) }
 $earlyCandidates = @(Find-NewReviewerCandidates -Baseline $baseline -Snapshot (New-Snapshot -FeedbackItems @($earlyHumanComment)) -NotBefore $bootstrapBoundary)
@@ -269,5 +272,7 @@ $hostQualifiedRouting = Resolve-RepositoryRouting -Repository "ghe.example/examp
 Assert-Equal "ghe.example" $hostQualifiedRouting.hostname "A host-qualified repository should supply the API hostname."
 Assert-Equal "example-owner/example-repository" $hostQualifiedRouting.apiRepository "API routing should strip the hostname from the repository path."
 Assert-Equal "ghe.example/example-owner/example-repository" $hostQualifiedRouting.selector "The CLI selector should retain the hostname."
+Assert-Equal $true (Test-CodexReviewerEvidence -Login "chatgpt-codex-connector") "A recognizable Codex service login should establish identity evidence."
+Assert-Equal $false (Test-CodexReviewerEvidence -Login "example-human") "An arbitrary human login should not establish Codex identity evidence."
 
 Write-Output "All wait-for-pr-review tests passed."
