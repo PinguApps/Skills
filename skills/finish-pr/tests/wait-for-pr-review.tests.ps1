@@ -96,6 +96,11 @@ Assert-Equal "changes_requested" (Get-GitarVerdict (New-Dashboard -Verdict "Chan
 Assert-Equal "needs_review" (Get-GitarVerdict (New-Dashboard -Verdict "Needs Review").body) "Needs Review must remain actionable."
 Assert-Equal "blocked" (Get-GitarVerdict (New-Dashboard -Verdict "Blocked").body) "Blocked must remain actionable."
 Assert-Equal "processing" (Get-GitarVerdict (New-Dashboard -Verdict "Processing").body) "Processing must remain non-terminal."
+$approvedWithMisleadingSummary = (New-Dashboard -Verdict "✅ Approved").body + " Changes Requested and blocked are mentioned in summary prose."
+Assert-Equal "approved" (Get-GitarVerdict $approvedWithMisleadingSummary) "Summary prose must not override the explicit verdict badge."
+$suggestionsWithMisleadingSummary = (New-Dashboard -Verdict "Approved with Suggestions").body + " The summary also says Approved."
+Assert-Equal "approved_with_suggestions" (Get-GitarVerdict $suggestionsWithMisleadingSummary) "Only the explicit verdict badge should control classification."
+Assert-Equal "unknown" (Get-GitarVerdict "# Code Review`nApproved") "Unstructured prose must not be accepted as a verdict."
 
 $waiting = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot) -ExpectedSha "new-sha"
 Assert-Equal "waiting" $waiting.status "A missing exact-HEAD Gitar check should wait."

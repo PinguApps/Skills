@@ -135,26 +135,28 @@ function Get-GitarVerdict {
         return "unknown"
     }
 
-    $codeReviewIndex = $Body.IndexOf("Code Review", [StringComparison]::OrdinalIgnoreCase)
-    $windowLength = [Math]::Min(600, $Body.Length - $codeReviewIndex)
-    $window = $Body.Substring($codeReviewIndex, $windowLength)
+    if ($Body -notmatch '(?is)<b>\s*Code Review\s*</b>\s*<kbd>\s*(?<verdict>[^<]+?)\s*</kbd>') {
+        return "unknown"
+    }
 
-    if ($window -match '(?i)Approved\s+with\s+Suggestions') {
+    $verdict = $Matches.verdict
+
+    if ($verdict -match '(?i)Approved\s+with\s+Suggestions') {
         return "approved_with_suggestions"
     }
-    if ($window -match '(?i)Changes\s+Requested') {
+    if ($verdict -match '(?i)Changes\s+Requested') {
         return "changes_requested"
     }
-    if ($window -match '(?i)Needs?\s+Review') {
+    if ($verdict -match '(?i)Needs?\s+Review') {
         return "needs_review"
     }
-    if ($window -match '(?i)Blocked') {
+    if ($verdict -match '(?i)Blocked') {
         return "blocked"
     }
-    if ($window -match '(?i)Approved') {
+    if ($verdict -match '(?i)Approved') {
         return "approved"
     }
-    if ($window -match '(?i)Processing|In\s+Progress|Reviewing') {
+    if ($verdict -match '(?i)Processing|In\s+Progress|Reviewing') {
         return "processing"
     }
 
