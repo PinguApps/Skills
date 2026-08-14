@@ -1,12 +1,13 @@
 ---
 name: finish-pr
-description: Finish the GitHub pull request attached to the current branch; resolve merge conflicts, diagnose and fix failed CI checks, action unresolved review feedback without duplicating replies that are awaiting a reviewer response, push focused commits, and continue through Codex review until the PR body has Codex's thumbs-up approval. Use whenever the user asks to finish, complete, ready, resolve, fix, or address feedback/CI/conflicts on the current PR.
-compatibility: Requires Git 2.38+, GitHub CLI (`gh`) authenticated for the repository, and PowerShell 7 (`pwsh`) for bundled helpers.
+description: Finish the GitHub pull request attached to the current branch; resolve merge conflicts, diagnose and fix failed CI checks, action review feedback from every source without duplicating replies that are awaiting a reviewer response, push focused commits, and continue through Gitar review until its current-HEAD Core signals show a completed clean review. Use whenever the user asks to finish, complete, ready, resolve, fix, or address feedback/CI/conflicts on the current PR.
 ---
 
 # Finish PR
 
 Bring the pull request attached to the current branch to a genuinely ready state.
+
+Requires Git 2.38+, GitHub CLI (`gh`) authenticated for the repository, and PowerShell 7 (`pwsh`) for bundled helpers.
 
 ## Definition of done
 
@@ -19,7 +20,9 @@ Finish only when all of these are true for the current PR HEAD:
   - the latest relevant comment is the agent's response and no reviewer has replied afterwards, so the thread is awaiting review and needs no duplicate work.
 - No reply created by this run remains in a pending GitHub review.
 - No review thread's resolution state was changed by this run.
-- The PR body has a 👍 reaction from the Codex reviewer that applies to the current pushed HEAD, with no later Codex pushback left unaddressed.
+- The exact current HEAD has a successful completed `Gitar` check, Gitar's dashboard Code Review verdict is `Approved`, and no later Gitar or other reviewer feedback is left unaddressed.
+
+This completion rule uses Gitar Core only. Never require Gitar auto-approval, a GitHub approving review, merge blocking, auto-apply, or any other Pro signal. Treat `Approved with Suggestions`, `Changes Requested`, `Blocked`, and `Needs Review` as non-terminal feedback states even if the `Gitar` check itself succeeds.
 
 An unresolved thread is not automatically unfinished. Reviewers own resolution state; the conversation order determines whether the agent currently owes action.
 
@@ -35,7 +38,8 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 - Never rebase, force-push, merge the pull request on GitHub, close, approve, or mark the PR ready for review unless the user explicitly requested that separate action. The conflict-resolution workflow may merge the latest base commit into the PR branch.
 - Never resolve or unresolve a review thread. Do not call `resolveReviewThread`, `unresolveReviewThread`, or an equivalent.
 - Reply directly to review threads, one at a time. Never create replies concurrently.
-- Continue autonomously through new Codex feedback after pushes, within the convergence bounds below.
+- Continue autonomously through new feedback from Gitar and every other source after pushes, within the convergence bounds below.
+- Never ask Gitar to apply or commit a fix. Do not use `gitar fix`, one-click apply, or `gitar auto-apply:on`. This agent owns every code change.
 
 ## 1. Establish state and intent
 
@@ -61,10 +65,7 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
    - linked issue/spec/design documents;
    - surrounding code, tests, and conventions.
 6. Inspect the complete PR diff before evaluating conflicts, CI, or feedback.
-7. Identify the Codex reviewer login from existing Codex-authored review comments, reviews, or PR-body reactions. Normalize an optional `[bot]` suffix. Never assume a fixed login.
-   - If one identity is established, retain it for the run.
-   - If multiple identities are plausible and approval identity changes the outcome, ask the user.
-   - If no candidate exists, leave `-ReviewerLogin` empty when capturing the pre-push baseline. The watcher may bootstrap only from a unique fresh actor whose login is Codex-marked and whose GitHub actor type is non-user service metadata (`App`, `Bot`, or `Organization`); never trust author-controlled comment text or promote an arbitrary human author merely because it is unique. Ask the user if identity remains uncertain or multiple plausible identities appear. Use the same 30-second 👀 grace period and fallback rule from step 6: post `@codex review` only when this run pushed and no fresh review-start signal appeared. If no push is needed and no identity exists, stop rather than posting a review request.
+7. Identify the Gitar integration from exact case-insensitive `Gitar` check runs whose GitHub App slug is Gitar-marked, plus the Gitar-authored dashboard Code Review comment. Treat the exact-HEAD check as the processing/completion boundary and the dashboard's Code Review verdict as the review result. Never infer completion from reactions or require a GitHub approval review.
 8. Resolve the authenticated GitHub viewer login. Treat comments from that login, or another agent login established unambiguously by the conversation/PR history, as agent responses.
 9. Resolve the base and head repositories independently from PR metadata:
    - derive the base repository from the PR URL;
@@ -245,7 +246,7 @@ For each action-required review thread or standalone feedback item:
 
    Do not amend, squash, or combine feedback commits. If an earlier unit's change completely satisfies a later agreed unit and no distinct file change remains, create an explicit traceability commit with `--allow-empty` for that later unit rather than merging their commit history. Do not create a commit for a justified disagreement.
 
-5. For review-thread feedback, reply directly to the thread after evaluating it and creating any relevant commit:
+5. For review-thread feedback, reply directly to the thread after evaluating it and creating any relevant commit, subject to the Gitar deferral below:
 
    ```powershell
    $body = @"
@@ -279,6 +280,8 @@ For each action-required review thread or standalone feedback item:
    No code change made.
    ```
 
+   If any Gitar-authored feedback disposition created a commit that has not been pushed yet, defer its thread or PR-level reply until immediately after the batch push. Gitar cannot verify a local-only SHA; replying before it can see the commit may cause a misleading follow-up. Prefix a PR-level Gitar reply with `Gitar,` so the dashboard feedback is processed; never ask it to apply the fix. A Gitar disagreement has no commit dependency and may be replied to immediately. Keep all replies serial.
+
 6. Record the one-to-one feedback-unit ID → commit SHA mapping for changed dispositions, plus every disposition, verification, and returned comment ID. Use the thread ID for review threads and the feedback ID for standalone items. Record `no commit — disagreement` for justified disagreements.
 
 The reply helper uses GitHub's single-comment reply endpoint so it never submits or modifies a shared pending review. It then verifies `state != PENDING` plus a non-null `submittedAt`. A helper failure is blocking; a returned comment URL alone is not proof of submission.
@@ -289,9 +292,9 @@ After all replies:
 2. Verify every reply created in this run belongs to a submitted review.
 3. Verify the authenticated user has no pending review on the PR, including reviews created before this run.
 4. For every thread ID present in the baseline, compare its `isResolved` value with the current value. Baseline resolution states must be unchanged; report external changes and never mutate them back. New thread IDs are expected during review convergence: classify them as additional feedback rather than treating their existence as a resolution mutation.
-5. If new action-required review threads or standalone feedback items appeared during the batch, action each in its own commit and repeat the audit. Push only once the currently visible feedback set has been fully actioned or is awaiting reviewer response.
+5. If new action-required review threads or standalone feedback items appeared during the batch, action each in its own commit and repeat the audit. Push only once the currently visible feedback set has been fully actioned or is awaiting reviewer response. Gitar threads with a deferred local-commit reply count as actioned for this pre-push audit, but the reply remains mandatory immediately after push.
 
-## 6. Push and converge with Codex
+## 6. Push and converge with Gitar
 
 1. Confirm the worktree contains no uncommitted changes created by this run. Do not push individual thread commits as they are created; batch-push all unsquashed thread commits only after the feedback audit is clear for the time being.
 2. Review commits after the starting SHA and every validated commit that was already local-ahead at invocation, then fetch the exact PR head before pushing:
@@ -308,7 +311,7 @@ After all replies:
 
    Stop if `$remoteHeadSha` and `$currentPrHeadSha` differ, or if either differs from `$lastObservedPrHeadSha`. Never overwrite `$lastObservedPrHeadSha` with an unexpected remote value. Use `$pushRequired`, not the starting-SHA commit range, to decide whether the PR head needs a push; the range is reporting context only.
 
-3. If `$pushRequired`, increment `$reviewRound` and capture a reviewer baseline immediately before pushing:
+3. If `$pushRequired`, increment `$reviewRound` and capture a review baseline immediately before pushing:
 
    ```powershell
    $reviewRound++
@@ -318,8 +321,7 @@ After all replies:
      -StatePath $reviewState `
      -PrNumber $prNumber `
      -Repository $baseRepository `
-     -Hostname $githubHostname `
-     -ReviewerLogin $codexReviewerLogin
+     -Hostname $githubHostname
    ```
 
 4. Push without force and record the exact HEAD:
@@ -331,7 +333,9 @@ After all replies:
    $lastObservedPrHeadSha = $expectedHeadSha
    ```
 
-5. After pushing, record the push-completion time and allow approximately 30 seconds for automatic review to start:
+   Immediately after the push, post each deferred Gitar thread or PR-level reply serially with its now-visible commit SHA and verification result. Verify thread replies are submitted, then refresh feedback once before waiting for Gitar.
+
+5. After pushing, allow approximately 60 seconds for the exact-HEAD `Gitar` check to appear:
 
    ```powershell
    pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
@@ -339,7 +343,7 @@ After all replies:
      -StatePath $reviewState `
      -ExpectedHeadSha $expectedHeadSha `
      -ReviewRequestedAt $reviewRequestedAt `
-     -ReviewStartGraceSeconds 30 `
+     -ReviewStartGraceSeconds 60 `
      -TimeoutMinutes 25 `
      -PollSeconds 10
    ```
@@ -347,10 +351,10 @@ After all replies:
    If this returns `review_not_started`, and only then, request review once for that pushed HEAD:
 
    ```powershell
-   gh pr comment $prNumber --repo $baseRepository --body "@codex review"
+   gh pr comment $prNumber --repo $baseRepository --body "gitar review"
    ```
 
-   Do not post the fallback comment when a fresh 👀, feedback, or approval appeared during the grace period.
+   Do not post the fallback comment when an exact-HEAD Gitar check appeared during the grace period, even if it is still queued or processing.
 
 6. If the grace-period watcher returned `review_not_started`, resume the bundled watcher against the same baseline:
 
@@ -367,18 +371,17 @@ After all replies:
    Run it as a long-lived tool call. While it runs, use only the environment's wait mechanism and remain silent unless the user interrupts. The watcher keeps repeated polling out of model context.
 
 7. Handle its terminal result:
-   - `feedback`: fetch all feedback for context, but action only IDs in `newFeedback`. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response.
-   - `standalone_feedback`: re-fetch PR-level reviews and issue comments, then classify and action only standalone IDs in `newFeedback`. This signal wakes the audit without treating SHA-less issue comments as feedback tied to the pushed HEAD.
-   - `approved`: the same Codex identity produced the stable 👍 signal. Re-fetch checks, PR-body reactions, PR-level feedback, and threads once; finish only if the full definition of done still holds.
-   - `review_not_started`: post the single fallback `@codex review` comment, then resume step 6.
-   - `reviewer_ambiguous`: stop and ask the user which fresh identity is Codex.
-   - `timeout`: report that Codex did not reach a terminal state; do not claim readiness.
+   - `feedback`: fetch all feedback for context, but action only IDs in `newFeedback`. This may include inline threads, PR-level feedback from any reviewer, or Gitar's dashboard when its verdict is `Approved with Suggestions`, `Changes Requested`, `Blocked`, or `Needs Review`. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response.
+   - `approved`: the exact-HEAD Gitar check completed successfully and the fresh dashboard verdict is `Approved`. Re-fetch checks, dashboard, PR-level feedback, and threads once; finish only if the full definition of done still holds.
+   - `gitar_failed`: inspect the Gitar check and dashboard details. Treat provider/integration failure as a blocker unless repository evidence gives a scoped fix; never describe the PR as reviewed successfully.
+   - `review_not_started`: post the single fallback `gitar review` comment, then resume step 6.
+   - `timeout`: report that Gitar did not reach a terminal state; do not claim readiness.
    - `head_changed`: fetch and inspect the new state. Stop when another actor's push makes continued mutation unsafe.
    - `pr_closed`: stop and report the PR state.
 
 8. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → automatic-review grace period → wait.
 
-If no push is needed, never post `@codex review`: the fallback is only permitted after this run pushes a new HEAD. A pre-existing Codex 👍 is not sufficient by itself, even when the HEAD remained unchanged during this run. Accept it only when the same Codex identity has a submitted review whose `commit_id` equals the current HEAD and the reaction was created at or after that review, or when retained run evidence already records that exact SHA linkage. Also require no later unaddressed Codex feedback. Otherwise wait read-only for an already-running review and stop on timeout without posting a trigger.
+If no push is needed, never post `gitar review`: the fallback is only permitted after this run pushes a new HEAD. Capture the current state and wait read-only. A completed successful `Gitar` check on the exact current HEAD plus an `Approved` dashboard verdict is sufficient; no Pro approval signal is required. Otherwise wait for an already-running automatic review and stop on timeout without posting a trigger.
 
 ```powershell
 $expectedHeadSha = (git rev-parse HEAD).Trim()
@@ -386,12 +389,10 @@ $reviewRound++
 $reviewState = Join-Path $runStateDirectory ("review-round-{0}.json" -f $reviewRound)
 pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -CaptureBaseline `
-  -PreserveExistingReviewStart `
   -StatePath $reviewState `
   -PrNumber $prNumber `
   -Repository $baseRepository `
-  -Hostname $githubHostname `
-  -ReviewerLogin $codexReviewerLogin
+  -Hostname $githubHostname
 pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -Wait `
   -StatePath $reviewState `
@@ -401,11 +402,9 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -PollSeconds 20
 ```
 
-The unchanged-HEAD path deliberately has no new request-time cutoff. The captured IDs exclude old reactions, while the preserved 👀 boundary links any later 👍 to the ongoing review and allows a reaction created during baseline capture to be observed.
+The watcher verifies that Gitar's check belongs to the exact expected SHA. After a push, it also requires the dashboard comment to have changed after the baseline and in the same processing window before accepting its verdict, because Gitar edits one persistent dashboard comment in place. Never use the fallback comment without a preceding push from this run.
 
-After a push, a 👀 created after the watcher has observed the expected HEAD establishes a trusted review boundary. A later stable 👍 is sufficient approval even when Codex reports no submitted review, which is its normal no-findings path. Feedback-bearing reviews may instead provide exact-HEAD linkage through their submitted review metadata. Without a push, apply the submitted-review or retained-evidence linkage rule above. Never use the fallback comment without a preceding push from this run.
-
-Bound convergence to five pushed review rounds or two hours overall. Stop earlier for approval, timeout, closure, unexpected head movement, or a genuine blocker.
+Bound convergence to five pushed review rounds or two hours overall. Stop earlier for a clean Gitar result, timeout, closure, unexpected head movement, or a genuine blocker.
 
 ## Final audit and response
 
@@ -415,7 +414,7 @@ Re-fetch rather than relying on cached state:
 - latest base commit and a fresh local `git merge-tree --write-tree --messages HEAD <base-commit>` conflict probe;
 - all checks;
 - required checks queried separately with `gh pr checks --required`;
-- PR-body reactions from the discovered Codex identity;
+- the exact-HEAD Gitar check and Gitar dashboard Code Review verdict;
 - PR-level reviews/comments;
 - all review threads and reply submission states;
 - local/remote branch state and worktree.
@@ -426,8 +425,8 @@ Report concisely:
 - conflict and CI outcome, with commits;
 - thread counts: actioned, awaiting reviewer, and disagreed;
 - fixes, focused verification, and commit SHAs;
-- push result and Codex review rounds;
-- terminal Codex 👍 status for current HEAD;
+- push result and Gitar review rounds;
+- terminal Gitar Core status for current HEAD: successful completed check plus `Approved` dashboard verdict;
 - pending review replies: `0`;
 - review-thread resolution mutations: `0`, with baseline audit result;
 - any blocker or required check still pending.
