@@ -176,6 +176,11 @@ function Test-ActionableFeedbackItem {
             return $false
         }
 
+        if ((Test-GitarActor -Login $Item.authorLogin -AuthorType $Item.authorType) -and
+            $body.Trim() -match '(?i)^Gitar has auto-approved this PR\b') {
+            return $false
+        }
+
         if ($body -match '(?i)reviewed\s+\d+\s+out\s+of\s+\d+\s+changed files.*generated no new comments') {
             return $false
         }

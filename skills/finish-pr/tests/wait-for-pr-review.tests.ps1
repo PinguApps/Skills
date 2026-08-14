@@ -164,6 +164,19 @@ $emptyCopilotReview = [pscustomobject]@{
 $cleanCopilotIgnored = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Checks @((New-Check)) -Dashboard $approvedDashboard -FeedbackItems @($emptyCopilotReview)) -ExpectedSha "new-sha"
 Assert-Equal "approved" $cleanCopilotIgnored.status "A reviewer's explicit no-findings summary must not be treated as actionable feedback."
 
+$gitarAutoApproval = [pscustomobject]@{
+    id = "gitar-auto-approval"
+    kind = "review"
+    authorLogin = "gitar-bot[bot]"
+    authorType = "Bot"
+    body = "Gitar has auto-approved this PR ([configure](https://app.gitar.ai))"
+    reviewState = "APPROVED"
+    updatedAt = "2026-08-12T12:00:10Z"
+    isGitarDashboard = $false
+}
+$gitarAutoApprovalIgnored = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Checks @((New-Check)) -Dashboard $approvedDashboard -FeedbackItems @($gitarAutoApproval)) -ExpectedSha "new-sha"
+Assert-Equal "approved" $gitarAutoApprovalIgnored.status "Gitar's optional Pro auto-approval review must not be treated as feedback."
+
 $editedFeedback = [pscustomobject]@{
     id = "old-comment"
     kind = "issue_comment"
