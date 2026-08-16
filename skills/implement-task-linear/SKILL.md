@@ -1,154 +1,128 @@
 ---
 name: implement-task-linear
-description: >-
-  Implement a Linear issue end to end in the current repository: load the issue,
-  inspect same-team-and-project context, reconcile Linear with the codebase, make
-  and verify the required changes, and update or create tightly related Linear
-  issues when justified.
-compatibility: Requires a connected Linear MCP server and repository read/write tools.
+description: Implement one Linear issue end to end in the current repository, using its optional originating spec, plan, domain context, and ADRs when available.
 disable-model-invocation: true
 ---
 
 # Implement Task from Linear
 
-Implement one Linear issue completely. Treat the issue as the source of its requested outcome, root project context as the larger product picture, and the repository as the source of current implementation truth.
+Implement exactly one Linear issue. The issue is the required input and scope boundary; its provenance chain and repository context refine how to implement it without silently adding work.
 
-## Non-negotiable scope boundary
+## 1. Resolve the target and Linear boundary
 
-The target issue defines the only permitted Linear scope:
+Require an unambiguous Linear issue identifier or URL. Ask for one when absent.
 
-- Read the explicitly supplied target issue to discover its team and project.
-- Record the target's exact team ID and project ID.
-- After that initial lookup, read or mutate an issue only after confirming that **both** IDs match.
-- Discover every non-target issue through a Linear query constrained by both recorded IDs. Do not directly fetch an unverified related identifier.
-- Apply the same check to search results, parent/sub-issues, blockers, duplicates, related issues, and newly created issues.
-- Prefer server-side team and project filters, then verify every returned issue before using it.
-- Do not follow an out-of-scope issue even when the target links to it. Mention only that an inaccessible cross-scope relation exists, without reading it.
-- Do not list, inspect, search, create, or modify issues in another team or project.
+Fetch the target's full description, status, labels, team, project, relation identifiers, comments, and requirement-bearing attachments. Record its exact team ID and project ID. If it has no project, ask the user to assign it or authorize assignment to a named project before inspecting surrounding Linear work.
 
-If the target has no project, stop and ask the user to assign it to a project or authorize assigning it to a named project. Do not inspect surrounding issues until the scope has both IDs.
+After resolving the target, apply this boundary to every other Linear issue read or mutation:
 
-The repository is not restricted by this Linear boundary; inspect and change the current repository as required by the target issue.
+- query with both recorded IDs, then verify both IDs on every result;
+- discover parents, sub-issues, blockers, duplicates, and related issues through scoped queries rather than directly fetching an unverified identifier;
+- treat a cross-scope relation as unavailable context and report only its existence;
+- create issues only with both recorded IDs.
 
-## 1. Resolve the issue
+Resolve the team's relevant workflow states, especially In Progress, In Review, Backlog, and any blocked state, by ID. Report ambiguity instead of guessing.
 
-Accept an issue identifier supplied with the invocation or in the conversation, such as `ABC-123`. If there is no unambiguous identifier, ask for it and wait.
+This step is complete when the target, acceptance criteria, team/project IDs, and usable workflow states are known.
 
-Use the Linear MCP server in the same style as `to-linear`:
+## 2. Follow the provenance chain
 
-1. Fetch the target issue itself, including its full description, status, labels, team, project, and relation identifiers. Do not dereference a parent, sub-issue, or native relation, and do not use embedded related-issue content, before the target's exact team and project IDs establish scope.
-2. Establish the exact team/project scope described above.
-3. Fetch comments or attachments on the target only when they may contain requirements or decisions.
-4. Resolve the team's relevant workflow states, especially In Progress, In Review, and Backlog, by ID. If a required state is ambiguous or missing, report that rather than guessing.
+Determine the repository root and read every applicable `AGENTS.md` before other repository work.
 
-Do not begin repository changes until the target and its acceptance criteria are understood.
+Then resolve context in this order. Each source is optional unless the target explicitly depends on it:
 
-## 2. Establish repository truth
+1. **Originating spec** — follow every explicit `Source` path or URL, spec link, design link, or requirement-bearing attachment in the target. When `to-linear` represented the spec as a native parent, find that parent through a team-and-project-scoped query, verify both IDs, then read its full description and comments. If no provenance is recorded, search `docs/`, `specs/`, and `.scratch/` for a single clear match to the target title, source name, or feature slug; ask before choosing among plausible matches. Inspect in-scope parents, blockers, milestone or cycle neighbours, and overlapping issues when they can clarify intent, dependencies, or drift.
+2. **Plan** — read root `PLAN.md` fully when it exists. Use it for the larger outcome, sequencing, dependencies, and the target's place in the plan.
+3. **Domain context** — read root `CONTEXT.md` fully when it exists. Also read root `CONTEXT-MAP.md` fully when it exists and follow every context entry applicable to the target. Context files define project language and domain boundaries, not implementation scope.
+4. **Decisions** — read applicable ADRs under root `docs/adr/` and any context-specific `docs/adr/`. Follow pertinent artifact pointers from the selected spec, plan, context files, ADRs, and current conversation.
+5. **Repository truth** — inspect the implicated code, tests, documentation, schemas, migrations, generated artifacts, configuration, and git status. Preserve unrelated user changes.
 
-Determine the repository root and read the applicable `AGENTS.md` files first.
+The prerequisite skills may leave different parts of this chain:
 
-Then check for `PLAN.md` and `CONTEXT.md` in the repository root. If either exists, read it **fully** before analysing or changing code:
+- `grill-with-docs` may leave `CONTEXT.md`, `CONTEXT-MAP.md`, and ADRs;
+- `to-spec` publishes implementation decisions, agreed testing seams, and out-of-scope boundaries in an originating tracker issue;
+- `to-linear` carries that origin into the target through a native parent or `Source` reference and may copy durable constraints into `Context`.
 
-- Treat `CONTEXT.md` as authoritative for domain language, boundaries, constraints, and durable decisions.
-- Use `PLAN.md` to understand the target's larger outcome, intended sequencing, dependencies, and relationship to surrounding work.
-- Trace the target issue against both documents. Surface material omissions, contradictions, or signs that Linear or the documents are stale.
-- Do not silently choose between conflicting issue, plan, context, and repository evidence. Ask the user when the conflict changes the implementation or intended outcome.
-- Do not automatically implement all work described in `PLAN.md`. Use it to implement the target coherently and to identify scoped related issues or follow-up work.
+Missing optional artifacts do not block implementation. Explicit pointers do require resolution: read them, or report why they are unavailable.
 
-The presence of either file is significant; never skip it because the Linear issue appears self-contained.
+Use this evidence hierarchy:
 
-Inspect the repository narrowly but deeply enough to understand:
+- the target issue defines the deliverable and acceptance criteria;
+- the originating spec and `PLAN.md` explain intent, sequencing, and exclusions without expanding the target;
+- context files and ADRs constrain vocabulary, boundaries, and durable decisions;
+- the repository defines current implementation truth.
 
-- existing architecture and conventions;
-- code, tests, documentation, migrations, and configuration implicated by the issue;
-- current git status, preserving unrelated user changes;
-- existing behaviour corresponding to every requirement and acceptance criterion.
+Surface material conflicts or stale evidence. Ask only when a conflict changes the intended behaviour, public interface, compatibility, or scope.
 
-Potentially inspect surrounding Linear issues when they can clarify intent, prevent duplicate work, reveal dependencies, or explain apparent drift. Search only within the recorded team and project. Useful context includes nearby milestone/cycle work, parent/sub-issues, blockers, blocked issues, and issues with overlapping domain terms.
+This step is complete when every explicit provenance pointer is resolved or reported unavailable, every applicable context artifact is read, and every target requirement is classified as implemented, partial, missing, contradicted, or blocked.
 
-Do not assume Linear or the repository is current. Compare them explicitly and classify relevant requirements as:
-
-- already implemented and verified;
-- partially implemented;
-- missing;
-- contradicted by repository evidence;
-- blocked by a decision or dependency.
-
-Ask the user only when a material ambiguity cannot be resolved from scoped Linear context or repository evidence.
-
-## 3. Plan for complete delivery
+## 3. Plan the delivery
 
 Before editing, give the user:
 
-- assumptions and any drift between Linear, `PLAN.md`, `CONTEXT.md`, and the repository;
-- a short implementation plan with a verification check for each step;
-- any material scope or compatibility tradeoff.
+- the target outcome and assumptions;
+- the context sources consulted, including missing or unavailable expected artifacts;
+- material drift between Linear, the originating spec, `PLAN.md`, domain documents, and the repository;
+- a short vertical-slice plan with a verification check for each step;
+- the public testing seams already agreed in the spec, or the highest existing seams that fit the change.
 
-Map every acceptance criterion and durable requirement to an implementation change or a concrete verification. Existing implementation counts only after verification.
+Map every acceptance criterion and durable constraint to an implementation change or concrete verification. Existing behaviour counts only after verification. If choosing a seam would create or materially change a public interface, confirm it with the user when the upstream artifacts did not already settle it.
 
-Move the target to the resolved In Progress state when work actually starts, unless it is already further along or the user asked not to change statuses. Report the transition.
+Move the target to the resolved In Progress state when implementation starts, unless it is already further along or the user asked to preserve its status.
 
-## 4. Implement
+This step is complete when every acceptance criterion has a delivery and verification path and every material design choice is settled.
 
-Implement the minimum coherent change that satisfies the entire target issue:
+## 4. Implement in verified slices
 
-- follow repository conventions and keep edits surgical;
-- include tests that reproduce changed behaviour where practical;
-- update required documentation, schemas, migrations, generated artifacts, or configuration;
-- do not turn required current-task work into a follow-up merely to reduce scope;
-- preserve unrelated work and do not commit, push, open a PR, deploy, or release unless the user asks.
+Implement the minimum coherent change that satisfies the whole target:
 
-Loop through implementation and verification until all acceptance criteria pass or a genuine blocker remains. Run the smallest relevant checks first, then the broader checks justified by risk.
+- follow repository conventions and preserve unrelated work;
+- for testable behaviour, work red then green at the agreed public seams, one vertical slice at a time;
+- run the smallest relevant test and typecheck after each slice, then the broader relevant suite once near the end;
+- update required documentation, schemas, migrations, generated artifacts, and configuration;
+- keep required target work in the current change rather than deferring it to manufacture completion;
+- leave commits, pushes, pull requests, deployment, and release to an explicit user request.
 
-## 5. Manage related Linear work when justified
+When a test cannot reasonably be written or a full suite cannot run, use the strongest available verification and record the limitation.
 
-The user authorizes necessary related-issue mutations without a separate approval step, but only inside the recorded team/project scope. Keep them minimal, evidence-based, and visible in the final report.
+Continue until every acceptance criterion passes or a genuine blocker remains.
 
-### Create a follow-up issue
+## 5. Review and reconcile
 
-Create a scoped follow-up when repository work reveals a concrete, actionable problem that:
+Inspect the complete diff before changing final Linear state:
 
-- is genuinely separate from the target's required outcome;
-- should be deferred rather than silently expanded into the current change; and
-- is not already covered by a scoped issue after an overlap search.
+- **Standards** — check every changed area against applicable repository instructions, conventions, and ADRs.
+- **Spec** — check every target criterion and originating-spec constraint for missing work, incorrect behaviour, and scope creep.
 
-Create it in the same team and project, normally in the resolved Backlog state. Give it a focused title, description, observable acceptance criteria, relevant context, and native relation to the target when supported. Do not create speculative cleanup, vague ideas, or tasks required to claim the target is complete.
+Fix actionable findings and rerun affected checks. Re-fetch the target and every mutated related issue, then reconfirm the team/project boundary.
 
-If an unavoidable prerequisite blocks the target and cannot responsibly be implemented now, create or update the scoped prerequisite issue, relate it natively, and report the target as blocked rather than complete.
+When every required outcome is implemented and verified:
 
-### Update an existing related issue
+1. Add a concise target comment mapping each acceptance criterion to implementation and verification evidence.
+2. Move the target to In Review only when its current state is earlier.
 
-Modify a scoped related issue when the implementation produces reliable evidence that its description, relations, or status is now stale. Keep the change limited to that evidence; do not rewrite unrelated scope.
+Preserve completed, cancelled, archived, In Review, and other terminal or further-along states. When blocked, leave the target In Progress or use the resolved blocked state and record the unmet criterion, evidence, and dependency.
 
-When the current implementation also satisfies another scoped issue:
+## Related Linear work
 
-1. Read that issue fully and verify every acceptance criterion against the repository.
-2. Confirm its team and project IDs still match the target.
-3. Add a concise cross-reference or relation to the implemented target when supported.
-4. Move it to the resolved In Review state only when its current state is earlier. Preserve In Review, completed, cancelled, archived, and any other terminal or further-along state; never reopen or regress it.
-5. Record the issue identifier, evidence, and transition in the final response.
+The user authorizes minimal related-issue mutations inside the recorded team/project boundary when implementation evidence justifies them.
 
-Do not transition an issue merely because its title appears similar. Partial coverage should be documented or narrowed only when evidence supports the edit; otherwise leave its status unchanged.
+Create a follow-up only when it is concrete, independently actionable, genuinely outside the target, and absent after a scoped overlap search. Create it in the same team/project, normally in Backlog, with observable acceptance criteria and a native relation to the target when supported. A prerequisite that blocks completion must be related and reported as a blocker rather than used to declare the target complete.
 
-## 6. Reconcile and report
+Update an existing related issue only when repository evidence makes its description, relations, or status stale. Before treating it as satisfied, read every acceptance criterion and verify complete coverage. Move it to In Review only from an earlier state; preserve terminal and further-along states. Partial or title-only overlap does not justify a transition.
 
-Before declaring completion:
+## Handoff
 
-1. Re-fetch the target and every mutated related issue.
-2. Reconfirm the team/project boundary.
-3. Verify repository changes and test results against each target acceptance criterion.
-4. When all required work is implemented and verified, move the target to In Review only if its current state is earlier. Preserve In Review, completed, cancelled, archived, and any other terminal or further-along state. Otherwise leave it In Progress, or use a resolved blocked state if appropriate, and explain why.
-5. Correct any Linear mutation mismatch before reporting.
+Report:
 
-End with a concise handoff containing:
-
-- target issue identifier, final status, and URL;
-- implemented outcome;
+- target identifier, URL, and final status;
+- implemented outcome and changed surfaces;
 - verification commands and results;
 - acceptance-criteria coverage;
-- drift discovered between Linear, `PLAN.md`, `CONTEXT.md`, and the repository;
-- every related issue read that materially changed the implementation decision;
+- context sources used and unavailable explicit pointers;
+- material drift or conflicts found;
+- every related issue read that changed an implementation decision;
 - every issue created or modified, with reason, status, and URL;
-- remaining blockers or follow-up work.
+- blockers, limitations, and follow-up work.
 
-Say explicitly when no related Linear issues were changed.
+Say explicitly when no related Linear issues changed.

@@ -25,7 +25,8 @@ Implements a Linear issue end to end in the current repository.
 The skill:
 
 - Accepts a Linear issue identifier or asks for one.
-- Reads root `PLAN.md` and `CONTEXT.md` when present.
+- Follows the originating spec and reads optional `PLAN.md`, `CONTEXT.md`,
+  `CONTEXT-MAP.md`, and applicable ADRs when present.
 - Reconciles the issue, surrounding work, and repository state.
 - Implements and verifies every requirement and acceptance criterion.
 - Restricts all Linear access and mutations to the issue's exact team and project.
