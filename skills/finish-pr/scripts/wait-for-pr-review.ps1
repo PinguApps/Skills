@@ -263,7 +263,7 @@ function Test-ActionableFeedbackItem {
         }
     }
 
-    return $body.Trim() -notmatch '^(?:lgtm|looks good(?: to me)?|approved|acknowledged|thanks|thank you|done|👍)[.! ]*$'
+    return $body.Trim() -notmatch '^(?:lgtm|looks good(?: to me)?|approved|acknowledged|thanks|thank you|done)[.! ]*$'
 }
 
 function Get-PrReviewSnapshot {
@@ -521,6 +521,9 @@ function Resolve-ReviewOutcome {
     $prAgentStatus = $Snapshot.prAgentStatus
     $prAgentPresent = ($null -ne $prAgentStatus -and [bool]$prAgentStatus.present)
     $prAgentRelevant = $prAgentPresent -or [bool]$Baseline.prAgentSeenAtBaseline
+    $gitarExpected = [bool]$Baseline.gitarSeenAtBaseline -or
+        @($Snapshot.gitarChecks).Count -gt 0 -or
+        ($null -ne $Snapshot.gitarDashboard)
 
     $newFeedback = @(Get-NewFeedback -Baseline $Baseline -Snapshot $Snapshot)
     if ($newFeedback.Count -gt 0) {
@@ -536,14 +539,14 @@ function Resolve-ReviewOutcome {
             return [pscustomobject]@{ status = "processing"; verdict = "unknown"; check = $null; prAgentRelevant = $true; prAgentState = "pending"; newFeedback = @() }
         }
 
-        if ($prAgentStatus.state -eq "failure") {
+        if ($prAgentStatus.state -in @("failure", "error")) {
             if ($newFeedback.Count -eq 0) {
                 $newFeedback = @([pscustomobject]@{
                     id = "pragent-status"
                     kind = "pragent_status"
                     authorLogin = "PR Agent"
                     authorType = "App"
-                    body = "PR Agent reported failure on this HEAD: $([string]$prAgentStatus.description)"
+                    body = "PR Agent reported $([string]$prAgentStatus.state) on this HEAD: $([string]$prAgentStatus.description)"
                     url = [string]$prAgentStatus.url
                     createdAt = [DateTimeOffset]::UtcNow.ToString("o")
                     updatedAt = [DateTimeOffset]::UtcNow.ToString("o")
@@ -552,11 +555,15 @@ function Resolve-ReviewOutcome {
                     isGitarDashboard = $false
                 })
             }
-            return [pscustomobject]@{ status = "feedback"; verdict = "unknown"; check = $null; prAgentRelevant = $true; prAgentState = "failure"; newFeedback = $newFeedback }
+            return [pscustomobject]@{ status = "feedback"; verdict = "unknown"; check = $null; prAgentRelevant = $true; prAgentState = [string]$prAgentStatus.state; newFeedback = $newFeedback }
         }
 
         if ($prAgentStatus.state -ne "success") {
-            return [pscustomobject]@{ status = "processing"; verdict = "unknown"; check = $null; prAgentRelevant = $true; prAgentState = [string]$prAgentStatus.state; newFeedback = @() }
+            return [pscustomobject]@{ status = "processing"; verdict = "unknown"; check = $null; prAgentRelevant = $true; prAgentState = [string]$prAgentStatus.state; gitarExpected = $gitarExpected; newFeedback = @() }
+        }
+
+        if ($gitarExpected -and @($Snapshot.gitarChecks).Count -eq 0) {
+            return [pscustomobject]@{ status = "processing"; verdict = "unknown"; check = $null; prAgentRelevant = $true; prAgentState = "success"; gitarExpected = $true; newFeedback = @() }
         }
     }
 
@@ -564,9 +571,9 @@ function Resolve-ReviewOutcome {
     $check = if ($checkArray.Count -eq 0) { $null } else { $checkArray[0] }
     if ($null -eq $check) {
         if ($prAgentRelevant -and $prAgentPresent -and $prAgentStatus.state -eq "success") {
-            return [pscustomobject]@{ status = "approved"; verdict = "pragent_approved"; check = $null; prAgentRelevant = $true; prAgentState = "success"; newFeedback = @() }
+            return [pscustomobject]@{ status = "approved"; verdict = "pragent_approved"; check = $null; prAgentRelevant = $true; prAgentState = "success"; gitarExpected = $false; newFeedback = @() }
         }
-        return [pscustomobject]@{ status = "waiting"; verdict = "unknown"; check = $null; prAgentRelevant = $prAgentRelevant; prAgentState = "unknown"; newFeedback = @() }
+        return [pscustomobject]@{ status = "waiting"; verdict = "unknown"; check = $null; prAgentRelevant = $prAgentRelevant; prAgentState = "unknown"; gitarExpected = $gitarExpected; newFeedback = @() }
     }
 
     if ($check.status -ne "completed") {
@@ -673,6 +680,28 @@ function Invoke-PrReviewWatcher {
         } catch {
             $prAgentSeenAtBaseline = $false
         }
+        $gitarSeenAtBaseline = $false
+        try {
+            if (@($snapshot.gitarChecks).Count -gt 0 -or $null -ne $snapshot.gitarDashboard) {
+                $gitarSeenAtBaseline = $true
+            } else {
+                $commitPages = Invoke-GhJson ($apiPrefix + @(
+                    "repos/$($routing.apiRepository)/pulls/$PrNumber/commits?per_page=20", "--paginate", "--slurp"
+                ))
+                foreach ($commit in @(Expand-PaginatedItems $commitPages)) {
+                    $gitarRuns = Invoke-GhJson ($apiPrefix + @(
+                        "-H", "Accept: application/vnd.github+json",
+                        "repos/$($routing.apiRepository)/commits/$([string]$commit.sha)/check-runs?filter=latest&per_page=100"
+                    ))
+                    if (@($gitarRuns.check_runs | Where-Object { $_.name -eq "Gitar" }).Count -gt 0) {
+                        $gitarSeenAtBaseline = $true
+                        break
+                    }
+                }
+            }
+        } catch {
+            $gitarSeenAtBaseline = $false
+        }
         $state = [pscustomobject]@{
             repository = $routing.selector
             hostname = $routing.hostname
@@ -690,6 +719,7 @@ function Invoke-PrReviewWatcher {
             gitarDashboard = $dashboardState
             prAgentContext = $PrAgentContext
             prAgentSeenAtBaseline = $prAgentSeenAtBaseline
+            gitarSeenAtBaseline = $gitarSeenAtBaseline
         }
         Save-ReviewState -State $state -Path $StatePath
 
@@ -709,6 +739,7 @@ function Invoke-PrReviewWatcher {
 
     $state = Get-Content -Raw -LiteralPath $StatePath | ConvertFrom-Json -Depth 100
     $deadline = [DateTimeOffset]::UtcNow.AddMinutes($TimeoutMinutes)
+    $gitarSeenDuringWatch = [bool]$state.gitarSeenAtBaseline
     $reviewStartDeadline = if ($ReviewStartGraceSeconds -gt 0) {
         $start = if ($ReviewRequestedAt -eq [DateTimeOffset]::MinValue) {
             [DateTimeOffset]::UtcNow
@@ -726,6 +757,12 @@ function Invoke-PrReviewWatcher {
             -Number ([int]$state.prNumber) `
             -Hostname ([string]$state.hostname) `
             -PrAgentContext ([string]$state.prAgentContext)
+
+        if (@($snapshot.gitarChecks).Count -gt 0 -or $null -ne $snapshot.gitarDashboard) {
+            $gitarSeenDuringWatch = $true
+        }
+        $state.gitarSeenAtBaseline = $gitarSeenDuringWatch
+
         $outcome = Resolve-ReviewOutcome `
             -Baseline $state `
             -Snapshot $snapshot `

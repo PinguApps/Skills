@@ -275,6 +275,20 @@ Assert-Equal "approved" $prAgentSuccessWithGitarApproval.status "Both reviewers 
 $prAgentFailureWithGitarApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Checks @((New-Check)) -Dashboard $approvedDashboard -PrAgentStatus (New-PrAgentStatus -State "failure")) -ExpectedSha "new-sha"
 Assert-Equal "feedback" $prAgentFailureWithGitarApproval.status "A PR Agent failure must block completion even when Gitar approved."
 
+$prAgentErrorState = Resolve-ReviewOutcome -Baseline $prAgentBaseline -Snapshot (New-Snapshot -PrAgentStatus (New-PrAgentStatus -State "error" -Description "review failed to run")) -ExpectedSha "new-sha"
+Assert-Equal "feedback" $prAgentErrorState.status "A PR Agent error state must be surfaced as feedback, not polled to timeout."
+
+$gitarSeenBaseline = [pscustomobject]@{
+    agentLogin = "example-agent"
+    baselineHeadSha = "old-sha"
+    seenFeedbackVersions = @()
+    gitarDashboard = $null
+    prAgentSeenAtBaseline = $true
+    gitarSeenAtBaseline = $true
+}
+$prAgentSuccessWhileGitarExpected = Resolve-ReviewOutcome -Baseline $gitarSeenBaseline -Snapshot (New-Snapshot -PrAgentStatus (New-PrAgentStatus -State "success")) -ExpectedSha "new-sha"
+Assert-Equal "processing" $prAgentSuccessWhileGitarExpected.status "PR Agent success alone must not approve while Gitar is expected but has not reported on the HEAD."
+
 $olderCheck = New-Check -StartedAt "2026-08-12T10:00:00Z"
 $olderCheck.id = 1
 $newerCheck = New-Check -Status "in_progress" -Conclusion "" -StartedAt "2026-08-12T12:00:00Z"
@@ -290,13 +304,23 @@ $baselinePath = Join-Path ([IO.Path]::GetTempPath()) "finish-pr-gitar-baseline-t
 function Invoke-GhJson {
     param([string[]]$GhArgs)
 
+    $joined = $GhArgs -join " "
     if ($GhArgs[0] -eq "api" -and $GhArgs[-1] -eq "user") {
         return [pscustomobject]@{ login = "example-agent" }
     }
-    throw "Unexpected gh call: $($GhArgs -join ' ')"
+    if ($joined -match "/status$") {
+        return [pscustomobject]@{ statuses = @() }
+    }
+    if ($joined -match "/check-runs") {
+        return [pscustomobject]@{ check_runs = @() }
+    }
+    if ($joined -match "/commits\?per_page=20") {
+        return @([pscustomobject]@{ sha = "commit-sha" })
+    }
+    throw "Unexpected gh call: $joined"
 }
 function Get-PrReviewSnapshot {
-    return New-Snapshot -Dashboard (New-Dashboard -Verdict "Approved") -FeedbackItems @($humanFeedback)
+    return New-Snapshot -FeedbackItems @($humanFeedback)
 }
 
 try {
@@ -311,7 +335,9 @@ try {
     Assert-Equal "ghe.example/owner/repository" $captured.repository "Baseline capture should retain repository routing."
     Assert-Equal "example-agent" $captured.agentLogin "Baseline capture should record the authenticated agent."
     Assert-Equal "human-comment" $captured.seenFeedbackVersions[0].id "Baseline capture should version feedback IDs."
-    Assert-Equal "dashboard" $captured.gitarDashboard.id "Baseline capture should retain the dashboard version."
+    Assert-Equal $null $captured.gitarDashboard "Baseline capture should record a missing Gitar dashboard as null."
+    Assert-Equal $false $captured.prAgentSeenAtBaseline "Baseline capture should record PR Agent absence when no status exists."
+    Assert-Equal $false $captured.gitarSeenAtBaseline "Baseline capture should record Gitar absence when no check exists."
 }
 finally {
     Remove-Item -LiteralPath $baselinePath -ErrorAction SilentlyContinue

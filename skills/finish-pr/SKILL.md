@@ -20,7 +20,7 @@ Finish only when all of these are true for the current PR HEAD:
   - the latest relevant comment is the agent's response and no reviewer has replied afterwards, so the thread is awaiting review and needs no duplicate work.
 - No reply created by this run remains in a pending GitHub review.
 - No review thread's resolution state was changed by this run.
-- The exact current HEAD has a successful completed `Gitar` check, Gitar's dashboard Code Review verdict is `Approved`, and no later Gitar or other reviewer feedback is left unaddressed.
+- The exact current HEAD has a successful completed `Gitar` check with an `Approved` dashboard verdict — when Gitar is running for this repository (same detection rule as PR Agent below: a `Gitar` check or dashboard comment anywhere on the pull request). When Gitar is not running, this rule does not apply.
 - If PR Agent is running for this repository, the exact current HEAD also carries a `PR Agent` status with state `success`. See the PR Agent section below: `pending` means its review is still running, `failure` means its inline findings are action-required feedback, and the complete absence of any `PR Agent` status anywhere on the pull request means PR Agent is not running and this rule does not apply.
 
 This completion rule uses Gitar Core only. Never require Gitar auto-approval, a GitHub approving review, merge blocking, auto-apply, or any other Pro signal. Treat `Approved with Suggestions`, `Changes Requested`, `Blocked`, and `Needs Review` as non-terminal feedback states even if the `Gitar` check itself succeeds.
