@@ -275,6 +275,19 @@ Assert-Equal "approved" $prAgentSuccessWithGitarApproval.status "Both reviewers 
 $prAgentFailureWithGitarApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Checks @((New-Check)) -Dashboard $approvedDashboard -PrAgentStatus (New-PrAgentStatus -State "failure")) -ExpectedSha "new-sha"
 Assert-Equal "feedback" $prAgentFailureWithGitarApproval.status "A PR Agent failure must block completion even when Gitar approved."
 
+$thumbsUp = [string][char]0xD83D + [string][char]0xDE4D
+$thumbsUpFeedback = [pscustomobject]@{
+    id = "thumbsup-comment"
+    kind = "thread_comment"
+    authorLogin = "reviewer"
+    authorType = "User"
+    body = $thumbsUp
+    updatedAt = "2026-08-12T12:00:10Z"
+    isGitarDashboard = $false
+}
+$thumbsUpIgnored = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Checks @((New-Check)) -Dashboard $approvedDashboard -FeedbackItems @($thumbsUpFeedback)) -ExpectedSha "new-sha"
+Assert-Equal "approved" $thumbsUpIgnored.status "A lone thumbs-up acknowledgement must not be treated as actionable feedback."
+
 $prAgentErrorState = Resolve-ReviewOutcome -Baseline $prAgentBaseline -Snapshot (New-Snapshot -PrAgentStatus (New-PrAgentStatus -State "error" -Description "review failed to run")) -ExpectedSha "new-sha"
 Assert-Equal "feedback" $prAgentErrorState.status "A PR Agent error state must be surfaced as feedback, not polled to timeout."
 
