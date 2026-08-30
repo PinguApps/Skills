@@ -57,7 +57,8 @@ function New-Snapshot {
         [string]$State = "OPEN",
         [array]$Checks = @(),
         [AllowNull()]$Dashboard = $null,
-        [array]$FeedbackItems = @()
+        [array]$FeedbackItems = @(),
+        [AllowNull()]$PrAgentStatus = $null
     )
 
     return [pscustomobject]@{
@@ -65,6 +66,21 @@ function New-Snapshot {
         feedbackItems = $FeedbackItems
         gitarChecks = $Checks
         gitarDashboard = $Dashboard
+        prAgentStatus = $PrAgentStatus
+    }
+}
+
+function New-PrAgentStatus {
+    param(
+        [string]$State = "success",
+        [string]$Description = "Approved - no findings."
+    )
+
+    return [pscustomobject]@{
+        present = $true
+        state = $State
+        description = $Description
+        url = "https://example.test/pr-agent"
     }
 }
 
@@ -204,6 +220,60 @@ $unchangedHeadBaseline = [pscustomobject]@{
 }
 $existingCurrentApproval = Resolve-ReviewOutcome -Baseline $unchangedHeadBaseline -Snapshot (New-Snapshot -Checks @((New-Check)) -Dashboard $approvedDashboard) -ExpectedSha "new-sha"
 Assert-Equal "approved" $existingCurrentApproval.status "A successful current-HEAD Gitar check should support the no-push path."
+
+$prAgentBaseline = [pscustomobject]@{
+    agentLogin = "example-agent"
+    baselineHeadSha = "old-sha"
+    seenFeedbackVersions = @(
+        [pscustomobject]@{ id = "old-comment"; body = "Old"; updatedAt = "2026-08-12T11:00:00Z" }
+    )
+    gitarDashboard = $null
+    prAgentSeenAtBaseline = $true
+}
+
+$prAgentPendingNoGitar = Resolve-ReviewOutcome -Baseline $prAgentBaseline -Snapshot (New-Snapshot -PrAgentStatus (New-PrAgentStatus -State "pending")) -ExpectedSha "new-sha"
+Assert-Equal "processing" $prAgentPendingNoGitar.status "A pending PR Agent status should wait as processing when Gitar is absent."
+Assert-Equal $true $prAgentPendingNoGitar.prAgentRelevant "PR Agent should be marked relevant once seen."
+
+$prAgentSuccessNoGitar = Resolve-ReviewOutcome -Baseline $prAgentBaseline -Snapshot (New-Snapshot -PrAgentStatus (New-PrAgentStatus -State "success")) -ExpectedSha "new-sha"
+Assert-Equal "approved" $prAgentSuccessNoGitar.status "A successful PR Agent status should complete the PR when Gitar is absent."
+Assert-Equal "pragent_approved" $prAgentSuccessNoGitar.verdict "The terminal result should expose the PR Agent approval path."
+
+$prAgentFailedNoGitar = Resolve-ReviewOutcome -Baseline $prAgentBaseline -Snapshot (New-Snapshot -PrAgentStatus (New-PrAgentStatus -State "failure" -Description "2 finding(s) on new-sha")) -ExpectedSha "new-sha"
+Assert-Equal "feedback" $prAgentFailedNoGitar.status "A failed PR Agent status must wake the feedback loop."
+Assert-Equal "pragent_status" $prAgentFailedNoGitar.newFeedback[0].kind "A failed PR Agent status without captured comments should be surfaced as feedback."
+
+$prAgentAbsentAfterSeen = Resolve-ReviewOutcome -Baseline $prAgentBaseline -Snapshot (New-Snapshot) -ExpectedSha "new-sha"
+Assert-Equal "processing" $prAgentAbsentAfterSeen.status "A missing head status after prior PR Agent activity should wait as processing."
+
+$notRunningBaseline = [pscustomobject]@{
+    agentLogin = "example-agent"
+    baselineHeadSha = "old-sha"
+    seenFeedbackVersions = @()
+    gitarDashboard = $null
+    prAgentSeenAtBaseline = $false
+}
+$notRunning = Resolve-ReviewOutcome -Baseline $notRunningBaseline -Snapshot (New-Snapshot) -ExpectedSha "new-sha"
+Assert-Equal "waiting" $notRunning.status "An absent PR Agent status with no history must not block the wait."
+
+$prAgentMarkerFeedback = [pscustomobject]@{
+    id = "pragent-comment"
+    kind = "thread_comment"
+    authorLogin = "example-agent"
+    authorType = "User"
+    body = "<!-- pr-agent:v1 -->`n**PR Agent**`n`n**high** - Null dereference."
+    updatedAt = "2026-08-12T12:00:10Z"
+    isGitarDashboard = $false
+}
+$prAgentMarkerFeedback = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Checks @((New-Check)) -Dashboard $approvedDashboard -FeedbackItems @($prAgentMarkerFeedback)) -ExpectedSha "new-sha"
+Assert-Equal "feedback" $prAgentMarkerFeedback.status "PR Agent comments authored through the owner login must count as reviewer feedback."
+Assert-Equal "pragent-comment" $prAgentMarkerFeedback.newFeedback[0].id "The PR Agent feedback ID should be returned."
+
+$prAgentSuccessWithGitarApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Checks @((New-Check)) -Dashboard $approvedDashboard -PrAgentStatus (New-PrAgentStatus -State "success")) -ExpectedSha "new-sha"
+Assert-Equal "approved" $prAgentSuccessWithGitarApproval.status "Both reviewers approving should complete."
+
+$prAgentFailureWithGitarApproval = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snapshot -Checks @((New-Check)) -Dashboard $approvedDashboard -PrAgentStatus (New-PrAgentStatus -State "failure")) -ExpectedSha "new-sha"
+Assert-Equal "feedback" $prAgentFailureWithGitarApproval.status "A PR Agent failure must block completion even when Gitar approved."
 
 $olderCheck = New-Check -StartedAt "2026-08-12T10:00:00Z"
 $olderCheck.id = 1
