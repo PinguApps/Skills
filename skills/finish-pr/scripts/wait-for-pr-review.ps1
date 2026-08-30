@@ -263,8 +263,7 @@ function Test-ActionableFeedbackItem {
         }
     }
 
-    $thumbsUp = [string][char]0xD83D + [string][char]0xDE4D
-    return $body.Trim() -notmatch ('^(?:lgtm|looks good(?: to me)?|approved|acknowledged|thanks|thank you|done|' + $thumbsUp + ')[.! ]*$')
+    return $body.Trim() -notmatch '^(?:lgtm|looks good(?: to me)?|approved|acknowledged|thanks|thank you|done|👍)[.! ]*$'
 }
 
 function Get-PrReviewSnapshot {
