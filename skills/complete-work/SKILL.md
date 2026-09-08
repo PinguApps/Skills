@@ -15,7 +15,7 @@ Inspect the worktree, current branch, and remotes. Preserve pre-existing changes
 
 Confirm that the `finish-pr` skill is available and GitHub CLI authentication supports the target repository. If a prerequisite is missing, report it explicitly rather than silently dropping the final phase.
 
-Before editing, identify the push remote for the intended head repository (which may differ from the base repository for a fork), then create the same-named remote branch with `git push --set-upstream <head-remote> HEAD:refs/heads/<branch-name>`. Verify that `git rev-parse --abbrev-ref "@{upstream}"` resolves to `<head-remote>/<branch-name>` and that the remote branch matches local HEAD. Branch setup is complete only when both branches exist with the same name and the local branch tracks that remote branch. If publishing or verification fails, stop and report the blocker.
+Before editing, identify the push remote for the intended head repository (which may differ from the base repository for a fork), then create the same-named remote branch with `git push --set-upstream <head-remote> HEAD:refs/heads/<branch-name>`. Verify that `git rev-parse --abbrev-ref "@{upstream}"` resolves to `<head-remote>/<branch-name>` and compare the SHA returned by `git ls-remote --exit-code --heads <head-remote> refs/heads/<branch-name>` with `git rev-parse HEAD` to verify the remote branch matches local HEAD. Branch setup is complete only when both branches exist with the same name and the local branch tracks that remote branch. If publishing or verification fails, stop and report the blocker.
 
 ## 2. Implement and commit incrementally
 
