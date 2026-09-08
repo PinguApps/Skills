@@ -4,6 +4,11 @@ Opinionated skills I use in my setup each day.
 
 ## Skills
 
+### [complete-work](skills/complete-work/)
+
+Takes supplied work through a new branch, incremental commits, verification, push,
+and PR creation, then runs `finish-pr` to complete review and CI.
+
 ### [finish-pr](skills/finish-pr/)
 
 Finishes the GitHub pull request attached to the current branch.
