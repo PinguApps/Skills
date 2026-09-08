@@ -6,8 +6,14 @@ Opinionated skills I use in my setup each day.
 
 ### [complete-work](skills/complete-work/)
 
-Takes supplied work through a new branch, incremental commits, verification, push,
-and PR creation, then runs `finish-pr` to complete review and CI.
+Takes supplied work from a new branch through PR review completion.
+
+The skill:
+
+- Fetches the latest `main` and creates an `agent/` branch from that commit.
+- Implements the task with incremental commits and relevant verification.
+- Pushes the branch and opens a PR against `main`.
+- Runs `finish-pr` to complete review and CI.
 
 ### [finish-pr](skills/finish-pr/)
 
