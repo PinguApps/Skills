@@ -57,10 +57,12 @@ Assign every ticket to exactly one native Linear project milestone. Reuse an exi
 Within each milestone, name every issue:
 
 ```text
-III - Title
+DDD - Title
 ```
 
-`III` is zero-padded to three digits. Start each milestone at `000`, increment in topological display order (`001`, `002`), and reset to `000` for the next milestone. Avoid numbers already used in that milestone.
+`DDD` is zero-padded to three digits. Start each milestone at `000`, increment in topological display order (`001`, `002`), and reset to `000` for the next milestone.
+
+Every issue title must begin with this prefix. Number issues contiguously from `000` within each milestone; the number expresses intended completion order, using actual dependency order first and preferred sequence to break ties.
 
 Topologically order all tickets without inventing dependencies. Every blocker must be earlier in the total milestone/task order:
 
@@ -69,6 +71,8 @@ Topologically order all tickets without inventing dependencies. Every blocker mu
 - A ticket must never depend on a later issue in its milestone or any future milestone.
 
 A lower issue number does not itself create a dependency; only a native `blockedBy` relationship does. Keep independent tickets unblocked. They form the execution **frontier** and may be assigned to separate agents concurrently.
+
+Treat the tickets as one dependency graph across all milestones, not as milestone gates. An issue is actionable as soon as its own blockers are complete, even when issues in earlier milestones remain open. Derive blockers from the work itself: if A must complete before B can complete, assign A as a native blocker of B. Prefer the minimal set of direct blockers that fully represents the graph; do not add an issue or an entire milestone merely because it appears earlier.
 
 If an existing milestone or issue conflicts with this order, surface it and ask before renaming, moving, or renumbering it. For wide mechanical refactors that cannot land green as vertical slices, use ordered expand–migrate–contract tickets.
 
@@ -91,7 +95,9 @@ Use two or three labels where useful. Agent tickets normally use `Agent`, one ty
 
 ### 6. Publish and verify
 
-After the final overlap recheck, create missing milestones in approved chronological order, then create issues milestone-by-milestone and ascending by title number. Assign each newly created issue to its milestone and the confirmed `team`, `project`, resolved Backlog `state`, and approved `labels`. Preserve every reused issue's existing state, milestone, project, labels, and relations unless the reviewed proposal explicitly listed each intended mutation and the user approved it. Add approved native parent and `blockedBy` relationships using existing or already-created identifiers. Never use prose instead of available native relations.
+After the final overlap recheck, create missing milestones in approved chronological order, then create every missing issue milestone-by-milestone and ascending by title number. Assign each newly created issue to its milestone and the confirmed `team`, `project`, resolved Backlog `state`, and approved `labels`. Preserve every reused issue's existing state, milestone, project, labels, and relations unless the reviewed proposal explicitly listed each intended mutation and the user approved it. Add approved native parent relationships using existing or already-created identifiers. Never use prose instead of available native relations.
+
+Only after every issue exists, make a separate blocker pass across the complete approved proposal. For every new issue, and every reused issue with approved relation changes, compare its actual prerequisites with the full issue set and add its approved native `blockedBy` relationships. This pass is exhaustive: verify each dependency edge is represented on the blocked issue, independent issues have no invented blockers, and cross-milestone edges capture the real prerequisite web without treating earlier milestones as blanket blockers.
 
 Use Linear's native milestone/issue reordering capability when available. Otherwise creation order plus numeric titles is the source of truth; verify the returned order and clearly report any manual Linear reorder still required. Never invent milestone target dates merely to force ordering.
 
