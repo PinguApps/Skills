@@ -51,6 +51,7 @@ PR Agent is a self-hosted reviewer that may or may not be running. Detect it by 
 - Never resolve or unresolve a review thread. Do not call `resolveReviewThread`, `unresolveReviewThread`, or an equivalent.
 - Reply directly to review threads, one at a time. Never create replies concurrently.
 - Continue autonomously through new feedback from Gitar, PR Agent, and every other source after pushes, within the convergence bounds below.
+- Let the PR automation initiate every Copilot re-review. Never manually request or trigger a Copilot re-review through GitHub controls, reviewer assignment or reassignment, comments, CLI commands, API calls, or any equivalent mechanism.
 - Never ask Gitar to apply or commit a fix. Do not use `gitar fix`, one-click apply, or `gitar auto-apply:on`. This agent owns every code change.
 - Never post trigger comments or fallbacks for PR Agent. It discovers PRs and pushes automatically when running; its only terminal signals are its commit status and its inline threads.
 
