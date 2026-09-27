@@ -51,7 +51,7 @@ PR Agent is a self-hosted reviewer that may or may not be running. Detect it by 
 - Never resolve or unresolve a review thread. Do not call `resolveReviewThread`, `unresolveReviewThread`, or an equivalent.
 - Reply directly to review threads, one at a time. Never create replies concurrently.
 - Continue autonomously through new feedback from Gitar, PR Agent, and every other source after pushes, within the convergence bounds below.
-- Let the PR automation initiate every Copilot re-review. Never manually request or trigger a Copilot re-review through GitHub controls, reviewer assignment or reassignment, comments, CLI commands, API calls, or any equivalent mechanism.
+- Let PR automation initiate reviews. Do not ping any reviewer, automated or human, to request a review or response by default. Only send one concise reminder when a reply is essential to finish the PR, the reviewer has been silent for at least 25 minutes for automation or one business day for a person, and no review is active; otherwise report the wait as a blocker. Never ping Copilot or manually request or trigger a Copilot review or re-review through GitHub controls, reviewer assignment or reassignment, comments, CLI commands, API calls, or any equivalent mechanism. Once created, every Copilot thread is handed off to the `pinguapps-pr-agent` reviewer bot for follow-up.
 - Never ask Gitar to apply or commit a fix. Do not use `gitar fix`, one-click apply, or `gitar auto-apply:on`. This agent owns every code change.
 - Never post trigger comments or fallbacks for PR Agent. It discovers PRs and pushes automatically when running; its only terminal signals are its commit status and its inline threads.
 
@@ -350,7 +350,7 @@ After all replies:
 
    Immediately after the push, post each deferred Gitar thread or PR-level reply serially with its now-visible commit SHA and verification result. Verify thread replies are submitted, then refresh feedback once before waiting for Gitar. Post deferred PR Agent thread replies the same way — PR Agent can only verify fixes against pushed commits.
 
-5. After pushing, allow approximately 60 seconds for the exact-HEAD `Gitar` check to appear, and for the `PR Agent` status to flip to `pending` when PR Agent is running (it picks up pushes automatically; its review typically completes within one to three minutes):
+5. After pushing, wait for the exact-HEAD `Gitar` check and for the `PR Agent` status when PR Agent is running (it picks up pushes automatically; its review typically completes within one to three minutes):
 
    ```powershell
    pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
@@ -358,45 +358,23 @@ After all replies:
      -StatePath $reviewState `
      -ExpectedHeadSha $expectedHeadSha `
      -ReviewRequestedAt $reviewRequestedAt `
-     -ReviewStartGraceSeconds 60 `
      -TimeoutMinutes 25 `
-     -PollSeconds 10
-   ```
-
-   If this returns `review_not_started`, and only then, request review once for that pushed HEAD:
-
-   ```powershell
-   gh pr comment $prNumber --repo $baseRepository --body "gitar review"
-   ```
-
-   Do not post the fallback comment when an exact-HEAD Gitar check appeared during the grace period, even if it is still queued or processing.
-
-6. If the grace-period watcher returned `review_not_started`, resume the bundled watcher against the same baseline:
-
-   ```powershell
-   pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
-      -Wait `
-      -StatePath $reviewState `
-      -ExpectedHeadSha $expectedHeadSha `
-      -ReviewRequestedAt $reviewRequestedAt `
-      -TimeoutMinutes 25 `
      -PollSeconds 20
    ```
 
    Run it as a long-lived tool call. While it runs, use only the environment's wait mechanism and remain silent unless the user interrupts. The watcher keeps repeated polling out of model context.
 
-7. Handle its terminal result. The watcher converges on both reviewers: when PR Agent is running (`prAgentRelevant` true in the result), a `PR Agent` status on the exact HEAD is part of every terminal state, and PR Agent's inline findings are delivered through `newFeedback` like every other reviewer's:
+6. Handle its terminal result. The watcher converges on both reviewers: when PR Agent is running (`prAgentRelevant` true in the result), a `PR Agent` status on the exact HEAD is part of every terminal state, and PR Agent's inline findings are delivered through `newFeedback` like every other reviewer's:
    - `feedback`: fetch all feedback for context, but action only IDs in `newFeedback`. This may include inline threads (from PR Agent, Gitar, or any other reviewer), PR-level feedback from any reviewer, Gitar's dashboard when its verdict is `Approved with Suggestions`, `Changes Requested`, `Blocked`, or `Needs Review`, and a synthetic `pragent_status` item when PR Agent reported `failure` without captured comments. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response. PR Agent findings follow the same agree-and-fix / push-back rules, and it will re-verify pushed fixes and resolve its threads automatically.
    - `approved`: the exact-HEAD Gitar check completed successfully with a fresh `Approved` dashboard verdict (when Gitar is running) AND the exact-HEAD `PR Agent` status is `success` (when PR Agent is running). Re-fetch checks, dashboards, PR-level feedback, and threads once; finish only if the full definition of done still holds.
    - `gitar_failed`: inspect the Gitar check and dashboard details. Treat provider/integration failure as a blocker unless repository evidence gives a scoped fix; never describe the PR as reviewed successfully.
-   - `review_not_started`: post the single fallback `gitar review` comment, then resume step 6. This outcome is never returned while PR Agent is still processing a review.
-   - `timeout`: report that a reviewer did not reach a terminal state; do not claim readiness.
+   - `timeout`: inspect whether a required reviewer has remained silent for the full 25 minutes with no review active. Only when its reply is essential to finish the PR, consider the single-reminder exception in the operating rules; never use it for Copilot. Otherwise report the wait as a blocker and do not claim readiness.
    - `head_changed`: fetch and inspect the new state. Stop when another actor's push makes continued mutation unsafe.
    - `pr_closed`: stop and report the PR state.
 
-8. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → automatic-review grace period → wait.
+7. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → wait.
 
-If no push is needed, never post `gitar review`: the fallback is only permitted after this run pushes a new HEAD. Capture the current state and wait read-only. A completed successful `Gitar` check on the exact current HEAD plus an `Approved` dashboard verdict — and a `success` `PR Agent` status on the same HEAD when PR Agent is running — is sufficient; no Pro approval signal is required. Otherwise wait for an already-running automatic review and stop on timeout without posting a trigger.
+If no push is needed, capture the current state and wait read-only. A completed successful `Gitar` check on the exact current HEAD plus an `Approved` dashboard verdict — and a `success` `PR Agent` status on the same HEAD when PR Agent is running — is sufficient; no Pro approval signal is required. Otherwise wait for an already-running automatic review and apply the same timeout rule without posting a default trigger.
 
 ```powershell
 $expectedHeadSha = (git rev-parse HEAD).Trim()
@@ -417,7 +395,7 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -PollSeconds 20
 ```
 
-The watcher verifies that Gitar's check belongs to the exact expected SHA. After a push, it also requires the dashboard comment to have changed after the baseline and in the same processing window before accepting its verdict, because Gitar edits one persistent dashboard comment in place. Never use the fallback comment without a preceding push from this run. When PR Agent is running, the watcher additionally waits for the exact-HEAD `PR Agent` status to reach `success` or `failure` before reporting `approved` or `feedback`, and never reports `review_not_started` while PR Agent is processing.
+The watcher verifies that Gitar's check belongs to the exact expected SHA. After a push, it also requires the dashboard comment to have changed after the baseline and in the same processing window before accepting its verdict, because Gitar edits one persistent dashboard comment in place. When PR Agent is running, the watcher additionally waits for the exact-HEAD `PR Agent` status to reach `success` or `failure` before reporting `approved` or `feedback`.
 
 Bound convergence to five pushed review rounds or two hours overall. Stop earlier for a clean combined result, timeout, closure, unexpected head movement, or a genuine blocker.
 
