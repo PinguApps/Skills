@@ -27,7 +27,7 @@ Before publishing implementation commits, review the complete diff against the i
 
 ## 3. Push and open the PR
 
-Push the completed commits without force using the explicit destination `git push <head-remote> HEAD:refs/heads/<branch-name>`, and create a PR against the intended base. Write a title and description covering the final problem, resulting behaviour, and verification. Check whether a PR already exists for this branch before creating one, so a resumed run reuses it.
+Push the completed commits without force using the explicit destination `git push <head-remote> HEAD:refs/heads/<branch-name>`, and create a PR against the intended base. Before writing the PR body, read and follow `test-changes` to produce the manual verification handoff for the completed work. Write a title and body summarising the problem, resulting behaviour, verification, and any other details needed to review the work. Always include the full handoff in a `## Test changes` section. Check whether a PR already exists for this branch before creating one, so a resumed run reuses it.
 
 An invocation requesting this workflow authorizes its commits, push, PR creation, and review replies; carry those steps through without redundant confirmation.
 
