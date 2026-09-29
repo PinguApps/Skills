@@ -10,9 +10,9 @@ Takes supplied work from a new branch through PR review completion.
 
 The skill:
 
-- Fetches the latest `main` and creates an `agent/` branch from that commit.
+- Discovers and fetches the repository's default branch, then creates an `agent/` branch from that commit.
 - Implements the task with incremental commits and relevant verification.
-- Pushes the branch and opens a PR against `main`.
+- Pushes the branch and opens a PR against the default branch.
 - Runs `finish-pr` to complete review and CI.
 
 ### [finish-pr](skills/finish-pr/)
