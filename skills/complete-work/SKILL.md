@@ -9,7 +9,7 @@ Take the task supplied with this invocation from a new branch through a verified
 
 ## 1. Establish scope and create a branch
 
-Recover the requested work and acceptance criteria from the accompanying instructions and conversation. Read applicable `AGENTS.md` files and repository requirements. If no task was supplied, ask for it before creating a branch.
+Recover the requested work and acceptance criteria from the accompanying instructions and conversation. When the supplied work is a Linear issue or ticket, read its full requirements and acceptance criteria, including referenced material needed to establish scope; a title or summary alone is insufficient. Without a Linear ticket, use the complete user request and conversation as the scope. Read applicable `AGENTS.md` files and repository requirements. If no task was supplied, ask for it before creating a branch.
 
 If an issue with performing the task requires decisions from the user—such as material ambiguity, conflicting requirements, unresolved tradeoffs, or implementation risk—invoke `$grilling` and complete its interview before creating the branch or beginning implementation. Proceed only after the user confirms the shared understanding. This is a conditional aid, not a mandatory phase: skip it when the request and acceptance criteria are clear and executable, and handle purely operational blockers through the normal workflow.
 
@@ -23,7 +23,9 @@ Before editing, identify the push remote for the intended head repository (which
 
 Implement the supplied task, keeping changes within its scope. Commit at meaningful checkpoints as coherent pieces are completed and verified; do not defer all commits until the end of a multi-step task. A small task may need only one commit. Stage only the changes belonging to this task, inspect each staged diff, and use descriptive commit messages.
 
-Before publishing implementation commits, review the complete diff against the intended base and verify every acceptance criterion. Run the relevant tests and repository-required checks, fix failures caused by the work, and inspect for accidental changes or omissions. Proceed when the implementation is complete, relevant verification passes, and all task changes are committed. Report any blocker or unavailable verification accurately.
+Before publishing implementation commits, review the complete diff against the intended base. Account for every requirement and acceptance criterion in the supplied Linear ticket, or every part of the user request when no Linear ticket was supplied, with the implementation and verification evidence that satisfies it. Run the relevant tests and repository-required checks, fix failures caused by the work, and inspect for accidental changes or omissions.
+
+Advance to step 3 only when the work fully satisfies that scope, relevant verification passes, and all task changes are committed. Complete any remaining work within scope before proceeding. If required information, access, decisions, or verification are missing, explain the specific gap and ask the user for what is needed; wait for it before advancing. Reporting a blocker or limitation does not satisfy this gate. Do not create or reuse a PR for partial work, including a draft PR: proceeding to PR creation is your assertion that everything requested is accounted for and complete.
 
 ## 3. Push and open the PR
 
