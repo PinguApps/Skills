@@ -27,7 +27,7 @@ Before publishing implementation commits, review the complete diff against the i
 
 ## 3. Push and open the PR
 
-Push the completed commits without force using the explicit destination `git push <head-remote> HEAD:refs/heads/<branch-name>`. Before writing the PR body, read and follow `test-changes` to produce the manual verification handoff for the completed work. Then load and follow `$create-pr` ([SKILL.md](../create-pr/SKILL.md)) to create or reuse the PR against the intended base, using its template selection, categorisation, and submission verification rules. Supply the task intent, final diff, verification results, base/head repositories and branches, and full handoff. Always include that handoff in a `## Test changes` section, appended after the template when it has no suitable section.
+Push the completed commits without force using the explicit destination `git push <head-remote> HEAD:refs/heads/<branch-name>`. Before writing the PR body, read and follow `test-changes` to produce the manual verification handoff for the completed work. Then load and follow `$create-pr` ([SKILL.md](../create-pr/SKILL.md)) to create or reuse the PR against the intended base, using its template selection, categorisation, and submission verification rules. Supply the task intent, final diff, verification results, base/head repositories and branches, and full handoff. Always include that handoff in a literal `## Test changes` section: use that section when the template already contains it, otherwise append it after the template even if another testing section exists.
 
 An invocation requesting this workflow authorizes its commits, push, PR creation, and review replies; carry those steps through without redundant confirmation.
 
