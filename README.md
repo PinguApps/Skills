@@ -12,8 +12,19 @@ The skill:
 
 - Discovers and fetches the repository's default branch, then creates an `agent/` branch from that commit.
 - Implements the task with incremental commits and relevant verification.
-- Pushes the branch and opens a PR against the default branch.
+- Pushes the branch and uses `create-pr` to open a PR against the default branch.
 - Runs `finish-pr` to complete review and CI.
+
+### [create-pr](skills/create-pr/)
+
+Creates a GitHub PR using the repository's template, including inherited templates,
+or the standard categorisation and summary fallback.
+
+The skill:
+
+- Selects one change category and one release level in the standard checkbox block.
+- Preserves template structure and appends additional verification or review sections.
+- Reuses an existing PR and verifies the saved description and target.
 
 ### [finish-pr](skills/finish-pr/)
 
