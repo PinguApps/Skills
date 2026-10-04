@@ -7,7 +7,7 @@ description: Loop through a Linear team's project backlog, delegate independentl
 
 Coordinate ticket delivery; delegate all implementation and PR repairs. Repeatedly select work that can be completed without user input, dispatch isolated workers, verify and merge their PRs, then reassess the backlog against the updated repository.
 
-Invoking this workflow authorizes scoped Linear transitions to In Progress, worker commits/pushes/PRs and review replies through `complete-work`, and coordinator merges of verified PRs. Honour narrower instructions and repository restrictions. Deployment, releases, bypassing protections, and unrelated tracker mutations require separate authorization.
+Run this workflow only when the user has requested autonomous ticket delivery through verified PR merges. That request authorizes scoped Linear transitions to In Progress, worker commits/pushes/PRs and review replies through `complete-work`, and coordinator merges of verified PRs. Loading or automatically selecting this skill does not supply authorization; a request to inspect or plan a backlog is insufficient. Establish missing authorization before claiming tickets or starting workers. Honour narrower instructions and repository restrictions. Deployment, releases, bypassing protections, and unrelated tracker mutations require separate authorization.
 
 ## 1. Resolve inputs and prerequisites
 
