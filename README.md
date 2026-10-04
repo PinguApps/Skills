@@ -15,6 +15,19 @@ The skill:
 - Pushes the branch and uses `create-pr` to open a PR against the default branch.
 - Runs `finish-pr` to complete review and CI.
 
+### [loop-work](skills/loop-work/)
+
+Loops through a Linear team's project backlog using isolated subagents and
+`complete-work`, merging verified PRs and reassessing newly unblocked work.
+
+The skill:
+
+- Requires the Linear team/project, parallel subagent limit, and ticket limit (or no max).
+- Selects independently actionable tickets that need no user input.
+- Uses fixed `agent/` branches derived from Linear and limits outstanding reservations.
+- Leaves In Review and Done transitions to verified GitHub–Linear automation.
+- Reassesses after merges and stops with a concise completion and blocker ledger.
+
 ### [create-pr](skills/create-pr/)
 
 Creates a GitHub PR using the repository's template, including inherited templates,
