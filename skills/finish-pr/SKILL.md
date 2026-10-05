@@ -36,7 +36,7 @@ PR Agent is a self-hosted reviewer that may or may not be running. Detect it by 
 - **Feedback identification**: PR Agent posts inline review comments and replies through the repository owner's own login. Identify them by the hidden `<!-- pr-agent:v1 -->` marker (and the "PR Agent" shields badge) in the body — never by author login. Its messages are reviewer feedback, not agent responses, even though the login matches yours. The bundled watcher already includes them in new feedback.
 - **Thread handling**: apply exactly the same logic as every other reviewer — agree and fix (one focused commit, then reply on the thread with the commit SHA and verification), or push back with concrete evidence. Never resolve PR Agent threads: it owns their resolution and resolves a thread automatically once it verifies a fix against the pushed HEAD or accepts a justified decline.
 - **Memory of declined findings**: when PR Agent accepts a push-back and resolves a thread, it remembers the declined finding and will not re-report it on later reviews of the same PR. If it pushes back again, only continue the debate when you have new evidence; otherwise leave the thread awaiting its response.
-- **Superseded reviews**: PR Agent reviews the entire pull request on every push. If you push while a review is running, that review is cancelled and a fresh one starts on the new HEAD — do not wait for the cancelled run's verdict.
+- **Superseded reviews**: PR Agent reviews the entire pull request on every push. A push during its review cancels that run and starts again on the new HEAD. Preserve the running review by following the automated-review gate below.
 
 ## Operating rules
 
@@ -50,11 +50,24 @@ PR Agent is a self-hosted reviewer that may or may not be running. Detect it by 
 - Never rebase, force-push, merge the pull request on GitHub, close, approve, or mark the PR ready for review unless the user explicitly requested that separate action. The conflict-resolution workflow may merge the latest base commit into the PR branch.
 - Never resolve or unresolve a review thread. Do not call `resolveReviewThread`, `unresolveReviewThread`, or an equivalent.
 - Reply directly to review threads, one at a time. Never create replies concurrently.
+- Apply the automated-review gate below before every push or PR comment, including thread replies, disagreements, acknowledgements, reminders, and deferred replies after a push.
 - Continue autonomously through new feedback from Gitar, PR Agent, and every other source after pushes, within the convergence bounds below.
 - Let PR automation initiate reviews. Do not ping any reviewer, automated or human, to request a review or response by default. For reviewers other than Gitar, PR Agent, and Copilot, only send one concise reminder when a reply is essential to finish the PR, no review is active, and the reviewer has been silent for at least 25 minutes for automation or one business day for a person. Measure a person's wait from PR creation or the latest agent reply across resumed runs of this skill; otherwise report the wait as a blocker. Never ping Copilot or manually request or trigger a Copilot review or re-review through GitHub controls, reviewer assignment or reassignment, comments, CLI commands, API calls, or any equivalent mechanism. `pinguapps-pr-agent` adopts every Copilot thread on creation; action its feedback and reply once with the fix or reasoned decline, then leave verification and further follow-up to that bot.
 - Never ask Gitar to apply or commit a fix. Do not use `gitar fix`, one-click apply, or `gitar auto-apply:on`. This agent owns every code change.
 - Never post trigger comments or fallbacks for PR Agent. It discovers PRs and pushes automatically when running; its only terminal signals are its commit status and its inline threads.
 - Gitar also discovers PRs and pushes automatically. Wait for its automatic review; never post trigger comments or fallbacks, assign or reassign it as a reviewer, or request a review or re-review through GitHub controls, CLI, API, or an equivalent mechanism. A timeout, slow review, missing signal, or ordinary review cycle is not an extraordinary scenario. An exception requires a diagnosed failure of automatic review, an essential review with no review active after the full 25-minute wait, and explicit user authorization for one specific recovery request. Otherwise report the blocker. Replies addressing existing Gitar feedback remain required; keep them about the fix or justified disagreement rather than asking for another review.
+
+### Automated-review gate
+
+This gate covers only Gitar and PR Agent. Other reviewers and unrelated CI checks do not block pushes or comments through this gate; the existing CI and feedback requirements still apply.
+
+Immediately before each push or PR comment, refresh the published PR head and its Gitar check runs and `PR Agent` commit status. Inspect all checks, including optional ones, using `gh pr checks`; use paginated check-run and commit-status API results when needed to establish the exact head, provider, or latest status. Use the existing integration detection rules: skip a reviewer only when it is not running for this PR. For a detected reviewer, a missing current-head signal is not proof of completion; wait for its automatic review.
+
+- Gitar is active while any current review check is not `completed`, including queued or in-progress runs. PR Agent is active while its latest current-head status is `pending`.
+- While either is active, keep all fixes, commits, and reply drafts local. Never push or post any PR comment, regardless of its recipient or whether it cites a commit. Work on available feedback from a reviewer whose review has completed; leave feedback from the still-running reviewer queued until it finishes. If both are active, wait before actioning either one's feedback.
+- When both detected reviewers have completed, fetch feedback again, action the newly completed feedback, and repeat the feedback audit before publishing the batch. Completion can include findings or failure; this gate requires finished reviews, not approval. The definition of done still requires clean terminal results.
+- Recheck the gate before the push and before each serial comment. A previous idle snapshot, captured baseline, watcher result, or successful push does not authorize the next mutation. A push may start new reviews immediately; retain deferred replies until both finish, then re-read their threads to avoid duplicate or superseded responses.
+- If completion cannot be established within the existing 25-minute wait or overall convergence bound, stop with the local commits and queued replies intact and report the blocker. A timeout never permits bypassing the gate.
 
 ## 1. Establish state and intent
 
@@ -239,7 +252,7 @@ Do not skip outdated unresolved threads; determine whether their feedback still 
 
 ## 5. Fix and reply
 
-For each action-required review thread or standalone feedback item:
+For each action-required review thread or standalone feedback item eligible under the automated-review gate:
 
 1. Make the smallest complete fix for every actionable item in that thread, with focused tests.
 2. Run the narrowest meaningful verification.
@@ -262,7 +275,7 @@ For each action-required review thread or standalone feedback item:
 
    Do not amend, squash, or combine feedback commits. If an earlier unit's change completely satisfies a later agreed unit and no distinct file change remains, create an explicit traceability commit with `--allow-empty` for that later unit rather than merging their commit history. Do not create a commit for a justified disagreement.
 
-5. For review-thread feedback, reply directly to the thread after evaluating it and creating any relevant commit, subject to the Gitar deferral below:
+5. For review-thread feedback, reply directly to the thread after evaluating it and creating any relevant commit, subject to the automated-review gate and commit deferral below. Draft and queue the reply locally whenever either blocks posting:
 
    ```powershell
    $body = @"
@@ -296,23 +309,23 @@ For each action-required review thread or standalone feedback item:
    No code change made.
    ```
 
-   If any Gitar-authored feedback disposition created a commit that has not been pushed yet, defer its thread or PR-level reply until immediately after the batch push. Gitar cannot verify a local-only SHA; replying before it can see the commit may cause a misleading follow-up. Prefix a PR-level Gitar reply with `Gitar,` so the dashboard feedback is processed; never ask it to apply the fix. A Gitar disagreement has no commit dependency and may be replied to immediately. Keep all replies serial.
+   If any Gitar- or PR Agent-authored feedback disposition created a commit that has not been pushed yet, defer its thread or PR-level reply until after the batch push and the automated-review gate clears. These reviewers cannot verify a local-only SHA; replying before they can see the commit may cause a misleading follow-up. Prefix a PR-level Gitar reply with `Gitar,` so the dashboard feedback is processed; never ask it to apply the fix. A disagreement has no commit dependency but still requires the gate to clear. Keep all replies serial.
 
 6. Record the one-to-one feedback-unit ID → commit SHA mapping for changed dispositions, plus every disposition, verification, and returned comment ID. Use the thread ID for review threads and the feedback ID for standalone items. Record `no commit — disagreement` for justified disagreements.
 
 The reply helper uses GitHub's single-comment reply endpoint so it never submits or modifies a shared pending review. It then verifies `state != PENDING` plus a non-null `submittedAt`. A helper failure is blocking; a returned comment URL alone is not proof of submission.
 
-After all replies:
+After each feedback batch, including when replies remain queued:
 
 1. Re-fetch all threads with `-All`, plus PR-level reviews and issue comments.
 2. Verify every reply created in this run belongs to a submitted review.
 3. Verify the authenticated user has no pending review on the PR, including reviews created before this run.
 4. For every thread ID present in the baseline, compare its `isResolved` value with the current value. Baseline resolution states must be unchanged; report external changes and never mutate them back. New thread IDs are expected during review convergence: classify them as additional feedback rather than treating their existence as a resolution mutation.
-5. If new action-required review threads or standalone feedback items appeared during the batch, action each in its own commit and repeat the audit. Push only once the currently visible feedback set has been fully actioned or is awaiting reviewer response. Gitar threads with a deferred local-commit reply count as actioned for this pre-push audit, but the reply remains mandatory immediately after push.
+5. If new action-required review threads or standalone feedback items appeared during the batch, action each eligible item in its own commit and repeat the audit. Push only once the automated-review gate clears and the refreshed feedback set has been fully actioned or is awaiting reviewer response. Items with completed local dispositions and queued replies count as actioned for this pre-push audit, but their replies remain mandatory once the commit deferral and gate clear; they are not awaiting reviewer response until posted.
 
 ## 6. Push and converge with Gitar
 
-1. Confirm the worktree contains no uncommitted changes created by this run. Do not push individual thread commits as they are created; batch-push all unsquashed thread commits only after the feedback audit is clear for the time being.
+1. Confirm the worktree contains no uncommitted changes created by this run. Do not push individual thread commits as they are created; batch-push all unsquashed thread commits only after both automated reviews have completed and the refreshed feedback audit is clear.
 2. Review commits after the starting SHA and every validated commit that was already local-ahead at invocation, then fetch the exact PR head before pushing:
 
    ```powershell
@@ -341,7 +354,7 @@ After all replies:
      -PrAgentContext "PR Agent"
    ```
 
-4. Push without force and record the exact HEAD:
+4. Recheck the automated-review gate against the published head immediately before pushing. If blocked, keep the batch local, wait for completion, and repeat the feedback audit and head checks before recapturing the baseline. Once clear, push without force and record the exact HEAD:
 
    ```powershell
    $reviewRequestedAt = [DateTimeOffset]::UtcNow
@@ -350,7 +363,7 @@ After all replies:
    $lastObservedPrHeadSha = $expectedHeadSha
    ```
 
-   Immediately after the push, post each deferred Gitar thread or PR-level reply serially with its now-visible commit SHA and verification result. Verify thread replies are submitted, then refresh feedback once before waiting for Gitar. Post deferred PR Agent thread replies the same way — PR Agent can only verify fixes against pushed commits.
+   Retain queued replies after the push. Recheck the automated-review gate before each reply; if the push has started either review, wait for both to finish. Then re-read feedback and post only still-needed replies serially with the now-visible commit SHA and verification result. Verify thread replies are submitted and refresh feedback. Apply the same gate to disagreements and replies to any other reviewer.
 
 5. After pushing, wait for the exact-HEAD `Gitar` check and for the `PR Agent` status when PR Agent is running (it picks up pushes automatically; its review typically completes within one to three minutes):
 
@@ -366,7 +379,7 @@ After all replies:
 
    Run it as a long-lived tool call. While it runs, use only the environment's wait mechanism and remain silent unless the user interrupts. The watcher keeps repeated polling out of model context.
 
-6. Handle its terminal result. The watcher converges on both reviewers: when PR Agent is running (`prAgentRelevant` true in the result), a `PR Agent` status on the exact HEAD is part of every terminal state, and PR Agent's inline findings are delivered through `newFeedback` like every other reviewer's:
+6. Handle its terminal result. The watcher delivers PR Agent's inline findings through `newFeedback` like every other reviewer's. A `feedback` result may arrive while another review is still active; use the automated-review gate to determine which feedback is eligible and whether publishing is allowed:
    - `feedback`: fetch all feedback for context, but action only IDs in `newFeedback`. This may include inline threads (from PR Agent, Gitar, Copilot, or other reviewers), PR-level feedback from any reviewer, Gitar's dashboard when its verdict is `Approved with Suggestions`, `Changes Requested`, `Blocked`, or `Needs Review`, and a synthetic `pragent_status` item when PR Agent reported `failure` without captured comments. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response. PR Agent findings follow the same agree-and-fix / push-back rules, and it will re-verify pushed fixes and resolve its threads automatically. For Copilot threads, reply once with the disposition so `pinguapps-pr-agent` can follow up; never request Copilot re-review.
    - `approved`: the exact-HEAD Gitar check completed successfully with a fresh `Approved` dashboard verdict (when Gitar is running) AND the exact-HEAD `PR Agent` status is `success` (when PR Agent is running). Re-fetch checks, dashboards, PR-level feedback, and threads once; finish only if the full definition of done still holds.
    - `gitar_failed`: inspect the Gitar check and dashboard details. Treat provider/integration failure as a blocker unless repository evidence gives a scoped fix; never describe the PR as reviewed successfully.
@@ -374,7 +387,7 @@ After all replies:
    - `head_changed`: fetch and inspect the new state. Stop when another actor's push makes continued mutation unsafe.
    - `pr_closed`: stop and report the PR state.
 
-7. For new feedback, repeat fix → verify → commit → serial reply → audit → baseline → push → wait.
+7. For new feedback, repeat eligible fix → verify → commit → queue or gated serial reply → completed reviews and refreshed audit → baseline → gated push → wait. Flush still-needed queued replies only when the gate and commit deferral clear; finish only after the reply audit passes.
 
 If no push is needed, capture the current state and wait read-only. A completed successful `Gitar` check on the exact current HEAD plus an `Approved` dashboard verdict — and a `success` `PR Agent` status on the same HEAD when PR Agent is running — is sufficient; no Pro approval signal is required. Otherwise wait for an already-running automatic review and apply the same timeout rule without posting a default trigger.
 
