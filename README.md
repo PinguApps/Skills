@@ -50,8 +50,8 @@ The skill:
 - Actions unresolved review comments without duplicating an agent response that is
   awaiting reviewer follow-up.
 - Preserves human-owned thread resolution state and verifies replies are submitted.
-- Pushes focused commits and continues through Gitar review until the current PR
-  head has a successful check and an `Approved` dashboard verdict.
+- Pushes focused commits and continues through review until current-head CI and
+  any running PR Agent review succeed, with all actionable feedback addressed.
 
 ### [implement-task-linear](skills/implement-task-linear/)
 
