@@ -68,17 +68,6 @@ function Normalize-Login {
     return $Login.Trim().ToLowerInvariant() -replace '\[bot\]$', ''
 }
 
-function Test-GitarActor {
-    param(
-        [AllowNull()][string]$Login,
-        [AllowNull()][string]$AuthorType
-    )
-
-    $normalizedLogin = Normalize-Login $Login
-    return $normalizedLogin -match '(?i)(?:^|[-_])gitar(?:$|[-_])' -and
-        $AuthorType -in @("App", "Bot", "Organization")
-}
-
 function Expand-PaginatedItems {
     param([AllowNull()]$Pages)
 
@@ -120,16 +109,6 @@ function Resolve-RepositoryRouting {
         apiRepository = $apiRepository
         selector = $selector
     }
-}
-
-function Test-GitarDashboardBody {
-    param([AllowNull()][string]$Body)
-
-    if ([string]::IsNullOrWhiteSpace($Body)) {
-        return $false
-    }
-
-    return $Body -match '(?is)<b>\s*Code Review\s*</b>|^\s*#{1,6}\s+Code Review\b'
 }
 
 function Test-PrAgentMarkerBody {
@@ -205,41 +184,6 @@ function Test-PrAgentSeenOnPull {
     return $false
 }
 
-function Get-GitarVerdict {
-    param([AllowNull()][string]$Body)
-
-    if (-not (Test-GitarDashboardBody $Body)) {
-        return "unknown"
-    }
-
-    if ($Body -notmatch '(?is)<b>\s*Code Review\s*</b>\s*<kbd>\s*(?<verdict>[^<]+?)\s*</kbd>') {
-        return "unknown"
-    }
-
-    $verdict = $Matches.verdict
-
-    if ($verdict -match '(?i)Approved\s+with\s+Suggestions') {
-        return "approved_with_suggestions"
-    }
-    if ($verdict -match '(?i)Changes\s+Requested') {
-        return "changes_requested"
-    }
-    if ($verdict -match '(?i)Needs?\s+Review') {
-        return "needs_review"
-    }
-    if ($verdict -match '(?i)Blocked') {
-        return "blocked"
-    }
-    if ($verdict -match '(?i)Approved') {
-        return "approved"
-    }
-    if ($verdict -match '(?i)Processing|In\s+Progress|Reviewing') {
-        return "processing"
-    }
-
-    return "unknown"
-}
-
 function Test-ActionableFeedbackItem {
     param([Parameter(Mandatory = $true)]$Item)
 
@@ -250,11 +194,6 @@ function Test-ActionableFeedbackItem {
 
     if ($Item.kind -eq "review") {
         if ($Item.reviewState -in @("DISMISSED", "PENDING")) {
-            return $false
-        }
-
-        if ((Test-GitarActor -Login $Item.authorLogin -AuthorType $Item.authorType) -and
-            $body.Trim() -match '(?i)^Gitar has auto-approved this PR\b') {
             return $false
         }
 
@@ -307,28 +246,6 @@ function Get-PrReviewSnapshot {
     }
     $threadData = ($threadJson -join [Environment]::NewLine) | ConvertFrom-Json -Depth 100
 
-    $checkResponse = Invoke-GhJson ($apiPrefix + @(
-        "-H", "Accept: application/vnd.github+json",
-        "repos/$($routing.apiRepository)/commits/$($pr.headRefOid)/check-runs?filter=latest&per_page=100"
-    ))
-    $gitarChecks = @($checkResponse.check_runs | Where-Object {
-        $_.name -eq "Gitar" -and
-        ([string]$_.app.slug -match '(?i)(?:^|[-_])gitar(?:$|[-_])')
-    } | ForEach-Object {
-        [pscustomobject]@{
-            id = [long]$_.id
-            name = [string]$_.name
-            appSlug = [string]$_.app.slug
-            status = [string]$_.status
-            conclusion = [string]$_.conclusion
-            startedAt = $_.started_at
-            completedAt = $_.completed_at
-            url = [string]$_.html_url
-            detailsUrl = [string]$_.details_url
-            headSha = [string]$_.head_sha
-        }
-    })
-
     $feedbackItems = @()
     foreach ($thread in @($threadData.threads)) {
         if ([bool]$thread.isResolved) {
@@ -347,14 +264,11 @@ function Get-PrReviewSnapshot {
                 updatedAt = $comment.updatedAt
                 threadId = [string]$thread.id
                 headSha = [string]$comment.pullRequestReview.commit.oid
-                isGitarDashboard = $false
             }
         }
     }
 
     foreach ($comment in $comments) {
-        $isGitarDashboard = (Test-GitarActor -Login $comment.user.login -AuthorType $comment.user.type) -and
-            (Test-GitarDashboardBody -Body $comment.body)
         $feedbackItems += [pscustomobject]@{
             id = [string]$comment.node_id
             kind = "issue_comment"
@@ -366,7 +280,6 @@ function Get-PrReviewSnapshot {
             updatedAt = $comment.updated_at
             threadId = $null
             headSha = $null
-            isGitarDashboard = $isGitarDashboard
         }
     }
 
@@ -383,7 +296,6 @@ function Get-PrReviewSnapshot {
             reviewState = ([string]$review.state).ToUpperInvariant()
             threadId = $null
             headSha = [string]$review.commit_id
-            isGitarDashboard = $false
         }
     }
 
@@ -395,11 +307,6 @@ function Get-PrReviewSnapshot {
         description = if ($prAgentStatusEntry) { [string]$prAgentStatusEntry.description } else { "" }
         url = if ($prAgentStatusEntry) { [string]$prAgentStatusEntry.target_url } else { "" }
     }
-
-    $dashboard = @($feedbackItems | Where-Object { $_.isGitarDashboard } |
-        Sort-Object { [DateTimeOffset]$_.updatedAt } -Descending |
-        Select-Object -First 1)
-    $selectedDashboard = if ($dashboard.Count -eq 0) { $null } else { $dashboard[0] }
 
     $verifiedPr = Invoke-GhJson @(
         "pr", "view", $Number.ToString(), "--repo", $routing.selector,
@@ -426,18 +333,8 @@ function Get-PrReviewSnapshot {
             headSha = [string]$pr.headRefOid
         }
         feedbackItems = @($feedbackItems)
-        gitarChecks = @($gitarChecks)
-        gitarDashboard = $selectedDashboard
         prAgentStatus = $prAgentStatus
     }
-}
-
-function Get-LatestGitarCheck {
-    param([Parameter(Mandatory = $true)]$Snapshot)
-
-    return @($Snapshot.gitarChecks |
-        Sort-Object { if ($_.startedAt) { [DateTimeOffset]$_.startedAt } else { [DateTimeOffset]::MinValue } } -Descending |
-        Select-Object -First 1)
 }
 
 function Get-NewFeedback {
@@ -450,8 +347,7 @@ function Get-NewFeedback {
     $seenVersions = @($Baseline.seenFeedbackVersions)
     return @($Snapshot.feedbackItems | Where-Object {
         $isPrAgentFeedback = Test-PrAgentMarkerBody -Body ([string]$_.body)
-        if ($_.isGitarDashboard -or
-            ((Normalize-Login $_.authorLogin) -eq $agentLogin -and -not $isPrAgentFeedback) -or
+        if (((Normalize-Login $_.authorLogin) -eq $agentLogin -and -not $isPrAgentFeedback) -or
             -not (Test-ActionableFeedbackItem $_)) {
             return $false
         }
@@ -466,39 +362,6 @@ function Get-NewFeedback {
     })
 }
 
-function Test-DashboardFreshForCheck {
-    param(
-        [Parameter(Mandatory = $true)]$Baseline,
-        [AllowNull()]$Dashboard,
-        [AllowNull()]$Check,
-        [Parameter(Mandatory = $true)][string]$ExpectedSha
-    )
-
-    if ($null -eq $Dashboard -or $null -eq $Check) {
-        return $false
-    }
-
-    if ([string]$Baseline.baselineHeadSha -eq $ExpectedSha) {
-        return $true
-    }
-
-    $baselineDashboard = $Baseline.gitarDashboard
-    $changed = $null -eq $baselineDashboard -or
-        [string]$baselineDashboard.id -ne [string]$Dashboard.id -or
-        [string]$baselineDashboard.updatedAt -ne [string]$Dashboard.updatedAt -or
-        [string]$baselineDashboard.body -ne [string]$Dashboard.body
-    if (-not $changed) {
-        return $false
-    }
-
-    if ([string]::IsNullOrWhiteSpace([string]$Dashboard.updatedAt) -or
-        [string]::IsNullOrWhiteSpace([string]$Check.startedAt)) {
-        return $true
-    }
-
-    return [DateTimeOffset]$Dashboard.updatedAt -ge ([DateTimeOffset]$Check.startedAt).AddSeconds(-5)
-}
-
 function Resolve-ReviewOutcome {
     param(
         [Parameter(Mandatory = $true)]$Baseline,
@@ -507,36 +370,32 @@ function Resolve-ReviewOutcome {
     )
 
     if ($Snapshot.pullRequest.state -ne "OPEN") {
-        return [pscustomobject]@{ status = "pr_closed"; verdict = "unknown"; check = $null; prAgentRelevant = $false; prAgentState = "absent"; newFeedback = @() }
+        return [pscustomobject]@{ status = "pr_closed"; verdict = "unknown"; prAgentRelevant = $false; prAgentState = "absent"; newFeedback = @() }
     }
 
     if ($Snapshot.pullRequest.headSha -ne $ExpectedSha) {
         if ([string]$Snapshot.pullRequest.headSha -eq [string]$Baseline.baselineHeadSha) {
-            return [pscustomobject]@{ status = "waiting"; verdict = "unknown"; check = $null; prAgentRelevant = $false; prAgentState = "absent"; newFeedback = @() }
+            return [pscustomobject]@{ status = "waiting"; verdict = "unknown"; prAgentRelevant = $false; prAgentState = "absent"; newFeedback = @() }
         }
 
-        return [pscustomobject]@{ status = "head_changed"; verdict = "unknown"; check = $null; prAgentRelevant = $false; prAgentState = "absent"; newFeedback = @() }
+        return [pscustomobject]@{ status = "head_changed"; verdict = "unknown"; prAgentRelevant = $false; prAgentState = "absent"; newFeedback = @() }
     }
 
     $prAgentStatus = $Snapshot.prAgentStatus
     $prAgentPresent = ($null -ne $prAgentStatus -and [bool]$prAgentStatus.present)
     $prAgentRelevant = $prAgentPresent -or [bool]$Baseline.prAgentSeenAtBaseline
-    $gitarExpected = [bool]$Baseline.gitarSeenAtBaseline -or
-        @($Snapshot.gitarChecks).Count -gt 0 -or
-        ($null -ne $Snapshot.gitarDashboard)
-
     $newFeedback = @(Get-NewFeedback -Baseline $Baseline -Snapshot $Snapshot)
     if ($newFeedback.Count -gt 0) {
-        return [pscustomobject]@{ status = "feedback"; verdict = "unknown"; check = $null; prAgentRelevant = $prAgentRelevant; prAgentState = "unknown"; newFeedback = $newFeedback }
+        return [pscustomobject]@{ status = "feedback"; verdict = "unknown"; prAgentRelevant = $prAgentRelevant; prAgentState = "unknown"; newFeedback = $newFeedback }
     }
 
     if ($prAgentRelevant) {
         if (-not $prAgentPresent) {
-            return [pscustomobject]@{ status = "processing"; verdict = "unknown"; check = $null; prAgentRelevant = $true; prAgentState = "pending"; newFeedback = @() }
+            return [pscustomobject]@{ status = "processing"; verdict = "unknown"; prAgentRelevant = $true; prAgentState = "pending"; newFeedback = @() }
         }
 
         if ($prAgentStatus.state -eq "pending") {
-            return [pscustomobject]@{ status = "processing"; verdict = "unknown"; check = $null; prAgentRelevant = $true; prAgentState = "pending"; newFeedback = @() }
+            return [pscustomobject]@{ status = "processing"; verdict = "unknown"; prAgentRelevant = $true; prAgentState = "pending"; newFeedback = @() }
         }
 
         if ($prAgentStatus.state -in @("failure", "error")) {
@@ -552,65 +411,20 @@ function Resolve-ReviewOutcome {
                     updatedAt = [DateTimeOffset]::UtcNow.ToString("o")
                     threadId = $null
                     headSha = $ExpectedSha
-                    isGitarDashboard = $false
                 })
             }
-            return [pscustomobject]@{ status = "feedback"; verdict = "unknown"; check = $null; prAgentRelevant = $true; prAgentState = [string]$prAgentStatus.state; newFeedback = $newFeedback }
+            return [pscustomobject]@{ status = "feedback"; verdict = "unknown"; prAgentRelevant = $true; prAgentState = [string]$prAgentStatus.state; newFeedback = $newFeedback }
         }
 
         if ($prAgentStatus.state -ne "success") {
-            return [pscustomobject]@{ status = "processing"; verdict = "unknown"; check = $null; prAgentRelevant = $true; prAgentState = [string]$prAgentStatus.state; gitarExpected = $gitarExpected; newFeedback = @() }
-        }
-
-        if ($gitarExpected -and @($Snapshot.gitarChecks).Count -eq 0) {
-            return [pscustomobject]@{ status = "processing"; verdict = "unknown"; check = $null; prAgentRelevant = $true; prAgentState = "success"; gitarExpected = $true; newFeedback = @() }
+            return [pscustomobject]@{ status = "processing"; verdict = "unknown"; prAgentRelevant = $true; prAgentState = [string]$prAgentStatus.state; newFeedback = @() }
         }
     }
 
-    $checkArray = @(Get-LatestGitarCheck -Snapshot $Snapshot)
-    $check = if ($checkArray.Count -eq 0) { $null } else { $checkArray[0] }
-    if ($null -eq $check) {
-        if ($prAgentRelevant -and $prAgentPresent -and $prAgentStatus.state -eq "success") {
-            return [pscustomobject]@{ status = "approved"; verdict = "pragent_approved"; check = $null; prAgentRelevant = $true; prAgentState = "success"; gitarExpected = $false; newFeedback = @() }
-        }
-        return [pscustomobject]@{ status = "waiting"; verdict = "unknown"; check = $null; prAgentRelevant = $prAgentRelevant; prAgentState = "unknown"; gitarExpected = $gitarExpected; newFeedback = @() }
+    if ($prAgentRelevant -and $prAgentPresent -and $prAgentStatus.state -eq "success") {
+        return [pscustomobject]@{ status = "approved"; verdict = "pragent_approved"; prAgentRelevant = $true; prAgentState = "success"; newFeedback = @() }
     }
-
-    if ($check.status -ne "completed") {
-        return [pscustomobject]@{ status = "processing"; verdict = "processing"; check = $check; prAgentRelevant = $prAgentRelevant; prAgentState = "unknown"; newFeedback = @() }
-    }
-
-    if ($check.conclusion -ne "success") {
-        return [pscustomobject]@{ status = "gitar_failed"; verdict = "unknown"; check = $check; prAgentRelevant = $prAgentRelevant; prAgentState = "unknown"; newFeedback = @() }
-    }
-
-    if (-not (Test-DashboardFreshForCheck -Baseline $Baseline -Dashboard $Snapshot.gitarDashboard -Check $check -ExpectedSha $ExpectedSha)) {
-        return [pscustomobject]@{ status = "waiting"; verdict = "unknown"; check = $check; prAgentRelevant = $prAgentRelevant; prAgentState = "unknown"; newFeedback = @() }
-    }
-
-    $verdict = Get-GitarVerdict -Body $Snapshot.gitarDashboard.body
-    if ($verdict -eq "approved") {
-        return [pscustomobject]@{ status = "approved"; verdict = $verdict; check = $check; prAgentRelevant = $prAgentRelevant; prAgentState = "success"; newFeedback = @() }
-    }
-
-    if ($verdict -in @("approved_with_suggestions", "changes_requested", "needs_review", "blocked")) {
-        $dashboardFeedback = [pscustomobject]@{
-            id = [string]$Snapshot.gitarDashboard.id
-            kind = "gitar_dashboard"
-            authorLogin = [string]$Snapshot.gitarDashboard.authorLogin
-            authorType = [string]$Snapshot.gitarDashboard.authorType
-            body = [string]$Snapshot.gitarDashboard.body
-            url = [string]$Snapshot.gitarDashboard.url
-            createdAt = $Snapshot.gitarDashboard.createdAt
-            updatedAt = $Snapshot.gitarDashboard.updatedAt
-            threadId = $null
-            headSha = $ExpectedSha
-            verdict = $verdict
-        }
-        return [pscustomobject]@{ status = "feedback"; verdict = $verdict; check = $check; prAgentRelevant = $prAgentRelevant; prAgentState = "unknown"; newFeedback = @($dashboardFeedback) }
-    }
-
-    return [pscustomobject]@{ status = "processing"; verdict = $verdict; check = $check; prAgentRelevant = $prAgentRelevant; prAgentState = "unknown"; newFeedback = @() }
+    return [pscustomobject]@{ status = "waiting"; verdict = "unknown"; prAgentRelevant = $false; prAgentState = "absent"; newFeedback = @() }
 }
 
 function Save-ReviewState {
@@ -660,15 +474,6 @@ function Invoke-PrReviewWatcher {
             -Hostname $routing.hostname `
             -PrAgentContext $PrAgentContext
 
-        $dashboardState = if ($null -eq $snapshot.gitarDashboard) {
-            $null
-        } else {
-            [pscustomobject]@{
-                id = [string]$snapshot.gitarDashboard.id
-                body = [string]$snapshot.gitarDashboard.body
-                updatedAt = $snapshot.gitarDashboard.updatedAt
-            }
-        }
         $prAgentSeenAtBaseline = $false
         try {
             $prAgentSeenAtBaseline = Test-PrAgentSeenOnPull `
@@ -679,28 +484,6 @@ function Invoke-PrReviewWatcher {
                 -Context $PrAgentContext
         } catch {
             $prAgentSeenAtBaseline = $false
-        }
-        $gitarSeenAtBaseline = $false
-        try {
-            if (@($snapshot.gitarChecks).Count -gt 0 -or $null -ne $snapshot.gitarDashboard) {
-                $gitarSeenAtBaseline = $true
-            } else {
-                $commitPages = Invoke-GhJson ($apiPrefix + @(
-                    "repos/$($routing.apiRepository)/pulls/$PrNumber/commits?per_page=20", "--paginate", "--slurp"
-                ))
-                foreach ($commit in @(Expand-PaginatedItems $commitPages)) {
-                    $gitarRuns = Invoke-GhJson ($apiPrefix + @(
-                        "-H", "Accept: application/vnd.github+json",
-                        "repos/$($routing.apiRepository)/commits/$([string]$commit.sha)/check-runs?filter=latest&per_page=100"
-                    ))
-                    if (@($gitarRuns.check_runs | Where-Object { $_.name -eq "Gitar" }).Count -gt 0) {
-                        $gitarSeenAtBaseline = $true
-                        break
-                    }
-                }
-            }
-        } catch {
-            $gitarSeenAtBaseline = $false
         }
         $state = [pscustomobject]@{
             repository = $routing.selector
@@ -716,10 +499,8 @@ function Invoke-PrReviewWatcher {
                     updatedAt = $_.updatedAt
                 }
             })
-            gitarDashboard = $dashboardState
             prAgentContext = $PrAgentContext
             prAgentSeenAtBaseline = $prAgentSeenAtBaseline
-            gitarSeenAtBaseline = $gitarSeenAtBaseline
         }
         Save-ReviewState -State $state -Path $StatePath
 
@@ -739,7 +520,6 @@ function Invoke-PrReviewWatcher {
 
     $state = Get-Content -Raw -LiteralPath $StatePath | ConvertFrom-Json -Depth 100
     $deadline = [DateTimeOffset]::UtcNow.AddMinutes($TimeoutMinutes)
-    $gitarSeenDuringWatch = [bool]$state.gitarSeenAtBaseline
     $reviewStartDeadline = if ($ReviewStartGraceSeconds -gt 0) {
         $start = if ($ReviewRequestedAt -eq [DateTimeOffset]::MinValue) {
             [DateTimeOffset]::UtcNow
@@ -758,25 +538,19 @@ function Invoke-PrReviewWatcher {
             -Hostname ([string]$state.hostname) `
             -PrAgentContext ([string]$state.prAgentContext)
 
-        if (@($snapshot.gitarChecks).Count -gt 0 -or $null -ne $snapshot.gitarDashboard) {
-            $gitarSeenDuringWatch = $true
-        }
-        $state.gitarSeenAtBaseline = $gitarSeenDuringWatch
-
         $outcome = Resolve-ReviewOutcome `
             -Baseline $state `
             -Snapshot $snapshot `
             -ExpectedSha $ExpectedHeadSha
 
-        if ($outcome.status -in @("feedback", "approved", "gitar_failed", "head_changed", "pr_closed")) {
+        if ($outcome.status -in @("feedback", "approved", "head_changed", "pr_closed")) {
             [pscustomobject]@{
                 status = $outcome.status
                 repository = $state.repository
                 prNumber = $state.prNumber
                 expectedHeadSha = $ExpectedHeadSha
                 actualHeadSha = $snapshot.pullRequest.headSha
-                gitarVerdict = $outcome.verdict
-                gitarCheck = $outcome.check
+                verdict = $outcome.verdict
                 prAgentRelevant = [bool]$outcome.prAgentRelevant
                 prAgentState = [string]$outcome.prAgentState
                 newFeedback = @($outcome.newFeedback)
@@ -787,16 +561,14 @@ function Invoke-PrReviewWatcher {
         if ($ReviewStartGraceSeconds -gt 0 -and
             [DateTimeOffset]::UtcNow -ge $reviewStartDeadline -and
             $snapshot.pullRequest.headSha -eq $ExpectedHeadSha -and
-            -not [bool]$outcome.prAgentRelevant -and
-            $null -eq $outcome.check) {
+            -not [bool]$outcome.prAgentRelevant) {
             [pscustomobject]@{
                 status = "review_not_started"
                 repository = $state.repository
                 prNumber = $state.prNumber
                 expectedHeadSha = $ExpectedHeadSha
                 actualHeadSha = $snapshot.pullRequest.headSha
-                gitarVerdict = "unknown"
-                gitarCheck = $null
+                verdict = "unknown"
                 newFeedback = @()
             } | ConvertTo-Json -Depth 20
             return
