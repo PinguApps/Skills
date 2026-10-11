@@ -23,6 +23,8 @@ After resolving the target, apply this boundary to every other Linear issue read
 
 Resolve the team's relevant workflow states, especially In Progress, In Review, Backlog, and any blocked state, by ID. Report ambiguity instead of guessing.
 
+Check whether estimates are enabled for the target project's team, including inherited settings, and resolve its configured scale and allowed values. Before creating or editing any ticket, including target status changes and related follow-ups, if estimates are enabled, provide a true and honest estimate of its full scope, including implementation, verification, complexity, and uncertainty. Use the team's scale and conventions rather than an arbitrary default; retain an existing estimate only when it remains defensible. Save the value in Linear's native estimate field and re-read the ticket to verify it; a description or comment alone is insufficient. If settings, scope, or estimate access cannot be established, report the gap and resolve it before the affected mutation. When estimates are disabled, leave estimate fields unchanged.
+
 This step is complete when the target, acceptance criteria, team/project IDs, and usable workflow states are known.
 
 ## 2. Follow the provenance chain
@@ -123,6 +125,7 @@ Report:
 - material drift or conflicts found;
 - every related issue read that changed an implementation decision;
 - every issue created or modified, with reason, status, and URL;
+- the saved estimate and brief rationale for each created or modified issue when estimates are enabled;
 - blockers, limitations, and follow-up work.
 
 Say explicitly when no related Linear issues changed.
