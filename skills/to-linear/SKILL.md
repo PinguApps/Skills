@@ -46,6 +46,8 @@ After destination confirmation and before drafting, list the project's milestone
 
 Recheck for newly created overlaps immediately before publishing.
 
+Check whether estimates are enabled for the confirmed project's team, including inherited settings, and resolve its configured scale and allowed values. Before creating or editing any ticket, if estimates are enabled, choose a true and honest estimate of its full scope, including implementation, verification, complexity, and uncertainty. Use the team's scale and conventions rather than an arbitrary default; retain an existing estimate only when it remains defensible. If settings, scope, or estimate access cannot be established, report the gap and resolve it before the affected mutation. When estimates are disabled, leave estimate fields unchanged.
+
 ### 3. Draft milestones and tracer-bullet tickets
 
 Each ticket must deliver a narrow, complete, independently verifiable outcome. Prefer vertical slices across necessary layers over layer-by-layer tasks. Size agent work for one fresh context window and human work as one focused action. Include human judgement, credentials, physical action, or approval as **Human** tickets; publish them normally without `Agent`.
@@ -78,9 +80,9 @@ If an existing milestone or issue conflicts with this order, surface it and ask 
 
 ### 4. Review with the user
 
-Present the selected primary source and the complete proposal in milestone order. For each milestone show existing/new status; for each ticket show title, existing/new status, blockers, delivered outcome, acceptance criteria, executor (`Agent` or `Human`), labels, and source provenance. Explicitly show omitted or narrowed overlaps and the initial frontier of independent agent tickets.
+Present the selected primary source and the complete proposal in milestone order. For each milestone show existing/new status; for each ticket show title, existing/new status, blockers, delivered outcome, acceptance criteria, executor (`Agent` or `Human`), labels, and source provenance. When estimates are enabled, include the proposed estimate and brief rationale for every new or edited ticket, explicitly identifying changes to existing estimates. Explicitly show omitted or narrowed overlaps and the initial frontier of independent agent tickets.
 
-Ask the user to approve milestone names/order, ticket order, granularity, dependencies, overlap decisions, criteria, labels, provenance, and parallel frontier. Do not publish until explicitly approved.
+Ask the user to approve milestone names/order, ticket order, granularity, dependencies, overlap decisions, criteria, labels, applicable estimates, provenance, and parallel frontier. Do not publish until explicitly approved.
 
 ### 5. Prepare Linear metadata
 
@@ -96,6 +98,8 @@ Use two or three labels where useful. Agent tickets normally use `Agent`, one ty
 ### 6. Publish and verify
 
 After the final overlap recheck, create missing milestones in approved chronological order, then create every missing issue milestone-by-milestone and ascending by title number. Assign each newly created issue to its milestone and the confirmed `team`, `project`, resolved Backlog `state`, and approved `labels`. Preserve every reused issue's existing state, milestone, project, labels, and relations unless the reviewed proposal explicitly listed each intended mutation and the user approved it. Add approved native parent relationships using existing or already-created identifiers. Never use prose instead of available native relations.
+
+When estimates are enabled, save the approved estimate in Linear's native estimate field for every new or edited ticket, including reused tickets with approved relation changes. Re-read each affected ticket and verify the saved value; a description or comment alone does not satisfy this requirement. Leave reused tickets with no approved edits untouched.
 
 Only after every issue exists, make a separate blocker pass across the complete approved proposal. For every new issue, and every reused issue with approved relation changes, compare its actual prerequisites with the full issue set and add its approved native `blockedBy` relationships. This pass is exhaustive: verify each dependency edge is represented on the blocked issue, independent issues have no invented blockers, and cross-milestone edges capture the real prerequisite web without treating earlier milestones as blanket blockers.
 
