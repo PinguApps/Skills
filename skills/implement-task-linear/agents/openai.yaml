@@ -1,5 +1,5 @@
 interface:
   display_name: "Implement Linear Task"
-  short_description: "Implement a Linear issue with full context"
+  short_description: "Clarify and deliver a Linear issue through PR review"
 policy:
   allow_implicit_invocation: false
