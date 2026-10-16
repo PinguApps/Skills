@@ -1,0 +1,3 @@
+interface:
+  display_name: "Plan Cycle"
+  short_description: "Fill or top up a Linear cycle within real capacity"
