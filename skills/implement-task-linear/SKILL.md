@@ -1,12 +1,16 @@
 ---
 name: implement-task-linear
-description: Implement one Linear issue end to end in the current repository, using its optional originating spec, plan, domain context, and ADRs when available.
+description: Implement one Linear issue through complete-work's branch-to-PR workflow, with upfront clarification, collaborative delivery, and its originating repository context.
 disable-model-invocation: true
 ---
 
 # Implement Task from Linear
 
 Implement exactly one Linear issue. The issue is the required input and scope boundary; its provenance chain and repository context refine how to implement it without silently adding work.
+
+Use this skill as a Linear-specific wrapper around [$complete-work](../complete-work/SKILL.md). Read that skill before planning delivery; it owns branch setup, incremental commits, verification, push, PR creation through `create-pr`, and review/CI convergence through `finish-pr`. If it or a required dependency is unavailable, report the missing prerequisite and resolve it before implementation rather than substituting a partial workflow. Invoking this skill authorizes that full workflow; leave merging, deployment, and release to a separate user request.
+
+Begin with a few short, precise bullets explaining the intended discovery and delivery before taking action. Steps 1–3 are read-only discovery and clarification: use them to produce an informed plan before branch creation, repository edits, or Linear mutations.
 
 ## 1. Resolve the target and Linear boundary
 
@@ -58,52 +62,53 @@ Surface material conflicts or stale evidence. Ask only when a conflict changes t
 
 This step is complete when every explicit provenance pointer is resolved or reported unavailable, every applicable context artifact is read, and every target requirement is classified as implemented, partial, missing, contradicted, or blocked.
 
-## 3. Plan the delivery
+## 3. Clarify and plan the delivery
 
-Before editing, give the user:
+Before implementation, give the user a very short overview in plain-language bullets covering:
 
-- the target outcome and assumptions;
-- the context sources consulted, including missing or unavailable expected artifacts;
-- material drift between Linear, the originating spec, `PLAN.md`, domain documents, and the repository;
-- a short vertical-slice plan with a verification check for each step;
-- the public testing seams already agreed in the spec, or the highest existing seams that fit the change.
+- the concrete outcome and surfaces that will change;
+- the small delivery steps and how each will be checked, including the agreed public testing seams or highest existing seams that fit;
+- material assumptions, tradeoffs, context gaps, or drift found during discovery;
+- anything needed from the user, followed by the planned commits, PR, and CI/review completion through `complete-work`.
+
+Keep the overview quick to scan; name consulted sources briefly and expand only where a decision needs explanation. Resolve material uncertainty about requirements, behaviour, scope, compatibility, or public interfaces with the user before branch creation or implementation. Use `complete-work`'s conditional `$grilling` interview when such decisions require it, carrying forward answers already given. A clear, executable task needs the overview but no redundant approval pause.
 
 Map every acceptance criterion and durable constraint to an implementation change or concrete verification. Existing behaviour counts only after verification. If choosing a seam would create or materially change a public interface, confirm it with the user when the upstream artifacts did not already settle it.
 
-Move the target to the resolved In Progress state when implementation starts, unless it is already further along or the user asked to preserve its status.
+This step is complete when the user has received the overview, every acceptance criterion has a delivery and verification path, and every material question has been answered.
 
-This step is complete when every acceptance criterion has a delivery and verification path and every material design choice is settled.
+## 4. Deliver through complete-work
 
-## 4. Implement in verified slices
+Invoke `$complete-work` with the target's full requirements, acceptance criteria, provenance, durable constraints, agreed plan, testing seams, and user decisions. Follow its complete workflow rather than maintaining a separate Git or PR procedure here. Its branch setup follows the read-only discovery and clarification above; reconcile the plan against the freshly fetched base before editing, and resolve any new material uncertainty with the user.
 
-Implement the minimum coherent change that satisfies the whole target:
+Move the target to the resolved In Progress state when implementation starts, unless it is already further along or the user asked to preserve its status. Apply the estimate and team/project rules to this and every later Linear mutation.
 
-- follow repository conventions and preserve unrelated work;
-- for testable behaviour, work red then green at the agreed public seams, one vertical slice at a time;
-- run the smallest relevant test and typecheck after each slice, then the broader relevant suite once near the end;
-- update required documentation, schemas, migrations, generated artifacts, and configuration;
-- keep required target work in the current change rather than deferring it to manufacture completion;
-- leave commits, pushes, pull requests, deployment, and release to an explicit user request.
+Within `complete-work`, implement in verified vertical slices, working red then green at the agreed public seams for testable behaviour. Include required documentation, schemas, migrations, generated artifacts, and configuration. Before its PR-publication gate, audit the complete diff against repository standards, applicable ADRs, every target criterion, and originating-spec constraints; fix findings and rerun affected checks. Required target work stays in this change.
 
-When a test cannot reasonably be written or a full suite cannot run, use the strongest available verification and record the limitation.
+### Collaborate when user input is needed
 
-Continue until every acceptance criterion passes or a genuine blocker remains.
+Continue autonomously whenever available tools, access, and settled requirements allow it. When progress needs a user decision, credential, permission, account setup, or other prerequisite, ask promptly and explain:
 
-## 5. Review and reconcile
+- what is implemented and verified so far, with an inspectable artifact, screenshot, or preview when useful;
+- exactly what is missing and which remaining behaviour or check it blocks;
+- how to supply or obtain it; for setup or access, include a direct service/account link, the relevant settings location, and the minimum necessary steps;
+- where to configure it, including the exact environment-variable or secret name and target environment when applicable;
+- what the user should confirm when done and what work will resume afterward.
 
-Inspect the complete diff before changing final Linear state:
+Check available authenticated tools and existing configuration before asking the user to do manual setup. Verify current setup instructions against the relevant service's documentation rather than inventing account navigation. Have credentials configured through the appropriate secret store or local environment instead of asking for secret values in chat or committing them.
 
-- **Standards** — check every changed area against applicable repository instructions, conventions, and ADRs.
-- **Spec** — check every target criterion and originating-spec constraint for missing work, incorrect behaviour, and scope creep.
+For example, a working UI may be ready to inspect while live data remains blocked on an API key. Show the UI, identify the unverified integration, and give the service link and configuration steps. Continue independent work while awaiting the user; pause dependent work until the input arrives, then verify the prerequisite and resume. An elapsed wait is not an answer. `complete-work`'s completeness gate still applies: partial implementation or mock data cannot justify publishing a PR for an incomplete target.
 
-Fix actionable findings and rerun affected checks. Re-fetch the target and every mutated related issue, then reconfirm the team/project boundary.
+## 5. Reconcile Linear and hand off
 
-When every required outcome is implemented and verified:
+After `complete-work` reaches its final audit or stopping condition, re-fetch the target and every mutated related issue, then reconfirm the team/project boundary.
 
-1. Add a concise target comment mapping each acceptance criterion to implementation and verification evidence.
+When every required outcome is implemented and verified and the PR exists:
+
+1. Add a concise target comment linking the PR and mapping each acceptance criterion to implementation and verification evidence, including any pending CI or review blocker reported by `finish-pr`.
 2. Move the target to In Review only when its current state is earlier.
 
-Preserve completed, cancelled, archived, In Review, and other terminal or further-along states. When blocked, leave the target In Progress or use the resolved blocked state and record the unmet criterion, evidence, and dependency.
+Preserve completed, cancelled, archived, In Review, and other terminal or further-along states. When implementation or required verification is blocked, leave the target In Progress or use the resolved blocked state and record the unmet criterion, evidence, and dependency. Distinguish implementation readiness from incomplete PR review or CI; report full workflow completion only when `finish-pr`'s definition of done is met.
 
 ## Related Linear work
 
@@ -118,6 +123,7 @@ Update an existing related issue only when repository evidence makes its descrip
 Report:
 
 - target identifier, URL, and final status;
+- PR URL and `finish-pr`'s final audit, or the specific prerequisite blocking PR creation or workflow completion;
 - implemented outcome and changed surfaces;
 - verification commands and results;
 - acceptance-criteria coverage;
