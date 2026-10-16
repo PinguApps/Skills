@@ -69,6 +69,17 @@ The skill:
   issues to In Review.
 - Reports repository drift, verification results, and every Linear mutation.
 
+### [plan-cycle](skills/plan-cycle/)
+
+Fills the next Linear cycle or tops up the current cycle from an existing backlog.
+
+The skill:
+
+- Uses an explicit destination or derives an unambiguous one from the conversation.
+- Budgets AI-assisted work against remaining time, existing commitments and available cycle history.
+- Selects complete outcomes with real native dependencies and useful parallel work.
+- Adds issues through the native cycle field and verifies membership and preserved metadata.
+
 ### [test-changes](skills/test-changes/)
 
 Explains how to manually inspect and test the work just completed in the current
@@ -99,3 +110,16 @@ The skill:
 - Publishes tickets to the backlog and verifies their metadata and ordering.
 
 Based on Matt Pocock's [to-tickets](https://github.com/mattpocock/skills/tree/main/skills/engineering/to-tickets) skill.
+
+### [to-spec-local](skills/to-spec-local/)
+
+Wraps a separately installed `to-spec` skill to save a complete Markdown
+specification in the current repository, ready to use as the primary source for
+`to-linear`.
+
+The skill:
+
+- Reads the installed upstream skill; its source is intentionally not hosted here.
+- Replaces tracker setup, issue publication and labels with in-repo file delivery.
+- Reuses accepted testing seams and preserves the upstream specification template.
+- Records complete scope and provenance without creating Linear issues.

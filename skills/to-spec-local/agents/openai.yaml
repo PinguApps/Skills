@@ -1,0 +1,3 @@
+interface:
+  display_name: "To Spec Local"
+  short_description: "Save an upstream to-spec specification in the repo"
