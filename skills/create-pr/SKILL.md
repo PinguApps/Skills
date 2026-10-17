@@ -17,7 +17,11 @@ If the repository has no template, check for an inherited template in its owner'
 
 ## 2. Write the title and description
 
-Use the selected template as the body: preserve its headings, order, comments, and checkbox labels while filling its sections. Append any extra sections needed at the bottom; the template is a starting structure, not a limit on content.
+Use the selected template as the body: preserve its headings, order, comments, and checkbox labels while filling its sections, except for the required user story placement below. Append any other extra sections needed at the bottom; the template is a starting structure, not a limit on content.
+
+Every PR description must include a `User story` section immediately before the summary, after categorisation when present. Match the template's heading level and reuse or move an existing user story section rather than duplicating it. When there is no summary, place the user story after categorisation, or first if neither section exists.
+
+Write the user story in one or two short sentences using everyday language: explain who needs what and why, so a human can understand it without specialist knowledge. Avoid jargon, unexplained abbreviations, and implementation details. Reuse the original user story when available and aligned with the delivered scope; otherwise infer it from the final PR changes and task context, keeping it grounded in the problem the PR actually solves.
 
 When no template exists, start with this exact structure:
 
@@ -33,6 +37,8 @@ When no template exists, start with this exact structure:
 - [ ] `minor`
 - [ ] `major`
 
+# User story
+
 # Summary
 
 ```
@@ -43,6 +49,6 @@ Write a concise title and summary around the concrete problem and resulting beha
 
 ## 3. Create and verify the PR
 
-Review the title and completed body against the final diff, template, checkbox selections, and caller requirements. Write the body to a UTF-8 temporary file outside the worktree and pass it to `gh pr create` with `--body-file`, an explicit `--repo`, `--base`, and `--head` (including the owner for a fork). This preserves literal backticks and newlines. Do not rely on automatic template insertion when passing a body. For an existing PR, update its description only when needed for the authorized task, using its already-discovered URL: `gh pr edit <pr-url> --body-file <body-file>`.
+Review the title and completed body against the final diff, template, checkbox selections, and caller requirements, including the user story's placement, plain language, and alignment with the delivered scope. Write the body to a UTF-8 temporary file outside the worktree and pass it to `gh pr create` with `--body-file`, an explicit `--repo`, `--base`, and `--head` (including the owner for a fork). This preserves literal backticks and newlines. Do not rely on automatic template insertion when passing a body. For an existing PR, update its description only when needed for the authorized task, using its already-discovered URL: `gh pr edit <pr-url> --body-file <body-file>`.
 
 Register the PR with the host's pull-request linking tool when available, including an existing PR reused by this run. Fetch its saved title, body, base, and head to verify the submitted content and target. Remove the temporary body file after verification. Return the PR URL and any verification limitation to the caller; continue into review only when the caller's workflow requires it.
