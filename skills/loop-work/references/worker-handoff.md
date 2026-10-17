@@ -6,6 +6,7 @@ Read when dispatching or repairing a ticket. Supply actual values and requiremen
 Complete this one ticket using $complete-work at <resolved skill path>.
 Follow its required skills through verified implementation, PR creation, CI,
 and finish-pr review convergence. Leave the PR open for the coordinator to merge.
+Use create-pr's user story requirement for the PR description.
 
 Execution:
 - Run/issue: <run ID; issue ID and URL; exact team/project IDs>.
@@ -19,9 +20,9 @@ Execution:
 - Stop constraint: <deadline/timezone or none; how stop events arrive>.
 
 Ticket scope:
-<Full description and every acceptance criterion. Include comments or changes
-that refine the requirements, referenced specifications/designs, parent/subtask
-scope, attachments, and material exclusions. Provide accessible references and
+<Full description, original user story when available, and every acceptance
+criterion. Include comments or changes that refine the requirements, referenced
+specifications/designs, parent/subtask scope, attachments, and material exclusions. Provide accessible references and
 the requirement-bearing content already recovered from them.>
 
 Readiness and implementation context:

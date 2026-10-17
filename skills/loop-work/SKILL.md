@@ -75,7 +75,7 @@ The coordinator owns selection, reservations, Linear state and estimates, and me
 
 ## 4. Receive results and merge serially
 
-A worker result must identify either a completed `complete-work` PR with evidence or a concrete blocker. A finished turn, opened PR, or queued CI job is not proof of readiness. Keep reservations for pending work; delegate repairs with the same issue, worktree, branch, and full accumulated context. Preserve `complete-work` / `finish-pr` convergence bounds across repair attempts rather than resetting them with a fresh worker. Retry a failed operation only after reconciling its outcome and identifying a recoverable cause; repeated unchanged failures become blockers.
+A worker result must identify either a completed `complete-work` PR with evidence or a concrete blocker. Verify its description follows `create-pr`'s user story requirement. A finished turn, opened PR, or queued CI job is not proof of readiness. Keep reservations for pending work; delegate repairs with the same issue, worktree, branch, and full accumulated context. Preserve `complete-work` / `finish-pr` convergence bounds across repair attempts rather than resetting them with a fresh worker. Retry a failed operation only after reconciling its outcome and identifying a recoverable cause; repeated unchanged failures become blockers.
 
 Before each merge, independently re-fetch and verify:
 
