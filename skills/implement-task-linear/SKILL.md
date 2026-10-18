@@ -120,6 +120,8 @@ The user authorizes minimal related-issue mutations inside the recorded team/pro
 
 Create a follow-up only when it is concrete, independently actionable, genuinely outside the target, and absent after a scoped overlap search. Create it in the same team/project, normally in Backlog, with observable acceptance criteria and a native relation to the target when supported. A prerequisite that blocks completion must be related and reported as a blocker rather than used to declare the target complete.
 
+Before naming or creating a follow-up, read and apply [Linear milestone and issue numbering](../to-linear/references/issue-numbering.md). Assign its native milestone and matching `MM-DDD - Issue title`, accounting for existing numbers. Obtain approval for any required milestone creation or existing-name/title changes; preserve the target's and related issues' titles during routine implementation, status and estimate updates. Re-read the saved follow-up title and milestone assignment to verify the prefix.
+
 Update an existing related issue only when repository evidence makes its description, relations, or status stale. Before treating it as satisfied, read every acceptance criterion and verify complete coverage. Move it to In Review only from an earlier state; preserve terminal and further-along states. Partial or title-only overlap does not justify a transition.
 
 ## Handoff

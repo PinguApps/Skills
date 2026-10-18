@@ -22,7 +22,7 @@ Completion: the destination, native cycle, mode, existing workload and remaining
 
 ## Select a complete, achievable outcome
 
-Read the authorized project's open backlog, following pagination, then the full requirements and relevant repository context for candidate issues. Inspect native blockers and their actual state; title numbers and milestone order are not dependencies.
+Read the authorized project's open backlog, following pagination, then the full requirements and relevant repository context for candidate issues. Interpret numbered milestone names and issue titles using [Linear milestone and issue numbering](../to-linear/references/issue-numbering.md): compare milestone number before issue number when consulting their intended order. Inspect native blockers and their actual state; title numbers and milestone order are not dependencies. Preserve existing names and titles while scheduling.
 
 Choose a coherent first outcome and enough complete PR-sized tasks to fit the remaining budget. Prefer the critical path and work that unlocks useful parallel progress. Independent research can accompany implementation when it advances that outcome. Account for implementation, verification, review and uncertainty, rather than filling the cycle with every unblocked ticket.
 

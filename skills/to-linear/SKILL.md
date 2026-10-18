@@ -54,17 +54,9 @@ Each ticket must deliver a narrow, complete, independently verifiable outcome. P
 
 Before slicing, look for prefactoring that makes the requested change easier. Create prefactoring tickets first only when they have concrete, independently verifiable outcomes needed by later slices; never invent unrelated cleanup.
 
-Assign every ticket to exactly one native Linear project milestone. Reuse an existing milestone that matches the outcome; otherwise create one, including for a single-ticket change. Milestone names describe outcomes or phases and have no numeric prefix. Order milestones chronologically and topologically: every prerequisite milestone must appear earlier.
+Assign every ticket to exactly one native Linear project milestone. Reuse an existing milestone that matches the outcome; otherwise propose a new one, including for a single-ticket change. Order milestones chronologically and topologically: every prerequisite milestone must appear earlier.
 
-Within each milestone, name every issue:
-
-```text
-DDD - Title
-```
-
-`DDD` is zero-padded to three digits. Start each milestone at `000`, increment in topological display order (`001`, `002`), and reset to `000` for the next milestone.
-
-Every issue title must begin with this prefix. Number issues contiguously from `000` within each milestone; the number expresses intended completion order, using actual dependency order first and preferred sequence to break ties.
+Before drafting names or allocating numbers, read [Linear milestone and issue numbering](references/issue-numbering.md). Apply its `MM - Milestone name` and `MM-DDD - Issue title` formats to the complete proposal, including existing items affected by an approved insertion or renumbering.
 
 Topologically order all tickets without inventing dependencies. Every blocker must be earlier in the total milestone/task order:
 
@@ -97,7 +89,7 @@ Use two or three labels where useful. Agent tickets normally use `Agent`, one ty
 
 ### 6. Publish and verify
 
-After the final overlap recheck, create missing milestones in approved chronological order, then create every missing issue milestone-by-milestone and ascending by title number. Assign each newly created issue to its milestone and the confirmed `team`, `project`, resolved Backlog `state`, and approved `labels`. Preserve every reused issue's existing state, milestone, project, labels, and relations unless the reviewed proposal explicitly listed each intended mutation and the user approved it. Add approved native parent relationships using existing or already-created identifiers. Never use prose instead of available native relations.
+After the final overlap recheck, recheck allocated prefixes against current milestones and issues, then create missing milestones in approved chronological order and every missing issue milestone-by-milestone and ascending by title number. Reconcile any newly occupied number before writing. Assign each newly created issue to its milestone and the confirmed `team`, `project`, resolved Backlog `state`, and approved `labels`. Preserve every reused milestone's name and every reused issue's title, state, milestone, project, labels, and relations unless the reviewed proposal explicitly listed each intended mutation and the user approved it. Add approved native parent relationships using existing or already-created identifiers. Never use prose instead of available native relations.
 
 Attempt the approved native estimate for every new or edited ticket, including reused tickets with approved relation changes, even when the project has no estimated issues. Re-read each saved value/label to infer the team's convention and use it for subsequent tickets; a successful read-back verifies that value, not the full allowed range. Correct a provisional mapping when evidence supports it; obtain approval if this materially changes the agreed sizing. A description or comment alone does not save an estimate. Leave reused tickets with no approved edits untouched.
 
@@ -107,7 +99,7 @@ Only after every issue exists, make a separate blocker pass across the complete 
 
 Use Linear's native milestone/issue reordering capability when available. Otherwise creation order plus numeric titles is the source of truth; verify the returned order and clearly report any manual Linear reorder still required. Never invent milestone target dates merely to force ordering.
 
-Do not assign, delegate, or add issues to a cycle unless asked. For newly created issues, verify milestone assignment, title, team, project, Backlog state, labels, and blockers. For reused issues, verify identity and approved mutations without normalizing unapproved metadata. Confirm new agent tickets have `Agent`, new human tickets do not, and every newly created or explicitly approved blocker is earlier. Correct in-scope mismatches before reporting identifiers and URLs.
+Do not assign, delegate, or add issues to a cycle unless asked. Re-read saved milestone names and issue titles against the shared numbering rules, including matching prefixes, uniqueness and approved order. For newly created issues, verify milestone assignment, title, team, project, Backlog state, labels, and blockers. For reused issues, verify identity and approved mutations without normalizing unapproved metadata. Confirm new agent tickets have `Agent`, new human tickets do not, and every newly created or explicitly approved blocker is earlier. Correct in-scope mismatches before reporting identifiers and URLs.
 
 End with plain text `Milestone order: <first> → <second> → <third>` followed by issue identifiers/URLs in that same milestone and ascending-number order. Then write `Parallel frontier: <issues>` listing unblocked `Agent` tickets that separate agents can implement concurrently, or `Parallel frontier: none`.
 
@@ -124,4 +116,4 @@ End with plain text `Milestone order: <first> → <second> → <third>` followed
 <Stable source reference; omit when represented by a native parent relation or no stable reference exists.>
 ```
 
-Avoid brittle paths and snippets. Example: milestone `Quote flow` contains `000 - Create quote form`, then `001 - Validate requests`; milestone `Launch` starts again at `000 - Approve production wording`.
+Avoid brittle paths and snippets. Use the milestone and issue title examples in the shared numbering reference.
