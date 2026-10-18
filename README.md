@@ -108,6 +108,7 @@ The skill:
 - Confirms the target Linear team and project before planning.
 - Reuses existing milestones and issues to avoid duplicate work.
 - Drafts narrow, non-overlapping tickets grouped into ordered milestones.
+- Names milestones `00 - Name`, `01 - Name` and issues `00-000 - Title`, `01-000 - Title`.
 - Captures acceptance criteria, executor, labels, and native dependencies.
 - Requires review and explicit approval before publishing.
 - Publishes tickets to the backlog and verifies their metadata and ordering.
