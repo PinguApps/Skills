@@ -83,7 +83,7 @@ This step is complete when the user has received the overview, every acceptance 
 
 ## 4. Deliver through complete-work
 
-Invoke `$complete-work` with the target's full requirements, original user story when available, acceptance criteria, provenance, durable constraints, agreed plan, testing seams, and user decisions. Follow its complete workflow, including `create-pr`'s user story requirement, rather than maintaining a separate Git or PR procedure here. Its branch setup follows the read-only discovery and clarification above; reconcile the plan against the freshly fetched base before editing, and resolve any new material uncertainty with the user.
+Invoke `$complete-work` with the target's full requirements, original user story when available, acceptance criteria, provenance, durable constraints, agreed plan, testing seams, and user decisions. Follow its complete workflow, including [create-pr's user story rules](../create-pr/SKILL.md): require a brief story in everyday language that readers without a technical background can understand, adapting the original wording as needed. Keep Git and PR procedures in `complete-work`. Its branch setup follows the read-only discovery and clarification above; reconcile the plan against the freshly fetched base before editing, and resolve any new material uncertainty with the user.
 
 Move the target to the resolved In Progress state when implementation starts, unless it is already further along or the user asked to preserve its status. Apply the estimate and team/project rules to this and every later Linear mutation.
 

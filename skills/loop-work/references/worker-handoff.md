@@ -6,7 +6,9 @@ Read when dispatching or repairing a ticket. Supply actual values and requiremen
 Complete this one ticket using $complete-work at <resolved skill path>.
 Follow its required skills through verified implementation, PR creation, CI,
 and finish-pr review convergence. Leave the PR open for the coordinator to merge.
-Use create-pr's user story requirement for the PR description.
+Follow create-pr's user story rules for the PR description: require a brief story
+in everyday language that readers without a technical background can understand,
+adapting any original wording as needed.
 
 Execution:
 - Run/issue: <run ID; issue ID and URL; exact team/project IDs>.
