@@ -171,7 +171,44 @@ $thumbsUpIgnored = Resolve-ReviewOutcome -Baseline $baseline -Snapshot (New-Snap
 Assert-Equal "approved" $thumbsUpIgnored.status "A lone thumbs-up acknowledgement must not be treated as actionable feedback."
 
 $prAgentErrorState = Resolve-ReviewOutcome -Baseline $prAgentBaseline -Snapshot (New-Snapshot -PrAgentStatus (New-PrAgentStatus -State "error" -Description "review failed to run")) -ExpectedSha "new-sha"
-Assert-Equal "feedback" $prAgentErrorState.status "A PR Agent error state must be surfaced as feedback, not polled to timeout."
+Assert-Equal "incomplete" $prAgentErrorState.status "A service error is incomplete, not findings or approval."
+
+foreach ($conclusion in @("success", "failure", "neutral", "cancelled", "timed_out", "skipped", "action_required", $null)) {
+    $signal = Get-PrAgentSignal -Checks @([pscustomobject]@{ status = "completed"; conclusion = $conclusion })
+    $expected = if ($conclusion -in @("success", "failure")) { $conclusion } else { "incomplete" }
+    Assert-Equal $expected $signal.state "A completed check must have a precise terminal disposition."
+    $outcome = Resolve-ReviewOutcome -Baseline $prAgentBaseline -Snapshot (New-Snapshot -PrAgentStatus $signal) -ExpectedSha "new-sha"
+    $terminal = if ($expected -eq 'success') { 'approved' } elseif ($expected -eq 'failure') { 'feedback' } else { 'incomplete' }
+    Assert-Equal $terminal $outcome.status "A check-run-only PR must reach the correct outcome."
+}
+$activeChecks = @([pscustomobject]@{ status = "completed"; conclusion = "success" }, [pscustomobject]@{ status = "queued"; conclusion = $null })
+Assert-Equal 'pending' (Get-PrAgentSignal -Checks $activeChecks).state 'An active provider must block despite another success.'
+Assert-Equal 'pending' (Get-PrAgentSignal -Checks @([pscustomobject]@{ status = 'in_progress' })).state 'An in-progress check must block.'
+Assert-Equal 'incomplete' (Get-PrAgentSignal -Checks @([pscustomobject]@{ status = 'completed'; conclusion = 'neutral' }) -Statuses @([pscustomobject]@{ context = 'PR Agent'; state = 'success' })).state 'Legacy success cannot override an incomplete check.'
+Assert-Equal 'absent' (Get-PrAgentSignal).state 'No signals means absent, not approval.'
+Assert-Equal $false (Test-ActionableFeedbackItem ([pscustomobject]@{ kind = 'issue_comment'; body = '<!-- pr-agent:v1 --><!-- pr-agent:summary:v1 --> Review in progress.' })) 'Status summary updates must not create feedback cycles.'
+Assert-Equal $true (Test-PrAgentMarkerBody '[![PR Agent](badge)](link) A finding.') 'Legacy badges identify reviewer feedback too.'
+
+function Invoke-GhJson {
+    param([string[]]$GhArgs)
+    if ($GhArgs -notcontains '--paginate' -or $GhArgs -notcontains '--slurp') { throw 'All pages must be read.' }
+    if (($GhArgs -join ' ') -match '/check-runs\?') {
+        return @(
+            [pscustomobject]@{ check_runs = @([pscustomobject]@{ id = 1; name = 'PR Agent'; app = @{ id = 42 }; status = 'in_progress' }) },
+            [pscustomobject]@{ check_runs = @([pscustomobject]@{ id = 2; name = 'PR Agent'; app = @{ id = 42 }; status = 'completed'; conclusion = 'success' }, [pscustomobject]@{ id = 3; name = 'PR Agent'; app = @{ id = 43 }; status = 'queued' }) }
+        )
+    }
+    throw 'Forbidden status read: current check runs already establish presence.'
+}
+$checks = @(Get-PrAgentChecks -ApiPrefix @('api') -ApiRepository 'owner/repo' -Sha 'head' -Context 'PR Agent')
+Assert-Equal 2 $checks.Count 'Latest check per App must survive across pages.'
+Assert-Equal 'pending' (Get-PrAgentSignal -Checks $checks).state 'A different App still running cannot be ignored.'
+Assert-Equal $true (Test-PrAgentSeenOnPull -ApiPrefix @('api') -ApiRepository 'owner/repo' -Number 1 -Sha 'head' -Context 'PR Agent') 'Check-run-only activity must be detected.'
+function Invoke-GhJson { throw 'Read denied' }
+try {
+    Get-CombinedStatusContexts -ApiPrefix @('api') -ApiRepository 'owner/repo' -Sha 'head' | Out-Null
+    throw 'An unavailable API was mistaken for absence.'
+} catch { if ($_.Exception.Message -ne 'Read denied') { throw } }
 
 $routing = Resolve-RepositoryRouting -Repository "ghe.example/owner/repository"
 Assert-Equal "ghe.example" $routing.hostname "Host-qualified repositories should preserve their host."
@@ -185,8 +222,11 @@ function Invoke-GhJson {
     if ($GhArgs[0] -eq "api" -and $GhArgs[-1] -eq "user") {
         return [pscustomobject]@{ login = "example-agent" }
     }
-    if ($joined -match "/status$") {
+    if ($joined -match "/status\?per_page=100") {
         return [pscustomobject]@{ statuses = @() }
+    }
+    if ($joined -match "/check-runs\?") {
+        return @([pscustomobject]@{ check_runs = @() })
     }
     if ($joined -match "/commits\?per_page=20") {
         return @([pscustomobject]@{ sha = "commit-sha" })

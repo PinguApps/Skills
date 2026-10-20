@@ -6,15 +6,21 @@ param(
     [Parameter(Mandatory = $true, ParameterSetName = "Wait")]
     [switch]$Wait,
 
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = "Inspect")]
+    [switch]$Inspect,
+
+    [Parameter(Mandatory = $true, ParameterSetName = "Capture")]
+    [Parameter(Mandatory = $true, ParameterSetName = "Wait")]
     [string]$StatePath,
 
     [int]$PrNumber,
 
     [Parameter(ParameterSetName = "Capture")]
+    [Parameter(Mandatory = $true, ParameterSetName = "Inspect")]
     [string]$Repository,
 
     [Parameter(ParameterSetName = "Capture")]
+    [Parameter(ParameterSetName = "Inspect")]
     [string]$Hostname,
 
     [Parameter(Mandatory = $true, ParameterSetName = "Wait")]
@@ -37,6 +43,7 @@ param(
 
     [Parameter(ParameterSetName = "Capture")]
     [Parameter(ParameterSetName = "Wait")]
+    [Parameter(ParameterSetName = "Inspect")]
     [string]$PrAgentContext = "PR Agent"
 )
 
@@ -45,7 +52,8 @@ $ErrorActionPreference = "Stop"
 function Invoke-GhJson {
     param([Parameter(Mandatory = $true)][string[]]$GhArgs)
 
-    $output = & gh @GhArgs 2>&1
+    $ghExecutable = (Get-Command gh -CommandType Application -ErrorAction Stop).Source
+    $output = & $ghExecutable @GhArgs 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw ($output -join [Environment]::NewLine)
     }
@@ -118,7 +126,7 @@ function Test-PrAgentMarkerBody {
         return $false
     }
 
-    return $Body -match '(?i)pr-agent:v\d+'
+    return $Body -match '(?i)pr-agent:v\d+|\[!\[PR Agent\]'
 }
 
 function Get-CombinedStatusContexts {
@@ -128,15 +136,38 @@ function Get-CombinedStatusContexts {
         [Parameter(Mandatory = $true)][string]$Sha
     )
 
-    try {
-        $response = Invoke-GhJson ($ApiPrefix + @(
-            "-H", "Accept: application/vnd.github+json",
-            "repos/$ApiRepository/commits/$Sha/status"
-        ))
-        return @($response.statuses)
-    } catch {
-        return @()
-    }
+    $pages = Invoke-GhJson ($ApiPrefix + @(
+        "-H", "Accept: application/vnd.github+json",
+        "repos/$ApiRepository/commits/$Sha/status?per_page=100", "--paginate", "--slurp"
+    ))
+    foreach ($page in @($pages)) { foreach ($status in @($page.statuses)) { if ($null -ne $status) { $status } } }
+}
+
+function Get-PrAgentChecks {
+    param([string[]]$ApiPrefix, [string]$ApiRepository, [string]$Sha, [string]$Context)
+    $pages = Invoke-GhJson ($ApiPrefix + @(
+        "-H", "Accept: application/vnd.github+json",
+        "repos/$ApiRepository/commits/$Sha/check-runs?filter=all&per_page=100", "--paginate", "--slurp"
+    ))
+    $checks = foreach ($page in @($pages)) { @($page.check_runs) | Where-Object { $null -ne $_ -and [string]$_.name -ieq $Context } }
+    # A rerequest replaces the older run from the same App, not another App's run.
+    @($checks | Group-Object { "$($_.app.id):$($_.name)" } | ForEach-Object { $_.Group | Sort-Object { [long]$_.id } -Descending | Select-Object -First 1 })
+}
+
+function Get-PrAgentSignal {
+    param([array]$Checks = @(), [array]$Statuses = @(), [string]$Context = "PR Agent")
+    $legacy = @($Statuses | Where-Object { [string]$_.context -ieq $Context } | Select-Object -First 1)
+    $states = @($Checks | ForEach-Object {
+        if ($_.status -ne "completed") { "pending" }
+        elseif ($_.conclusion -in @("success", "failure")) { [string]$_.conclusion }
+        else { "incomplete" }
+    }) + @($legacy | ForEach-Object { if ($_.state -eq "error") { "incomplete" } else { [string]$_.state } })
+    $state = if (!$states.Count) { "absent" } elseif ($states -contains "pending") { "pending" }
+        elseif ($states -contains "incomplete") { "incomplete" } elseif ($states -contains "failure") { "failure" }
+        elseif (@($states | Where-Object { $_ -ne "success" }).Count) { "incomplete" } else { "success" }
+    [pscustomobject]@{ present = ($states.Count -gt 0); state = $state; checks = @($Checks); legacy = $legacy
+        description = (@($Checks | ForEach-Object { $_.output.title }) + @($legacy | ForEach-Object { $_.description })) -join "; "
+        url = (@($Checks | ForEach-Object { $_.html_url }) + @($legacy | ForEach-Object { $_.target_url }) | Select-Object -First 1) }
 }
 
 function Test-PrAgentContextPresent {
@@ -162,23 +193,23 @@ function Test-PrAgentSeenOnPull {
         [Parameter(Mandatory = $true)][string]$Context
     )
 
+    $headChecks = @(Get-PrAgentChecks -ApiPrefix $ApiPrefix -ApiRepository $ApiRepository -Sha $Sha -Context $Context)
+    if ($headChecks.Count) { return $true }
     $headStatuses = Get-CombinedStatusContexts -ApiPrefix $ApiPrefix -ApiRepository $ApiRepository -Sha $Sha
     if (Test-PrAgentContextPresent -Statuses $headStatuses -Context $Context) {
         return $true
     }
 
-    try {
-        $commitPages = Invoke-GhJson ($ApiPrefix + @(
-            "repos/$ApiRepository/pulls/$Number/commits?per_page=20", "--paginate", "--slurp"
-        ))
-        foreach ($commit in @(Expand-PaginatedItems $commitPages)) {
-            $statuses = Get-CombinedStatusContexts -ApiPrefix $ApiPrefix -ApiRepository $ApiRepository -Sha ([string]$commit.sha)
-            if (Test-PrAgentContextPresent -Statuses $statuses -Context $Context) {
-                return $true
-            }
+    $commitPages = Invoke-GhJson ($ApiPrefix + @(
+        "repos/$ApiRepository/pulls/$Number/commits?per_page=20", "--paginate", "--slurp"
+    ))
+    foreach ($commit in @(Expand-PaginatedItems $commitPages)) {
+        if ([string]$commit.sha -eq $Sha) { continue }
+        if (@(Get-PrAgentChecks -ApiPrefix $ApiPrefix -ApiRepository $ApiRepository -Sha ([string]$commit.sha) -Context $Context).Count) { return $true }
+        $statuses = Get-CombinedStatusContexts -ApiPrefix $ApiPrefix -ApiRepository $ApiRepository -Sha ([string]$commit.sha)
+        if (Test-PrAgentContextPresent -Statuses $statuses -Context $Context) {
+            return $true
         }
-    } catch {
-        return $false
     }
 
     return $false
@@ -191,6 +222,7 @@ function Test-ActionableFeedbackItem {
     if ([string]::IsNullOrWhiteSpace($body)) {
         return $false
     }
+    if ($body -match '<!-- pr-agent:summary:v\d+ -->') { return $false }
 
     if ($Item.kind -eq "review") {
         if ($Item.reviewState -in @("DISMISSED", "PENDING")) {
@@ -300,13 +332,8 @@ function Get-PrReviewSnapshot {
     }
 
     $prAgentStatuses = Get-CombinedStatusContexts -ApiPrefix $apiPrefix -ApiRepository $routing.apiRepository -Sha $pr.headRefOid
-    $prAgentStatusEntry = $prAgentStatuses | Where-Object { [string]$_.context -ieq $PrAgentContext } | Select-Object -First 1
-    $prAgentStatus = [pscustomobject]@{
-        present = ($null -ne $prAgentStatusEntry)
-        state = if ($prAgentStatusEntry) { [string]$prAgentStatusEntry.state } else { "absent" }
-        description = if ($prAgentStatusEntry) { [string]$prAgentStatusEntry.description } else { "" }
-        url = if ($prAgentStatusEntry) { [string]$prAgentStatusEntry.target_url } else { "" }
-    }
+    $prAgentChecks = @(Get-PrAgentChecks -ApiPrefix $apiPrefix -ApiRepository $routing.apiRepository -Sha $pr.headRefOid -Context $PrAgentContext)
+    $prAgentStatus = Get-PrAgentSignal -Checks $prAgentChecks -Statuses @($prAgentStatuses) -Context $PrAgentContext
 
     $verifiedPr = Invoke-GhJson @(
         "pr", "view", $Number.ToString(), "--repo", $routing.selector,
@@ -386,7 +413,7 @@ function Resolve-ReviewOutcome {
     $prAgentRelevant = $prAgentPresent -or [bool]$Baseline.prAgentSeenAtBaseline
     $newFeedback = @(Get-NewFeedback -Baseline $Baseline -Snapshot $Snapshot)
     if ($newFeedback.Count -gt 0) {
-        return [pscustomobject]@{ status = "feedback"; verdict = "unknown"; prAgentRelevant = $prAgentRelevant; prAgentState = "unknown"; newFeedback = $newFeedback }
+        return [pscustomobject]@{ status = "feedback"; verdict = "unknown"; prAgentRelevant = $prAgentRelevant; prAgentState = if ($prAgentStatus) { [string]$prAgentStatus.state } else { "absent" }; newFeedback = $newFeedback }
     }
 
     if ($prAgentRelevant) {
@@ -396,6 +423,10 @@ function Resolve-ReviewOutcome {
 
         if ($prAgentStatus.state -eq "pending") {
             return [pscustomobject]@{ status = "processing"; verdict = "unknown"; prAgentRelevant = $true; prAgentState = "pending"; newFeedback = @() }
+        }
+
+        if ($prAgentStatus.state -in @("incomplete", "error")) {
+            return [pscustomobject]@{ status = "incomplete"; verdict = "unknown"; prAgentRelevant = $true; prAgentState = "incomplete"; newFeedback = @() }
         }
 
         if ($prAgentStatus.state -in @("failure", "error")) {
@@ -441,6 +472,12 @@ function Save-ReviewState {
 }
 
 function Invoke-PrReviewWatcher {
+    if ($Inspect) {
+        if ($PrNumber -le 0) { throw "-Inspect requires -PrNumber." }
+        $snapshot = Get-PrReviewSnapshot -Repository $Repository -Number $PrNumber -Hostname $Hostname -PrAgentContext $PrAgentContext
+        $snapshot | ConvertTo-Json -Depth 100
+        return
+    }
     if ($CaptureBaseline) {
         if ([string]::IsNullOrWhiteSpace($Repository)) {
             $repo = Invoke-GhJson @("repo", "view", "--json", "owner,name,url")
@@ -475,16 +512,12 @@ function Invoke-PrReviewWatcher {
             -PrAgentContext $PrAgentContext
 
         $prAgentSeenAtBaseline = $false
-        try {
             $prAgentSeenAtBaseline = Test-PrAgentSeenOnPull `
                 -ApiPrefix $apiPrefix `
                 -ApiRepository $routing.apiRepository `
                 -Number $PrNumber `
                 -Sha ([string]$snapshot.pullRequest.headSha) `
                 -Context $PrAgentContext
-        } catch {
-            $prAgentSeenAtBaseline = $false
-        }
         $state = [pscustomobject]@{
             repository = $routing.selector
             hostname = $routing.hostname
@@ -543,7 +576,7 @@ function Invoke-PrReviewWatcher {
             -Snapshot $snapshot `
             -ExpectedSha $ExpectedHeadSha
 
-        if ($outcome.status -in @("feedback", "approved", "head_changed", "pr_closed")) {
+        if ($outcome.status -in @("feedback", "approved", "incomplete", "head_changed", "pr_closed")) {
             [pscustomobject]@{
                 status = $outcome.status
                 repository = $state.repository

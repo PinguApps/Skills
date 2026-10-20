@@ -29,11 +29,11 @@ An unresolved thread is not automatically unfinished. Reviewers own resolution s
 PR Agent is a self-hosted reviewer that may or may not be running. Detect its check run named `PR Agent` or its legacy commit status with context `PR Agent` (configurable via its `CHECK_NAME`), posted on every PR head it reviews.
 
 - **Detection**: PR Agent is considered running for this PR when a `PR Agent` check run or commit status exists on the current HEAD or on any earlier commit of the pull request. If neither exists anywhere on the PR, it is not running — never wait for it, never post anything to trigger it, and skip every PR Agent rule below.
-- **Status semantics**: a check run not yet `completed`, or a legacy status of `pending`, means a review is running or about to run. A completed check with conclusion `failure`, or a legacy status of `failure`, means its inline findings are action-required; a completed successful check or legacy `success` means PR Agent has approved this exact HEAD. PR Agent picks up new PRs and pushes automatically; inspect its check output or status description for details.
-- **Feedback identification**: PR Agent posts inline review comments and replies through the repository owner's own login. Identify them by the hidden `<!-- pr-agent:v1 -->` marker (and the "PR Agent" shields badge) in the body — never by author login. Its messages are reviewer feedback, not agent responses, even though the login matches yours. The bundled watcher already includes them in new feedback.
+- **Status semantics**: queued/in-progress check runs and legacy `pending` mean running. Completed `failure` means findings; completed `success` or legacy `success` approves that exact HEAD. `neutral`, cancelled, timed-out, skipped or otherwise non-successful/non-finding conclusions and legacy `error` mean incomplete, never approved. Inspect the service error and retry state rather than changing code to appease an infrastructure failure. Missing current-head signals after earlier activity mean await automatic review. When signals coexist, any active latest signal prevents publishing; all latest signals must succeed for approval.
+- **Feedback identification**: current PR Agent comments come from its GitHub App; older versions used the owner's login. Identify reviewer messages by the hidden `<!-- pr-agent:v1 -->` marker or PR Agent badge, never by author login alone. The bundled watcher includes marked reviewer feedback even when the login matches yours.
 - **Thread handling**: apply exactly the same logic as every other reviewer — agree and fix (one focused commit, then reply on the thread with the commit SHA and verification), or push back with concrete evidence. Never resolve PR Agent threads: it owns their resolution and resolves a thread automatically once it verifies a fix against the pushed HEAD or accepts a justified decline.
-- **Memory of declined findings**: when PR Agent accepts a push-back and resolves a thread, it remembers the declined finding and will not re-report it on later reviews of the same PR. If it pushes back again, only continue the debate when you have new evidence; otherwise leave the thread awaiting its response.
-- **Superseded reviews**: PR Agent reviews the entire pull request on every push. A push during its review cancels that run and starts again on the new HEAD. Preserve the running review by following the automated-review gate below.
+- **Resolution memory**: distinguish verified fixes, false positives, intentional behaviour and accepted tradeoffs. A fixed defect may be reintroduced, and a decline applies only while its source-backed premises still hold. If PR Agent pushes back again, continue the debate only with new evidence; otherwise leave the thread awaiting its response.
+- **Superseded reviews**: the first review covers the full PR; subsequent automatic reviews inspect changes since the last completed ancestor plus context needed to verify findings. Rewritten history or incompatible saved work can require a full review. A push supersedes an active review. Preserve the running review with the automated-review gate below; do not request extra whole-PR passes by default.
 
 ## Operating rules
 
@@ -43,6 +43,7 @@ PR Agent is a self-hosted reviewer that may or may not be running. Detect its ch
 - Preserve unrelated worktree changes. Commit only changes made during this run.
 - Resolve conflicts before failed checks, and failed checks before review feedback. Later evidence may require revisiting an earlier phase.
 - Prefer the smallest correct change. Add focused tests for behavioural or regression-prone fixes.
+- After confirming a defect, search the changed implementation and directly related PR code for other instances of the demonstrated cause. Fix verified instances within the same feedback unit's commit and test the shared failure where useful. Keep unrelated pre-existing defects outside the PR; this is a focused causal search, not a repository cleanup.
 - Use exactly one focused, unsquashed commit per action-required PR feedback unit whose disposition produces a change: one review thread or one standalone PR-level feedback item. Never combine multiple units into one commit, even when they are related. A justified disagreement requires a reply but no commit.
 - Never rebase, force-push, merge the pull request on GitHub, close, approve, or mark the PR ready for review unless the user explicitly requested that separate action. The conflict-resolution workflow may merge the latest base commit into the PR branch.
 - Never resolve or unresolve a review thread. Do not call `resolveReviewThread`, `unresolveReviewThread`, or an equivalent.
@@ -57,6 +58,8 @@ PR Agent is a self-hosted reviewer that may or may not be running. Detect its ch
 This gate covers only PR Agent. Other reviewers and unrelated CI checks do not block pushes or comments through this gate; the existing CI and feedback requirements still apply.
 
 Immediately before each push or PR comment, refresh the published PR head and its `PR Agent` check runs plus any legacy `PR Agent` commit status. Inspect all checks, including optional ones, using `gh pr checks`; use paginated check-run and commit-status API results when needed to establish the exact head, provider, or latest status. Skip the gate only when PR Agent is not running for this PR. When detected, a missing current-head signal is not proof of completion; wait for its automatic review.
+
+The bundled `scripts/wait-for-pr-review.ps1 -Inspect -PrNumber <number> -Repository <host/owner/repo>` produces a fresh head-verified snapshot and one `prAgentStatus` classification for check runs and legacy statuses: `pending`, `success`, `failure`, `incomplete` or `absent`. It paginates both APIs and selects the latest same-name run per App. Treat a read/authentication failure as unknown and blocking, never as absence. Historical detection still applies when the current signal is absent. Use this classification for the gate and fallback watcher instead of reconstructing incompatible status rules.
 
 - PR Agent is active while any of its latest current-head review check runs is not `completed`, including queued or in-progress runs, or its latest current-head legacy status is `pending`.
 - While PR Agent is active, keep all fixes, commits, and reply drafts local. Never push or post any PR comment, regardless of its recipient or whether it cites a commit. Work on available feedback from other reviewers whose reviews have completed; leave PR Agent feedback queued until its review finishes.
@@ -228,11 +231,11 @@ pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber
   Set-Content -Encoding utf8 $threadSnapshot
 ```
 
-For each unresolved thread, read all paginated comments in chronological order and classify it. First identify comment authorship: PR Agent posts through the repository owner's own login, so classify every comment carrying the hidden `<!-- pr-agent:v1 -->` marker (or the "PR Agent" badge) as a PR Agent reviewer message — never as an agent response. Then classify the thread:
+For each unresolved thread, read all paginated comments in chronological order and classify it. Classify every comment carrying the hidden `<!-- pr-agent:v1 -->` marker or PR Agent badge as reviewer feedback regardless of author login. Then classify the thread:
 
 - **Copilot handoff:** if Copilot created the thread, action its feedback and reply once with the fix or reasoned decline. `pinguapps-pr-agent` verifies the reply and handles further follow-up. Never request a Copilot review or send it a reminder.
 - **Awaiting reviewer:** the latest relevant comment is an agent response in a submitted review (`pullRequestReview.state != PENDING` with non-null `submittedAt`) and nobody has replied later. Do nothing. Do not post a reminder, repeat the fix, or duplicate the response. PR Agent messages count as reviewer messages for this rule: when PR Agent replies (verification result, push-back, or resolution note), the thread is awaiting your action or is already resolved by it.
-- **Action required:** there is reviewer feedback after the agent's latest submitted response, the agent has never responded, or its latest response exists only in a pending review. PR Agent inline findings are always action-required when the thread is unresolved: agree and fix with a focused commit, or push back with evidence and let PR Agent re-evaluate.
+- **Action required:** there is reviewer feedback after the agent's latest submitted response, the agent has never responded, or its latest response exists only in a pending review. Apply this conversation-order rule to PR Agent too: an unresolved thread already awaiting its response needs no duplicate fix or reply. For newly owed feedback, agree and fix with a focused commit, or push back with evidence and let PR Agent re-evaluate.
 - **Superseded/non-actionable:** the later conversation explicitly withdraws, answers, or supersedes the point. Reply only if the thread still needs an agent acknowledgement; avoid duplicating an existing agent response. A PR Agent resolution note ("verified ... resolving this thread") on a thread it has just resolved needs no reply.
 
 Within action-required threads, identify each distinct feedback item. Judge it against the user's intent, conversation history, repository rules, linked requirements, PR scope, current code, conventions, and tests. The thread is the commit boundary: group all work required by one thread into that thread's single commit, but never include another thread's work.
@@ -360,10 +363,9 @@ After each feedback batch, including when replies remain queued:
 
    Retain queued replies after the push. Recheck the automated-review gate before each reply; if the push has started a PR Agent review, wait for it to finish. Then re-read feedback and post only still-needed replies serially with the now-visible commit SHA and verification result. Verify thread replies are submitted and refresh feedback. Apply the same gate to disagreements and replies to any other reviewer.
 
-5. After pushing, wait for the exact-HEAD `PR Agent` check run or legacy commit status when PR Agent is running. Select the wait path from its detected signal type:
+5. After pushing, wait for the exact-HEAD PR Agent result when it is running:
 
-   - **PR Agent check runs:** use the environment's PR watcher when available; inspect exact-HEAD checks and refreshed feedback on each wake. Otherwise poll these read-only signals through `gh pr checks` and the paginated check-run API every 20 seconds, bounded to 25 minutes. Apply the gate and definition of done directly. The bundled watcher reads legacy statuses only, so skip its `-Wait` invocation on this path; a successful check-run-only review with no new feedback can finish through the final audit without waiting for a helper timeout.
-   - **Legacy-status PR Agent:** use the environment's PR watcher when available; otherwise use the bundled `-Wait` command below. If PR Agent check runs appear later, switch to the check-run path. A missing legacy status or absence from the helper's result never overrides check-run detection.
+   - **PR Agent check runs or legacy statuses:** use the environment's PR watcher when available and resume the exact-head audit on each wake. Otherwise use the bundled `-Wait` command below; it handles both signal types with the same classification as `-Inspect`. A successful exact-head result with no new feedback can proceed directly to final audit.
    - **PR Agent not running:** refresh checks and feedback, then proceed to the final audit. Do not wait for an absent integration.
 
    ```powershell
@@ -378,9 +380,10 @@ After each feedback batch, including when replies remain queued:
 
    Run it as a long-lived tool call. While it runs, use only the environment's wait mechanism and remain silent unless the user interrupts. The watcher keeps repeated polling out of model context.
 
-6. Handle the selected wait path's result using the outcomes below. The bundled watcher delivers PR Agent's inline findings through `newFeedback` like every other reviewer's; on the check-run path, refresh and classify feedback using step 4. Feedback may arrive while another review is still active; use the automated-review gate to determine which feedback is eligible and whether publishing is allowed:
-   - `feedback`: fetch all feedback for context, but action only newly owed feedback (`newFeedback` IDs when using the bundled watcher). This may include inline threads (from PR Agent, Copilot, or other reviewers), PR-level feedback from any reviewer, and a synthetic `pragent_status` item when PR Agent reported `failure` or `error` without captured comments. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response. PR Agent findings follow the same agree-and-fix / push-back rules, and it will re-verify pushed fixes and resolve its threads automatically. For Copilot threads, reply once with the disposition so `pinguapps-pr-agent` can follow up; never request Copilot re-review.
-   - `approved`: the exact-HEAD `PR Agent` legacy status succeeded. Verify PR Agent check runs separately as above. Re-fetch checks, PR-level feedback, and threads once; finish only if the full definition of done still holds.
+6. Handle the selected wait path's result using the outcomes below. The bundled watcher delivers inline findings through `newFeedback` like every other reviewer's. Feedback may arrive while another review is still active; use the automated-review gate to determine which feedback is eligible and whether publishing is allowed:
+   - `feedback`: fetch all feedback for context, but action only newly owed feedback (`newFeedback` IDs when using the bundled watcher). This may include inline threads (from PR Agent, Copilot, or other reviewers), PR-level feedback from any reviewer, and a synthetic `pragent_status` item when PR Agent reported `failure` without captured comments. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response. PR Agent findings follow the same agree-and-fix / push-back rules, and it will re-verify pushed fixes and resolve its threads automatically. For Copilot threads, reply once with the disposition so `pinguapps-pr-agent` can follow up; never request Copilot re-review.
+   - `approved`: all latest exact-HEAD PR Agent signals succeeded. Re-fetch checks, PR-level feedback, and threads once; finish only if the full definition of done still holds.
+   - `incomplete`: the review ended without approval or a findings verdict. Inspect check output and retry state; wait for an already scheduled retry within the existing bounds, or report the service blocker. Do not convert this into code feedback or approval, and do not trigger a review by comment.
    - `timeout`: inspect whether a required automated reviewer has remained silent for the full 25 minutes with no review active. For a person, require one business day since PR creation or the latest agent reply, including across resumed runs. Only when the reply is essential to finish the PR, consider the single-reminder exception for eligible reviewers in the operating rules; it excludes PR Agent and Copilot. Otherwise report the wait as a blocker and do not claim readiness.
    - `head_changed`: fetch and inspect the new state. Stop when another actor's push makes continued mutation unsafe.
    - `pr_closed`: stop and report the PR state.
@@ -401,7 +404,7 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -Hostname $githubHostname
 ```
 
-Run the following wait command only on the legacy-status PR Agent path when the environment has no PR watcher:
+Run the following wait command for either signal type when the environment has no PR watcher:
 
 ```powershell
 pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
@@ -413,11 +416,13 @@ pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
   -PollSeconds 20
 ```
 
-The watcher verifies the PR head matches the expected SHA and waits for its `PR Agent` legacy status to reach `success`, `failure`, or `error` before reporting `approved` or `feedback`, unless new feedback arrives first. Check runs must be verified separately using the check-run path above.
+The watcher verifies the expected PR head and classifies current check runs plus legacy statuses before reporting approval, findings or incomplete work. New feedback may wake it before review completes; the automated-review gate still governs every publication. API errors terminate the helper rather than pretending the integration is absent.
 
-Bound convergence to five pushed review rounds or two hours overall. Stop earlier for a clean result, timeout, closure, unexpected head movement, or a genuine blocker.
+After the third pushed review round, classify remaining feedback as new regressions, repeated disagreements, or previously missed instances. Check whether the approach or requirement interpretation is causing churn. Continue only with a concrete evidence-backed plan for the remaining work; otherwise report the blocker without claiming approval. This checkpoint does not request another full review or reset the counters. Retain the hard bounds of five pushed review rounds or two hours overall. Stop earlier for a clean result, timeout, closure, unexpected head movement, or a genuine blocker.
 
 ## Final audit and response
+
+Refresh the saved PR's [review context](../create-pr/references/review-context.md) when review fixes changed behaviour, decisions, verification or recovery. Preserve the template and unrelated author content; follow the same automated-review gate before publishing this update. Record current-head verification and material gaps without duplicating the manual-test handoff. For occasional workflow assessment, record actual human interventions and approximate active minutes separately from PR Agent's model cost; elapsed waiting time is not human effort.
 
 Re-fetch rather than relying on cached state:
 

@@ -79,6 +79,8 @@ Keep the overview quick to scan; name consulted sources briefly and expand only 
 
 Map every acceptance criterion and durable constraint for every target to an implementation change or concrete verification. Plan dependencies and overlapping requirements across the supplied targets as one delivery. Confirm that the combined work can be delivered in one repository and PR; if it cannot, resolve that conflict with the user before implementation. Existing behaviour counts only after verification. If choosing a seam would create or materially change a public interface, confirm it with the user when the upstream artifacts did not already settle it.
 
+Prepare the concise [review context](../create-pr/references/review-context.md) for that combined delivery. Carry every target's criterion coverage, settled tradeoffs and exclusions into `complete-work` and the PR, with short source links and enough meaning for PR Agent to assess intent without Linear access. Preserve the full target ledger separately; the PR brief should expose material constraints without copying all discovery notes.
+
 This step is complete when the user has received the overview, every acceptance criterion has a delivery and verification path, and every material question has been answered.
 
 ## 4. Deliver through complete-work
