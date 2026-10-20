@@ -52,6 +52,8 @@ Infer the team's estimate convention from connector-exposed settings and values/
 
 Each ticket must deliver a narrow, complete, independently verifiable outcome. Prefer vertical slices across necessary layers over layer-by-layer tasks. Size agent work for one fresh context window and human work as one focused action. Include human judgement, credentials, physical action, or approval as **Human** tickets; publish them normally without `Agent`.
 
+Draft every ticket description using the [Issue description](#issue-description) format, including Human and prefactoring tickets.
+
 Before slicing, look for prefactoring that makes the requested change easier. Create prefactoring tickets first only when they have concrete, independently verifiable outcomes needed by later slices; never invent unrelated cleanup.
 
 Assign every ticket to exactly one native Linear project milestone. Reuse an existing milestone that matches the outcome; otherwise propose a new one, including for a single-ticket change. Order milestones chronologically and topologically: every prerequisite milestone must appear earlier.
@@ -72,9 +74,9 @@ If an existing milestone or issue conflicts with this order, surface it and ask 
 
 ### 4. Review with the user
 
-Present the selected primary source and the complete proposal in milestone order. For each milestone show existing/new status; for each ticket show title, existing/new status, blockers, delivered outcome, acceptance criteria, executor (`Agent` or `Human`), labels, and source provenance. Include the proposed estimate and brief rationale for every new or edited ticket, explicitly identifying changes to existing estimates and any provisional scale assumption. Explicitly show omitted or narrowed overlaps and the initial frontier of independent agent tickets.
+Present the selected primary source and the complete proposal in milestone order. For each milestone show existing/new status; for each ticket show title, existing/new status, blockers, opening user story, delivered outcome, acceptance criteria, executor (`Agent` or `Human`), labels, and source provenance. Include the proposed estimate and brief rationale for every new or edited ticket, explicitly identifying changes to existing estimates and any provisional scale assumption. Explicitly show omitted or narrowed overlaps and the initial frontier of independent agent tickets.
 
-Ask the user to approve milestone names/order, ticket order, granularity, dependencies, overlap decisions, criteria, labels, applicable estimates, provenance, and parallel frontier. Do not publish until explicitly approved.
+Ask the user to approve milestone names/order, ticket order, granularity, user stories, dependencies, overlap decisions, criteria, labels, applicable estimates, provenance, and parallel frontier. Do not publish until explicitly approved.
 
 ### 5. Prepare Linear metadata
 
@@ -101,11 +103,17 @@ Use Linear's native milestone/issue reordering capability when available. Otherw
 
 Do not assign, delegate, or add issues to a cycle unless asked. Re-read saved milestone names and issue titles against the shared numbering rules, including matching prefixes, uniqueness and approved order. For newly created issues, verify milestone assignment, title, team, project, Backlog state, labels, and blockers. For reused issues, verify identity and approved mutations without normalizing unapproved metadata. Confirm new agent tickets have `Agent`, new human tickets do not, and every newly created or explicitly approved blocker is earlier. Correct in-scope mismatches before reporting identifiers and URLs.
 
+Re-read every newly created or explicitly approved edited description and verify it starts with the approved user story and meets the [Issue description](#issue-description) rules. Leave reused descriptions without approved edits untouched; surface any missing or unclear opening story for approval before changing it.
+
 End with plain text `Milestone order: <first> → <second> → <third>` followed by issue identifiers/URLs in that same milestone and ascending-number order. Then write `Parallel frontier: <issues>` listing unblocked `Agent` tickets that separate agents can implement concurrently, or `Parallel frontier: none`.
 
 ## Issue description
 
+Every ticket description must start with a user story explaining who needs what and why, in everyday language understandable to someone without a technical background. Keep it to one or two short sentences. Use `As a <person>, I want <outcome> so that <benefit>` when it reads naturally; use a second sentence or depart from that pattern when it makes the story clearer. Focus on the person's need and benefit, using familiar words and explaining any essential specialist term. Put implementation details in the sections below.
+
 ```md
+<Brief, plain-language user story.>
+
 ## What to build
 <End-to-end outcome from the user's perspective.>
 ## Acceptance criteria
