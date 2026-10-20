@@ -55,11 +55,12 @@ The skill:
 
 ### [implement-task-linear](skills/implement-task-linear/)
 
-Wraps `complete-work` to deliver one Linear issue through PR review and CI.
+Wraps `complete-work` to deliver one or more supplied Linear issues together in a
+single PR through review and CI.
 
 The skill:
 
-- Accepts a Linear issue identifier or asks for one.
+- Accepts Linear issue identifiers or URLs, or asks for them.
 - Gives a short bullet plan and resolves material questions before implementation.
 - Follows the originating spec and reads optional `PLAN.md`, `CONTEXT.md`,
   `CONTEXT-MAP.md`, and applicable ADRs when present.
@@ -67,7 +68,11 @@ The skill:
 - Implements and verifies every requirement and acceptance criterion.
 - Uses `complete-work` for branch setup, commits, PR creation, and review completion.
 - Requests user help only when needed, with precise setup and resumption steps.
-- Restricts all Linear access and mutations to the issue's exact team and project.
+- Moves every supplied issue to In Progress when implementation starts and In Review
+  when the complete PR is created, preserving terminal and further-along states.
+- Includes every supplied issue in PR closing references for automatic linking and
+  closure on merge through the existing GitHub–Linear integration.
+- Restricts related Linear access and mutations to each issue's exact team and project.
 - Creates or updates related issues when justified, including moving fully covered
   issues to In Review.
 - Reports repository drift, verification results, and every Linear mutation.
