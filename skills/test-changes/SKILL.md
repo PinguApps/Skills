@@ -77,3 +77,5 @@ Omit empty sections.
 ```
 
 Keep the handoff concise, but include every changed test surface. Do not repeat automated test results unless they help the user interpret a manual test.
+
+State material verification gaps and the recovery action for runtime, data or configuration changes. Identify irreversible steps where applicable; avoid inventing a rollback procedure. After review fixes, refresh affected expectations and commands against the final change. Follow the caller's existing review brief rather than adding a second copy of it.
