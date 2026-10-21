@@ -1,0 +1,4 @@
+# PR Agent review scope; this policy does not affect Git tracking.
+# No exclusions are currently justified by the tracked repository contents.
+# Keep skills, scripts, tests, configuration and lockfiles reviewable.
+# Use $pragent-ignore to assess future generated or unreviewable outputs.
