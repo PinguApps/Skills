@@ -1,5 +1,7 @@
 # Linear milestone and issue numbering
 
+Shared naming rules owned by `linear-ticket`; read these before allocating or changing milestone names or issue titles.
+
 Use these names throughout a project:
 
 ```text

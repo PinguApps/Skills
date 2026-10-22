@@ -1,0 +1,3 @@
+interface:
+  display_name: "Linear Ticket"
+  short_description: "Create and update Linear tickets with shared rules"

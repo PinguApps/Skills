@@ -10,6 +10,8 @@ Implement every supplied Linear issue together on one branch and in one PR. The 
 
 Use this skill as a Linear-specific wrapper around [$complete-work](../complete-work/SKILL.md). Read that skill before planning delivery; it owns branch setup, incremental commits, verification, push, PR creation through `create-pr`, and review/CI convergence through `finish-pr`. If it or a required dependency is unavailable, report the missing prerequisite and resolve it before implementation rather than substituting a partial workflow. Invoking this skill authorizes that full workflow; leave merging, deployment, and release to a separate user request.
 
+Read and apply [$linear-ticket](../linear-ticket/SKILL.md) before any ticket draft or mutation. Pass each target's verified team/project boundary and this workflow's scoped authorization; it owns ticket content, numbering, metadata, estimates, native writes and read-back verification.
+
 Begin with a few short, precise bullets explaining the intended discovery and delivery before taking action. Steps 1–3 are read-only discovery and clarification: use them to produce an informed plan before branch creation, repository edits, or Linear mutations.
 
 ## 1. Resolve the target and Linear boundary
@@ -23,15 +25,11 @@ Explicitly supplied targets may have different teams or projects; keep their bou
 - query with both recorded IDs, then verify both IDs on every result;
 - discover parents, sub-issues, blockers, duplicates, and related issues through scoped queries rather than directly fetching an unverified identifier;
 - treat a cross-scope relation as unavailable context and report only its existence;
-- create issues only with both recorded IDs.
+- pass both recorded IDs to `linear-ticket` for authorized writes.
 
 Resolve each target team's relevant workflow states, especially In Progress, In Review, Backlog, and any blocked state, by ID. Report ambiguity instead of guessing.
 
-Use the Linear connector for estimate discovery and writes; do not use browser automation or require team-settings access. Infer the team's convention from available settings, the target's estimate value/label, and comparable issues within the recorded team/project boundary. Enough evidence to choose an appropriate value is sufficient; a complete scale or inherited-settings audit is unnecessary. Missing estimates do not mean estimation is disabled.
-
-Before creating or editing a ticket, including status changes and related follow-ups, assess its full scope: implementation, verification, complexity and uncertainty. Retain an existing estimate only when defensible. Save the assessed estimate in the native field on each ticket authorized for mutation and re-read it to verify. If the project has no estimate examples or exposed scale, provisionally size the actual work on Fibonacci values (1, 2, 3, 5, 8), disclose that assumption and still attempt the write. Use the returned value/label to infer the team's scale, adjust if needed and apply that convention to subsequent work. A successful read-back establishes the saved value, not the team's entire allowed range; a comment alone is insufficient.
-
-If Linear explicitly rejects estimation as disabled, record that result for the team and continue without estimate writes; do not enable it. An invalid-value error instead informs scale correction. Permission, transport or unrelated validation failures are access/operation problems, not evidence that estimates are off. Re-read after an uncertain write before retrying. Missing settings alone must not block implementation or routine status changes; report any unresolved estimate-write problem separately.
+Use `linear-ticket`'s estimate discovery during this read-only phase. Carry the assessed estimates and rationale into every authorized target or related-issue update, including status changes.
 
 This step is complete when every supplied target is recorded with its acceptance criteria, team/project IDs, and usable workflow states.
 
@@ -87,7 +85,7 @@ This step is complete when the user has received the overview, every acceptance 
 
 Invoke `$complete-work` once for the combined scope, carrying every target's full requirements, original user story when available, acceptance criteria, provenance, durable constraints, agreed plan, testing seams, and user decisions. Follow its complete workflow, including [create-pr's user story rules](../create-pr/SKILL.md): require a brief story in everyday language that readers without a technical background can understand, adapting the original wording as needed. Keep Git and PR procedures in `complete-work`. Its branch setup follows the read-only discovery and clarification above; reconcile the plan against the freshly fetched base before editing, and resolve any new material uncertainty with the user.
 
-When implementation of the combined work starts, move every target to its team's resolved In Progress state, unless it is already further along or the user asked to preserve its status. Do this for all targets at the start, including those scheduled for later slices. Apply the estimate and team/project rules to this and every later Linear mutation. Re-read each changed issue to verify its saved status and update the ledger; re-read after an uncertain write before retrying, and report any failed transition explicitly.
+When implementation of the combined work starts, move every target to its team's resolved In Progress state, unless it is already further along or the user asked to preserve its status. Do this for all targets at the start, including those scheduled for later slices. Perform this and every later ticket write through `linear-ticket`, then record its verified result or failure in the ledger.
 
 Within `complete-work`, implement in verified vertical slices, working red then green at the agreed public seams for testable behaviour. Include required documentation, schemas, migrations, generated artifacts, and configuration. Before its PR-publication gate, audit the complete diff against repository standards, applicable ADRs, every criterion of every supplied target, and originating-spec constraints; fix findings and rerun affected checks. Required target work stays in this single change.
 
@@ -124,7 +122,7 @@ Run this reconciliation at PR creation as directed above, and again after `compl
 When every required outcome across all supplied targets is implemented and verified and the shared PR exists, for each target:
 
 1. Add or update a concise target comment linking the shared PR and mapping that target's acceptance criteria to implementation and verification evidence, including current CI/review status and any blocker reported by `finish-pr`.
-2. Move the target to its team's resolved In Review state only when its current state is earlier. Re-read to verify the saved status and record it in the ledger; report any failed transition explicitly.
+2. Through `linear-ticket`, move the target to its team's resolved In Review state only when its current state is earlier, then record the verified result in the ledger.
 
 Preserve completed, cancelled, archived, In Review, and other terminal or further-along states. When implementation or required verification is blocked for any target, keep the combined PR unpublished, leave started targets In Progress or use the resolved blocked state where applicable, and record the unmet criterion, evidence, and dependency. Distinguish implementation readiness from incomplete PR review or CI; report full workflow completion only when `finish-pr`'s definition of done is met. Leave completion transitions after merge to the configured GitHub–Linear automation.
 
@@ -132,11 +130,7 @@ Preserve completed, cancelled, archived, In Review, and other terminal or furthe
 
 The user authorizes minimal related-issue mutations inside the relevant target's recorded team/project boundary when implementation evidence justifies them.
 
-Create a follow-up only when it is concrete, independently actionable, genuinely outside all supplied targets, and absent after a scoped overlap search. Create it in the originating target's team/project, normally in Backlog, with observable acceptance criteria and a native relation to that target when supported. A prerequisite that blocks completion must be related and reported as a blocker rather than used to declare the target complete.
-
-Before naming or creating a follow-up, read and apply [Linear milestone and issue numbering](../to-linear/references/issue-numbering.md). Assign its native milestone and matching `MM-DDD - Issue title`, accounting for existing numbers. Obtain approval for any required milestone creation or existing-name/title changes; preserve the target's and related issues' titles during routine implementation, status and estimate updates. Re-read the saved follow-up title and milestone assignment to verify the prefix.
-
-Update an existing related issue only when repository evidence makes its description, relations, or status stale. Before treating it as satisfied, read every acceptance criterion and verify complete coverage. Move it to In Review only from an earlier state; preserve terminal and further-along states. Partial or title-only overlap does not justify a transition.
+Use `linear-ticket` for justified follow-up creation and evidence-backed related-issue updates, passing the originating target and its boundary. Its overlap, criteria-coverage, provenance, milestone/numbering, estimate and verification rules apply. This workflow authorizes minimal related edits and follow-ups outside all supplied targets; milestone creation and existing-name/title changes still require explicit approval. Required target work remains in the combined implementation, and unmet prerequisites remain blockers. Related issues verified as fully covered may move to In Review from an earlier state through the same ticket procedure.
 
 ## Handoff
 

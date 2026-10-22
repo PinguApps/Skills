@@ -79,6 +79,18 @@ The skill:
   issues to In Review.
 - Reports repository drift, verification results, and every Linear mutation.
 
+### [linear-ticket](skills/linear-ticket/)
+
+Creates or updates one Linear ticket, with shared rules used by the other Linear
+workflows.
+
+The skill:
+
+- Owns ticket descriptions, milestone numbering, labels and native relations.
+- Sizes work and verifies native estimates, including safe recovery from failed writes.
+- Preserves each calling workflow's scope and authorization.
+- Re-reads saved fields before reporting success.
+
 ### [plan-cycle](skills/plan-cycle/)
 
 Fills the next Linear cycle or tops up the current cycle from an existing backlog.
@@ -118,7 +130,7 @@ The skill:
 - Names milestones `00 - Name`, `01 - Name` and issues `00-000 - Title`, `01-000 - Title`.
 - Captures acceptance criteria, executor, labels, and native dependencies.
 - Requires review and explicit approval before publishing.
-- Publishes tickets to the backlog and verifies their metadata and ordering.
+- Uses `linear-ticket` to publish and verify individual tickets, then checks the full backlog order.
 
 Based on Matt Pocock's [to-tickets](https://github.com/mattpocock/skills/tree/main/skills/engineering/to-tickets) skill.
 

@@ -1,0 +1,13 @@
+# Native estimates
+
+Use the Linear connector for discovery, native estimate writes and read-back. Infer the team's convention from exposed settings and estimate values/labels on comparable issues within the authorized team/project. Use enough evidence to size the work; browser automation, team-settings access and a complete scale/inheritance audit are unnecessary. Keep different teams' conventions separate. Missing estimates do not mean estimation is disabled.
+
+Assess full scope, including implementation, verification, complexity and uncertainty. Retain an existing estimate only when defensible, subject to a caller's narrower preservation rule. If scope is insufficient for an honest estimate, report the missing input; an autonomous delivery loop skips that ticket. With no examples or exposed scale, provisionally size the actual work on Fibonacci values (1, 2, 3, 5, 8) and disclose the assumption and rationale. Do not create probe tickets or mutate unrelated issues to discover settings.
+
+Keep discovery read-only until publication or the scoped edit is authorized. Attempt the assessed native estimate on every new or authorized edited ticket, including status or relation changes, even when no project issue is estimated. Respect a caller that authorizes only missing estimates or requested reassessments. A description or comment alone does not save an estimate.
+
+Re-read each saved value/label, infer the convention and use it for subsequent tickets. A successful read-back verifies that value, not the full allowed range. Correct a provisional mapping when evidence supports it. Obtain approval if correction materially changes agreed sizing; a cycle planner must rebudget before adding more work when the correction changes workload materially.
+
+Only an explicit disabled-estimation rejection means estimates are off: record it once per team and continue authorized non-estimate work without estimate writes. Never enable estimates or change team settings. Invalid-value errors inform scale correction; permission, transport and unrelated validation errors remain operation problems.
+
+After any rejected or uncertain combined write, re-read issue existence and saved fields before retrying. Apply authorized non-estimate changes separately when safe, verifying status or cycle membership before continuing. Never duplicate a ticket because its estimate failed. Missing settings alone must not block publication, implementation, scheduling or dispatch once the relevant non-estimate mutation is verified. Report unresolved estimate failures separately from that mutation's outcome, with the saved estimate and rationale or specific disabled/error result.
