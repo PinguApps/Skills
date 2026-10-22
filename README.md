@@ -84,7 +84,7 @@ Fills the next Linear cycle or tops up the current cycle from an existing backlo
 The skill:
 
 - Uses an explicit destination or derives an unambiguous one from the conversation.
-- Budgets AI-assisted work against remaining time, existing commitments and available cycle history.
+- Includes Pingu's weekends and budgets AI-assisted work from recent cycles, current-cycle delivery over elapsed time, and unfinished commitments.
 - Selects complete outcomes with real native dependencies and useful parallel work.
 - Adds issues through the native cycle field and verifies membership and preserved metadata.
 
