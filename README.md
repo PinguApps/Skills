@@ -17,12 +17,14 @@ The skill:
 
 ### [loop-work](skills/loop-work/)
 
-Loops through a Linear team's project backlog using isolated subagents and
+Loops through a Linear team's project backlog using isolated T3 worker threads and
 `complete-work`, merging verified PRs and reassessing newly unblocked work.
 
 The skill:
 
-- Requires the Linear team/project, parallel subagent limit, and ticket limit (or no max).
+- Requires the Linear team/project, parallel thread limit, and ticket limit (or no max).
+- Controls each worker's worktree, result delivery, repair and shutdown through T3.
+- Supports concurrency beyond native subagent slots; accepts the old limit parameter as an alias.
 - Selects independently actionable tickets that need no user input.
 - Uses fixed `agent/` branches derived from Linear and limits outstanding reservations.
 - Leaves In Review and Done transitions to verified GitHub–Linear automation.
