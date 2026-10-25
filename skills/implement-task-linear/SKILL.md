@@ -91,7 +91,7 @@ Within `complete-work`, implement in verified vertical slices, working red then 
 
 ### Link every target and update review states at PR creation
 
-Pass all target identifiers to `create-pr` and require a closing line in the PR description that mentions every supplied target, for example:
+Pass all target identifiers, plus any related tickets that informed the task and are fully completed by the PR, to `create-pr` for its title-prefix rule. Also require a closing line in the PR description that mentions every supplied target, for example:
 
 ```text
 Fixes ENG-123, ENG-124, ENG-125, ENG-126, and ENG-127
@@ -99,7 +99,7 @@ Fixes ENG-123, ENG-124, ENG-125, ENG-126, and ENG-127
 
 Use the actual identifiers from the ledger, including a single identifier for a single target. The existing GitHub–Linear integration uses these closing references to link the PR and close the tickets automatically when it merges; leave that integration configuration unchanged and leave tickets open until merge.
 
-Immediately after the complete PR is created or reused, read back its saved description and verify that the closing references include every supplied target. Correct any omission, then run step 5's PR comment and In Review transitions for every target before continuing to `finish-pr`. Review or CI may still be pending at this point; their completion is not a prerequisite for these transitions.
+Immediately after the complete PR is created or reused, read back its saved title and description. Verify the title follows `create-pr`'s ticket-prefix rule and the closing references include every supplied target. Correct any omission, then run step 5's PR comment and In Review transitions for every target before continuing to `finish-pr`. Review or CI may still be pending at this point; their completion is not a prerequisite for these transitions.
 
 ### Collaborate when user input is needed
 

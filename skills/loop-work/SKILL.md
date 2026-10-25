@@ -83,7 +83,7 @@ A worker result must identify either a completed `complete-work` PR with evidenc
 
 Before each merge, independently re-fetch and verify:
 
-- The issue still belongs to the selected scope and its requirements match the delivered work; the PR links the exact issue through the configured integration.
+- The issue still belongs to the selected scope and its requirements match the delivered work; the PR links the exact issue through the configured integration and its saved title follows [create-pr's Linear ticket title-prefix rule](../create-pr/SKILL.md).
 - The PR targets the intended repository/default branch and has the expected owned head, complete acceptance coverage, and recorded verification evidence.
 - No worker run, queued repair, watcher-driven follow-up, or nested task can still change that PR. Register the PR in the coordinator thread as well as the worker thread when host linking is available.
 - The PR is open, non-draft, conflict-free against the latest base, and permitted by branch protections. All applicable CI/checks on the exact current head are successful or legitimately skipped; none remain queued, pending, failed, cancelled, or unknown.

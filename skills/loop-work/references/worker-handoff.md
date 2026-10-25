@@ -6,6 +6,8 @@ Read when launching or repairing a ticket. Supply actual values and requirement 
 Complete this one ticket using $complete-work at <resolved skill path>.
 Follow its required skills through verified implementation, PR creation, CI,
 and finish-pr review convergence. Leave the PR open for the coordinator to merge.
+Follow create-pr's Linear ticket title-prefix rule, carrying the supplied issue
+identifier and any other qualifying tickets into PR creation or reuse.
 Follow create-pr's user story rules for the PR description: require a brief story
 in everyday language that readers without a technical background can understand,
 adapting any original wording as needed.
