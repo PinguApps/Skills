@@ -39,7 +39,9 @@ The skill:
 
 - Selects one change category and one release level in the standard checkbox block.
 - Preserves template structure and appends additional verification or review sections.
-- Reuses an existing PR and verifies the saved description and target.
+- Starts the PR title with the IDs of Linear tickets that informed the task and
+  are fully completed by the PR.
+- Reuses an existing PR and verifies the saved title, description and target.
 
 ### [finish-pr](skills/finish-pr/)
 

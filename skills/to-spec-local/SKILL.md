@@ -22,7 +22,7 @@ Run the upstream synthesis process with these explicit changes:
 - Reuse testing seams already explicitly agreed in the conversation. If a genuinely new seam needs the upstream confirmation, confirm that seam before finalizing; do not repeat an accepted discussion or reopen the requirements interview.
 - Leave issue creation, Linear destination selection, labels, milestones, estimates and cycles to a later `to-linear` invocation. This wrapper does not invoke it.
 
-Retain upstream requirements for repository exploration, domain vocabulary, relevant ADRs, user-focused synthesis, extensive numbered user stories, implementation/testing decisions and scope boundaries. Apply its actual spec template rather than maintaining another copy here. Commit, push or open a PR only when separately authorized by the surrounding task.
+Retain upstream requirements for repository exploration, domain vocabulary, relevant ADRs, user-focused synthesis, extensive numbered user stories, implementation/testing decisions and scope boundaries. Apply its actual spec template rather than maintaining another copy here. Commit, push or open a PR only when separately authorized by the surrounding task. For an authorized PR, follow [create-pr](../create-pr/SKILL.md), including its Linear ticket title-prefix rule.
 
 ## Produce one authoritative local source
 
