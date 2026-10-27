@@ -1,0 +1,28 @@
+{
+  "documentationExtensions": [".md", ".markdown", ".mdown", ".mkd", ".json", ".jsonc", ".json5"],
+  "bands": {
+    "code": [["small", 500, 10], ["standard", 4000, 60], ["large", 10000, 120]],
+    "documentation": [["small", 2000, 30], ["standard", 20000, 150]]
+  },
+  "roundCaps": {"normal": 3, "securityOrState": 5},
+  "models": {
+    "haiku": {"id": "openrouter/anthropic/claude-haiku-5.5", "efforts": ["medium", "high"]},
+    "glm": {"id": "openrouter/z-ai/glm-5.3-flash", "efforts": ["high"]},
+    "ling": {"id": "openrouter/inclusionai/ling-3.1-flash", "efforts": ["thinking"]},
+    "minimax": {"id": "openrouter/minimax/minimax-m3.1-flash", "efforts": ["medium", "high"]},
+    "deepseek": {"id": "openrouter/deepseek/deepseek-v4.1-flash-1017", "efforts": ["high"]},
+    "mimo": {"id": "openrouter/xiaomi/mimo-v2.6-flash", "efforts": ["thinking"]},
+    "step": {"id": "openrouter/stepfun/step-5-preview", "efforts": ["medium"]},
+    "sonnet": {"id": "openrouter/anthropic/claude-sonnet-5.5", "efforts": ["high"]},
+    "kimi": {"id": "openrouter/moonshotai/kimi-k3.1-pro", "efforts": ["high"]}
+  },
+  "routes": [
+    {"category": "security", "reviewers": [["haiku", "high"], ["mimo", "thinking"]], "escalation": ["sonnet", "high"]},
+    {"category": "state", "reviewers": [["deepseek", "high"], ["minimax", "high"]], "escalation": ["kimi", "high"]},
+    {"category": "compatibility", "reviewers": [["deepseek", "high"], ["haiku", "high"]], "escalation": ["sonnet", "high"]},
+    {"category": "agent-policy", "reviewers": [["haiku", "high"], ["minimax", "high"]], "escalation": ["sonnet", "high"]},
+    {"category": "ui", "reviewers": [["haiku", "high"], ["minimax", "medium"]], "escalation": ["sonnet", "high"]},
+    {"category": "general", "reviewers": [["haiku", "high"], ["minimax", "medium"]], "escalation": ["sonnet", "high"]},
+    {"category": "documentation", "reviewers": [["haiku", "medium"], ["ling", "thinking"]], "escalation": ["sonnet", "high"]}
+  ]
+}
