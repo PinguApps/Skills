@@ -40,12 +40,14 @@ test('owned review gets only the source tool; another session keeps its tools', 
     const config = join(state, 'runtime.json');
     writeFileSync(config, JSON.stringify({state, runs: [run]}));
     const hooks = new Map();
+    let sourceTool;
     await runtime(config).setup({app: {version: 'test'},
       model: {transform: async callback => callback({list: () => []}), list: async () => []},
       session: {hook: async (name, callback) => hooks.set(name, callback)},
-      tool: {transform: async callback => callback({add() {}}),
+      tool: {transform: async callback => callback({add(tool) { sourceTool = tool; }}),
         hook: async (name, callback) => hooks.set('tool.' + name, callback)},
     });
+    assert.equal(sourceTool.options.codemode, false, 'source reader must be directly visible, not hidden in Code Mode');
     await hooks.get('prompt')({sessionID: 'owned', prompt: {text: 'Wrapper\n' + run.marker + '\nReview'}});
     const event = {sessionID: 'owned', model: {providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5', variant: 'high'},
       tools: {shell: {}, read: {}, pingu_review_source: {}}};

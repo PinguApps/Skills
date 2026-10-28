@@ -119,6 +119,7 @@ export default function runtime(configPath) {
       });
       await ctx.tool.transform(editor => editor.add({
         name: 'pingu_review_source',
+        options: { codemode: false },
         description: 'Read only the assigned committed review diff, filtered source or search. Never use another tool for source.',
         input: { type: 'object', properties: {
           operation: { type: 'string', enum: ['diff', 'read', 'search'] },
