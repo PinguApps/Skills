@@ -10,7 +10,10 @@ exact `model`/`effort`, `base`, `from`, `head`, absolute `scope` manifest and su
 `R<n>: <model>` title. Do not quote another run marker as its own
 dedicated line in a later brief.
 
-With no live reviewer, prepare the run-local runtime:
+Before **every dispatch batch**, record all new runs, including new rounds and
+escalations, then prepare with no live reviewer. Record terminal T3 task statuses
+for previously dispatched runs before preparing. Use fresh run IDs/markers for
+retried launches; do not recycle a marker into another child.
 
 ```powershell
 & <absolute-python> <skill>/scripts/review_runtime.py --ledger <ledger> prepare
@@ -21,22 +24,31 @@ The helper freezes the trusted reader/policy/runtime in the external run directo
 and adds one uniquely named loader under the worktree's `.opencode/plugins/`.
 It does not edit existing configuration or global settings. Retain its ownership
 receipt. Never stage this temporary loader; it is operational state, not task
-source. Verify the API reports `pingu.pre-pr-review` loaded for the actual location
+source. It adds only its unique loader filename to Git's `info/exclude`, preserving
+other entries; removal drops that owned rule. Verify the API reports
+`pingu.pre-pr-review` loaded for the actual location
 and the external `runtime-ready.json` records the running version before launch.
 A first location lookup may return while plugins load; make one follow-up lookup
 after setup and require `state.status: active` for this loader. Verify the ready
 file's runtime digest matches `runtime.json` and its location matches this worktree.
-A stale file alone is not proof. Preserve and investigate existing loaders/config;
+A stale file alone is not proof. Require `registeredRuns` to contain every new run
+and `protectedModels` to cover its model. New registrations change the loader digest
+so OpenCode reloads and writes a fresh ready receipt. Preserve and investigate existing loaders/config;
 never overwrite a file owned by another run. Do not refresh helper copies while
 reviewers are live. After implementation changes to the runtime itself, remove the
 owned loader, prepare again and reverify the loaded plugin.
 
-The plugin recognises only registered exact markers, binds their OpenCode sessions
+The marker field is the complete single line `Review-Run-ID: <opaque>`, not a bare
+ID. Malformed or unknown marker-bearing prompts fail before inference. The plugin
+recognises only registered exact markers, binds their OpenCode sessions
 durably, and leaves unrelated sessions unchanged. It exposes only
 `pingu_review_source` to owned review requests and rejects other tool execution.
 The source tool calls the frozen reader without a shell and fixes the worktree,
 head and manifest. The model can choose `diff`, `read`, `search`, allowed historical
-ref and pagination. Give repository conventions explicitly in the brief or through
+ref and pagination. Reads require a path; searches require a nonempty pattern.
+Searches batch at most 200 allowed files/8 MB and request a narrower path prefix
+when those limits are exceeded. Read larger individual context files in pages.
+Give repository conventions explicitly in the brief or through
 that reader; ambient file instructions and prompt attachments are not review input.
 
 The HTTP hook leaves response bytes unchanged while recording only generation ID,
@@ -45,6 +57,9 @@ numeric usage, model/effort, request kind, session ID and completion metadata in
 Title generation uses the assigned title without an inference call. Other charged
 flows must use the assigned model/variant; an unexpected auxiliary model blocks.
 OpenRouter selects its hosting endpoint; the hook rejects hosting-provider pins.
+Each physical request is correlated by its exact native Request object, including
+overlapping summaries and retries. Unknown request kinds and auxiliary models
+block the review; their failure evidence remains in the ledger for investigation.
 
 ## Automatic compaction below pricing tiers
 
@@ -54,7 +69,8 @@ applicable configuration before dispatch; incompatible overrides are a prerequis
 to resolve, never silently accept costly requests. The runtime examines selected
 models' current catalogue context-price tiers. For the first increase, it lowers
 the effective input limit to 80% of that tier boundary using a temporary location
-model transform. Flat-price models retain their full input window. Nothing is
+model transform for all accepted models, including later escalation assignments.
+Flat-price models retain their full input window. Nothing is
 written to global configuration, and unloading the runtime removes the transform.
 
 For Haiku's 100,000-token tier, this sets an 80,000-token effective input limit.
@@ -73,9 +89,15 @@ would still cost money. Catalogue tiers can change; inspect live metadata each r
 
 On T3 completion, save `task_status`'s structured result outside the repo, collect
 usage serially with `review_usage.py collect --task-state <file>`, and audit the
-guard/source transcript plus journal. Missing/unfinished transport evidence is
+guard/source transcript plus journal. A terminal task/session with final numeric
+provider usage, a generation ID and successful response for every physical request
+has complete billing evidence even when OpenCode cancels after that final usage
+event instead of draining to EOF. Missing/unfinished transport evidence is
 explicitly unavailable; retain it rather than manufacturing a zero or using an
-estimate as billed spend. The collector separately preserves OpenCode's estimate.
+estimate as billed spend. `--allow-estimate` retains incomplete provider evidence
+separately and uses only a labelled OpenCode estimate when available; guard breaches
+and foreign-model/session evidence still fail. Billed and estimated subtotals are
+reported separately. Neither estimate recovery nor quota supplies review approval.
 
 After all reviewer tasks are terminal, results/accounting are saved and children
 are settled, remove only this run's loader:

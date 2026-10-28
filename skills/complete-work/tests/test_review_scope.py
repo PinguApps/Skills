@@ -185,6 +185,25 @@ class ReviewScopeTests(unittest.TestCase):
             self.assertEqual({'ui', 'documentation'}, set(result['route']['selectedCategories']))
             self.assertEqual({'minimax', 'haiku'}, {pair[0] for pair in result['route']['reviewers']})
 
+    def test_search_is_bounded_batched_and_ignores_binary_content(self):
+        for i in range(201):
+            self.write(f'large/{i}.cs', 'ordinary\n')
+        self.write('.pragentignore', 'private/\n')
+        self.write('private/secret.cs', 'DO_NOT_LEAK\n')
+        self.write('small/App.cs', 'VISIBLE\n')
+        self.write('small/binary.dat', b'\x00DO_NOT_LEAK')
+        self.write('manual.svg', '<svg>DO_NOT_LEAK</svg>')
+        head = self.save()
+        scope = review.Scope(self.repo, head)
+        self.assertTrue(scope.search(head, 'VISIBLE')['needsNarrowerPrefix'])
+        result = scope.search(head, 'DO_NOT_LEAK|VISIBLE', 'small')
+        self.assertEqual(['VISIBLE'], [hit['text'] for hit in result['matches']])
+        self.assertEqual(['small/binary.dat'], result['needsExclusionAssessment'])
+        self.assertTrue(scope.read('manual.svg', head)['needsExclusionAssessment'])
+        self.assertTrue(scope.read('private/secret.cs', head)['excluded'])
+        with self.assertRaisesRegex(ValueError, 'nonempty'):
+            scope.search(head, '')
+
 
 class ReviewRoutingTests(unittest.TestCase):
     def manifest(self, *rows):

@@ -56,7 +56,7 @@ class UsageTests(unittest.TestCase):
     def test_live_v2_correlation_and_pagination_are_not_guessed(self):
         root = str(Path.cwd())
         session = {'id': 'exact', 'location': {'directory': root}}
-        user = {'type': 'user', 'text': 'Wrapper\nReview-Run-ID: unique\nTask', 'time': {'created': 1}}
+        user = {'type': 'user', 'text': 'Wrapper\r\nReview-Run-ID: unique\r\nTask', 'time': {'created': 1}}
         responses = [
             {'data': [session], 'cursor': {'next': 'page2'}},
             {'data': [user], 'cursor': {}},
@@ -75,7 +75,8 @@ class UsageTests(unittest.TestCase):
         common = {'requestID': 'call', 'sessionID': 'session', **run}
         records = [
             {'event': 'guard', 'tools': ['pingu_review_source']},
-            {**common, 'event': 'request'},
+            {**common, 'event': 'request', 'kind': 'primary'},
+            {**common, 'event': 'response', 'status': 200},
             {**common, 'event': 'usage', 'generationID': 'gen-exact', 'usage': {
                 'cost': .12345, 'prompt_tokens': 100, 'completion_tokens': 40,
                 'completion_tokens_details': {'reasoning_tokens': 25},
@@ -88,7 +89,59 @@ class UsageTests(unittest.TestCase):
         self.assertEqual('0.12345', result['costUSD'])
         self.assertEqual(['gen-exact'], result['generationIDs'])
         self.assertTrue(result['billed'])
-        self.assertEqual(['call'], usage.billed_usage(records[:-1], run, 'session')['missingUsageMessageIDs'])
+        self.assertEqual(result, usage.billed_usage(records[:-1], run, 'session'), 'Final provider usage is authoritative without stream EOF')
+        with self.assertRaises(usage.IncompleteUsage):
+            usage.billed_usage(records[:-2], run, 'session')
+
+    def test_partial_or_response_less_capture_uses_only_labelled_estimate(self):
+        run = {'model': 'openrouter/anthropic/claude-haiku-5.5', 'effort': 'high'}
+        estimate = usage.reported_usage([self.message('one')], run['model'], run['effort'])
+        records = [{'event': 'bound', 'sessionID': 'session'},
+                   {'event': 'guard', 'sessionID': 'session', 'tools': ['pingu_review_source']}]
+        usage.collect_usage(run, records, 'session', estimate, True)
+        self.assertFalse(run['usage']['billed'])
+        self.assertTrue(run['accountingIncomplete'])
+        self.assertIn('no-transport-requests', run['partialBilledUsage']['missingUsageMessageIDs'])
+        with self.assertRaises(usage.IncompleteUsage):
+            usage.collect_usage(run, records, 'session', estimate, False)
+        self.assertIsNone(run['usage'])
+        records.append({'event': 'blocked-tool', 'tool': 'read'})
+        with self.assertRaisesRegex(ValueError, 'guard breach'):
+            usage.collect_usage(run, records, 'session', estimate, True)
+        with self.assertRaisesRegex(ValueError, 'different review session'):
+            usage.collect_usage(run, [{'event': 'bound', 'sessionID': 'foreign'}], 'session', estimate, True)
+
+    def test_route_assignment_and_fresh_marker_are_enforced(self):
+        ledger = {'runs': [], 'route': {'reviewers': [['haiku', 'high']], 'escalationByCategory': {'general': [['sonnet', 'high']]}}}
+        run = {'id': 'one', 'marker': 'Review-Run-ID: unique', 'model': 'openrouter/anthropic/claude-haiku-5.5', 'effort': 'high'}
+        usage.validate_assignment(ledger, run)
+        with self.assertRaisesRegex(ValueError, 'complete Review-Run-ID'):
+            usage.validate_assignment(ledger, {**run, 'marker': 'unique'})
+        with self.assertRaisesRegex(ValueError, 'outside the recorded route'):
+            usage.validate_assignment(ledger, {**run, 'effort': 'medium'})
+        ledger['runs'].append(run)
+        with self.assertRaisesRegex(ValueError, 'fresh marker'):
+            usage.validate_assignment(ledger, {**run, 'id': 'two'})
+        ledger['benchmarkAuthorization'] = {'reason': 'User requested a medium comparison', 'assignments': [['haiku', 'medium']]}
+        usage.validate_assignment(ledger, {**run, 'effort': 'medium'})
+
+    def test_billed_and_estimated_subtotals_never_become_a_mixed_total(self):
+        estimate = usage.reported_usage([self.message('one')], 'openrouter/anthropic/claude-haiku-5.5')
+        common = {'round': 2, 'roundLabel': '2A', 'model': 'Haiku', 'effort': 'high', 'from': 'previous', 'head': 'head'}
+        text = usage.render({'mergePolicy': 'manual', 'runs': [
+            {**common, 'usage': estimate}, {**common, 'usage': {**estimate, 'billed': True, 'costUSD': '.12'}}]})
+        self.assertIn('Round 2A', text)
+        self.assertIn('Recorded billed subtotal: $0.12', text)
+        self.assertIn('Recorded estimate subtotal (not billed): $0.01', text)
+        self.assertNotIn('$0.13', text)
+        self.assertNotIn('Total billed review cost', text)
+
+    def test_top_level_model_metadata_is_not_silently_skipped(self):
+        message = self.message('top')
+        model = message.pop('model')
+        message.update(providerID=model['providerID'], modelID=model['id'], variant=model['variant'])
+        result = usage.reported_usage([message], 'openrouter/anthropic/claude-haiku-5.5', 'high')
+        self.assertEqual('0.005', result['costUSD'])
 
 
 if __name__ == '__main__':

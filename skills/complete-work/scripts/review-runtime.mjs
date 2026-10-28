@@ -7,26 +7,33 @@ import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 
 const execute = promisify(execFile);
-const markerLines = text => String(text ?? '').split(/\r?\n/).filter(line => /^Review-Run-ID: \S+$/.test(line));
+const markerLines = text => String(text ?? '').split(/\r?\n/).filter(line => /^\s*Review-Run-ID:/.test(line));
 
 export function pricingCeiling(model) {
-  const base = model.cost?.find(cost => !cost.tier);
+  const costs = model.cost ?? [];
+  const untiered = costs.find(cost => !cost.tier);
+  const base = untiered ?? costs.filter(cost => cost.tier?.type === 'context')
+    .toSorted((a, b) => a.tier.size - b.tier.size)[0];
   if (!base) return undefined;
-  const bumps = model.cost.filter(cost => cost.tier?.type === 'context' &&
-    (cost.input > base.input || cost.output > base.output ||
-      cost.cache?.read > base.cache?.read || cost.cache?.write > base.cache?.write));
-  if (!bumps.length) return undefined;
-  const threshold = Math.min(...bumps.map(cost => cost.tier.size));
+  const bumps = costs.filter(cost => cost.tier?.type === 'context' && cost.tier.size > 0 &&
+    ((cost.input ?? 0) > (base.input ?? 0) || (cost.output ?? 0) > (base.output ?? 0) ||
+      (cost.cache?.read ?? 0) > (base.cache?.read ?? 0) || (cost.cache?.write ?? 0) > (base.cache?.write ?? 0)));
+  const thresholds = (untiered ? bumps : costs.filter(cost => cost.tier?.type === 'context' && cost.tier.size > 0))
+    .map(cost => cost.tier.size);
+  if (!thresholds.length) return undefined;
+  const threshold = Math.min(...thresholds);
   return { threshold, input: Math.min(model.limit.input || model.limit.context, Math.floor(threshold * .8)) };
 }
 
 export function streamUsage(response, record) {
   const decoder = new TextDecoder();
-  let buffer = '', generationID;
+  let buffer = '', generationID, failed = false;
   const sse = response.headers.get('content-type')?.includes('text/event-stream');
   const inspect = text => {
     if (!text || text === '[DONE]') return;
-    const value = JSON.parse(text);
+    let value;
+    try { value = JSON.parse(text); }
+    catch { failed = true; record({ event: 'capture-error', reason: 'Malformed response data' }); return; }
     if (value.id) generationID = value.id;
     if (value.usage) record({ event: 'usage', generationID, usage: value.usage });
   };
@@ -38,21 +45,25 @@ export function streamUsage(response, record) {
       buffer = buffer.slice(boundary + 2);
       inspect(event.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n'));
     }
-    if (final && buffer.trim()) throw new Error('Incomplete OpenRouter SSE event');
+    if (final && buffer.trim()) { failed = true; record({ event: 'capture-error', reason: 'Incomplete SSE event' }); }
   };
   if (!response.body) { record({ event: 'end', complete: false }); return response; }
   return new Response(response.body.pipeThrough(new TransformStream({
     transform(chunk, controller) {
       controller.enqueue(chunk);
+      if (failed) return;
       buffer += decoder.decode(chunk, { stream: true });
       buffer = buffer.replace(/\r\n/g, '\n');
-      if (buffer.length > 4_000_000) throw new Error('Usage response exceeds parser limit');
-      parse(false);
+      if (buffer.length > 4_000_000) {
+        failed = true; buffer = '';
+        record({ event: 'capture-error', reason: 'Response exceeds capture limit' });
+      }
+      if (!failed) parse(false);
     },
     flush() {
       buffer += decoder.decode();
-      try { parse(true); record({ event: 'end', complete: true }); }
-      catch (error) { record({ event: 'end', complete: false }); throw error; }
+      if (!failed) parse(true);
+      record({ event: 'end', complete: !failed });
     },
   })), { status: response.status, statusText: response.statusText, headers: response.headers });
 }
@@ -63,9 +74,10 @@ export default function runtime(configPath) {
     async setup(ctx) {
       const config = () => JSON.parse(readFileSync(configPath, 'utf8'));
       const sessions = new Map();
-      const requests = new Map();
+      const requests = new WeakMap();
       const ceilings = {};
-      const selectedModels = new Set(config().runs.map(run => run.model));
+      // Protect future rechecks/escalations too, not just the runs registered now.
+      const selectedModels = new Set([...(config().models ?? []), ...config().runs.map(run => run.model)]);
       await ctx.model.transform(editor => {
         for (const model of editor.list('openrouter')) {
           if (!selectedModels.has(model.providerID + '/' + model.id)) continue;
@@ -90,8 +102,11 @@ export default function runtime(configPath) {
       const log = (run, value) => appendFileSync(join(config().state, run.id + '.transport.jsonl'), JSON.stringify(value) + '\n');
       const match = text => {
         const lines = markerLines(text);
-        if (lines.length !== 1) return undefined;
-        return config().runs.find(run => run.marker === lines[0]);
+        if (!lines.length) return undefined;
+        const run = lines.length === 1 && /^Review-Run-ID: \S+$/.test(lines[0]) &&
+          config().runs.find(run => run.marker === lines[0]);
+        if (!run) throw new Error('Unregistered or malformed Review-Run-ID; prepare the registered run before dispatch');
+        return run;
       };
       const bind = (sessionID, run) => {
         if (!run) return;
@@ -125,11 +140,13 @@ export default function runtime(configPath) {
           operation: { type: 'string', enum: ['diff', 'read', 'search'] },
           path: { type: 'string' }, ref: { type: 'string' }, pattern: { type: 'string' },
           pathPrefix: { type: 'string' }, offset: { type: 'integer', minimum: 0 },
-          limit: { type: 'integer', minimum: 1, maximum: 48000 },
+          limit: { type: 'integer', minimum: 1, maximum: 12000 },
         }, required: ['operation'], additionalProperties: false },
         execute: async (input, context) => {
           const run = await owned(context.sessionID);
           if (!run) throw new Error('No owned review assignment');
+          if (input.operation === 'read' && !input.path?.trim()) throw new Error('read requires a path');
+          if (input.operation === 'search' && !input.pattern?.trim()) throw new Error('search requires a nonempty pattern');
           const settings = config();
           const args = ['-B', settings.helper, '--repo', settings.repo, '--head', run.head, input.operation];
           if (input.operation === 'diff') args.push('--scope', run.scope);
@@ -179,26 +196,31 @@ export default function runtime(configPath) {
         const run = await owned(event.sessionID);
         if (!run) return;
         validate(run, event.model);
+        if (!['primary', 'compaction', 'title', 'generate'].includes(event.kind)) throw new Error('Unknown review request kind');
         if (new URL(event.request.url).hostname !== 'openrouter.ai') throw new Error('Review requests must route through OpenRouter');
         const body = await event.request.clone().json();
         if (body.provider?.order || body.provider?.only || body.provider?.ignore)
           throw new Error('Review hosting providers must remain unpinned');
         const requestID = randomUUID();
-        requests.set(event.sessionID, requestID);
+        requests.set(event.request, { requestID, sessionID: event.sessionID, kind: event.kind });
         log(run, { event: 'request', requestID, sessionID: event.sessionID, model: run.model, effort: run.effort, kind: event.kind });
       });
       await ctx.session.hook('http.response', async event => {
         const run = await owned(event.sessionID);
         if (!run) return;
         validate(run, event.model);
-        const requestID = requests.get(event.sessionID);
-        if (!requestID) throw new Error('Missing review request capture');
+        const request = requests.get(event.request);
+        if (!request || request.sessionID !== event.sessionID || request.kind !== event.kind)
+          throw new Error('Missing exact review request capture');
+        requests.delete(event.request);
+        const { requestID } = request;
         const record = value => log(run, { requestID, sessionID: event.sessionID, model: run.model, effort: run.effort, kind: event.kind, ...value });
         record({ event: 'response', status: event.response.status });
         event.response = streamUsage(event.response, record);
       });
       writeFileSync(join(config().state, 'runtime-ready.json'), JSON.stringify({ version: ctx.app.version,
-        plugin: 'pingu.pre-pr-review', location: ctx.location?.directory, runtimeDigest: config().runtimeDigest, ceilings }));
+        plugin: 'pingu.pre-pr-review', location: ctx.location?.directory, runtimeDigest: config().runtimeDigest,
+        registeredRuns: config().runs.map(run => run.id), protectedModels: [...selectedModels], ceilings }));
     },
   };
 }

@@ -6,6 +6,7 @@
     "documentation": [["small", 2000, 30], ["standard", 20000, 150]]
   },
   "roundCaps": {"normal": 3, "securityOrState": 5},
+  "integration": {"model": ["step", "medium"], "codeBands": ["large", "very large"], "mode": "escalation"},
   "mixing": {
     "protectedCategories": ["security", "state"],
     "minimumShare": 0.2,

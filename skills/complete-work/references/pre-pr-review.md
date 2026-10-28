@@ -15,6 +15,8 @@ reviewers inspect that snapshot. Preserve unrelated work and stop if it cannot b
 separated. Any uncommitted task work prevents publication.
 
 Apply `pragent-ignore` when assessing generated outputs, media and binaries.
+It is an externally installed skill, not authored in this repository; find it in
+the runtime's skill catalogue. These shared instructions define source filtering.
 Retain `.pragentignore`: root and nested policies at reviewed HEAD are the sole
 source of exclusions. Assess candidates from metadata before loading content;
 commit justified narrow rules with the artifacts. Do not silently exclude by
@@ -146,6 +148,8 @@ findings. Supply the complete brief; children do not inherit the conversation.
 Follow the task's returned `next`; async completion wakes the parent. Do not poll
 running tasks. Under `loop-work`, acquire coordinator-allocated reviewer capacity;
 queue reviews when capacity is occupied instead of exceeding the shared limit.
+Before each new batch, re-prepare/reverify registration as required by the runtime
+setup. Record completed task status, usage and child cleanup before refreshing.
 
 The reviewer brief must contain:
 
@@ -250,7 +254,12 @@ Run JSON requires `id`, integer `round`, unique `marker`, exact policy `model`,
 evidence on completion. Session correlation requires the exact unique marker in
 the first saved user message, never guessed titles/timestamps or a T3 thread ID used as
 an OpenCode session ID. The helper reads session/message metadata without making
-inference requests. Capture every charged step/retry/compaction, deduplicate IDs,
+inference requests. For an ambiguous match, set `sessionID` only after verifying
+the exact marker, transport binding and owned terminal child. Each retried launch
+gets a fresh run ID/marker. Route/model/effort validation prevents substitutions;
+an intentional benchmark requires a recorded `benchmarkAuthorization` reason and
+explicit model-key/effort assignments. Preserve that exceptional grant in the PR.
+Capture every charged step/retry/compaction, deduplicate IDs,
 and detect unexpected auxiliary models. Do not double-count session totals and
 message totals. OpenCode 2 stores visible output separately from reasoning; add
 them once for its output total. OpenRouter completion tokens already include
@@ -264,6 +273,9 @@ is never labelled billed spend. `--allow-estimate` can retain failed-run evidenc
 when transport usage is unavailable; disclose that limitation in the PR. Missing
 usage is unavailable, never zero. Keep cost precision internally and round displayed
 model/round/grand totals to cents. Exclude implementation-agent and CI costs.
+When any run has only estimated or incomplete accounting, keep billed and estimate
+subtotals separate and omit a mixed grand total. Partial provider records remain
+evidence, never a complete billed total. Guard breaches still block coverage.
 
 Append `## AI review` after `## Test changes`: one subsection per actual round,
 reviewed range/outcome, model/effort, input, cache reads/writes, output, costs and

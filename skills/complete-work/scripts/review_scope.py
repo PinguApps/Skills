@@ -126,6 +126,8 @@ class Scope:
         match = self.matching([path])[path]
         if match['excluded']:
             return {**match, 'path': path, 'complete': True, 'nextOffset': None}
+        if PurePosixPath(path).suffix.lower() in MEDIA:
+            return {'path': path, 'needsExclusionAssessment': True, 'reason': 'media/artifact needs an explicit ignore rule'}
         sha = ref if ref in self._trees else commit(self.repo, ref)
         if sha not in self._trees:
             self._trees[sha] = tree(self.repo, sha)
@@ -144,6 +146,47 @@ class Scope:
         end = min(offset + limit, len(text))
         return {'path': path, 'ref': sha, 'content': text[offset:end], 'offset': offset,
                 'complete': end == len(text), 'nextOffset': end if end < len(text) else None}
+
+    def search(self, ref, pattern, prefix=''):
+        if not pattern.strip():
+            raise ValueError('Search requires a nonempty pattern')
+        pattern = re.compile(pattern)
+        prefix = safe_path(prefix).rstrip('/') if prefix else ''
+        entries = tree(self.repo, commit(self.repo, ref))
+        names = [p for p in entries if not prefix or p == prefix or p.startswith(prefix + '/')]
+        matches = self.matching(names)
+        names = [p for p in names if not matches[p]['excluded']]
+        if len(names) > 200:
+            return {'needsNarrowerPrefix': True, 'candidateFiles': len(names), 'fileLimit': 200}
+        assessments = [p for p in names if PurePosixPath(p).suffix.lower() in MEDIA or
+                       entries[p][0] not in ('100644', '100755') or entries[p][1] != 'blob']
+        names = [p for p in names if p not in assessments]
+        if not names:
+            return {'matches': [], 'needsExclusionAssessment': assessments}
+        request = ('\n'.join(entries[p][2] for p in names) + '\n').encode()
+        sizes = run_git(self.repo, 'cat-file', '--batch-check=%(objectsize)', input=request)
+        if sum(int(n) for n in sizes.splitlines()) > 8_000_000:
+            return {'needsNarrowerPrefix': True, 'byteLimit': 8_000_000, 'needsExclusionAssessment': assessments}
+        raw = run_git(self.repo, 'cat-file', '--batch', input=request)
+        offset, hits = 0, []
+        for name in names:
+            end = raw.index(b'\n', offset)
+            length = int(raw[offset:end].split()[-1])
+            content = raw[end + 1:end + 1 + length]
+            offset = end + length + 2
+            try:
+                if b'\0' in content:
+                    raise UnicodeError('binary')
+                text = content.decode('utf-8-sig')
+            except UnicodeError:
+                assessments.append(name)
+                continue
+            for number, line in enumerate(text.splitlines(), 1):
+                if pattern.search(line):
+                    hits.append({'path': name, 'line': number, 'text': line})
+                    if len(hits) >= 500:
+                        return {'matches': hits, 'needsNarrowerPrefix': True, 'needsExclusionAssessment': assessments}
+        return {'matches': hits, 'needsExclusionAssessment': assessments}
 
     def manifest(self, base, previous=None, prefixes=None):
         base = commit(self.repo, base)
@@ -322,9 +365,9 @@ def route_for(manifest, categories, cross_boundary, areas=None):
             'reviewers': reviewers, 'reviewerAssignments': assignments,
             'escalation': escalations[primary][0] if escalations[primary] else None,
             'escalationByCategory': escalations,
-            'integration': ['step', 'medium'] if cross_boundary and band in ('large', 'very large') else None,
-            'integrationMode': 'escalation',
-            'roundCap': POLICY['roundCaps']['securityOrState' if {'security', 'state'} & set(categories) else 'normal']}
+            'integration': POLICY['integration']['model'] if cross_boundary and band in POLICY['integration']['codeBands'] else None,
+            'integrationMode': POLICY['integration']['mode'],
+            'roundCap': POLICY['roundCaps']['securityOrState' if set(POLICY['mixing']['protectedCategories']) & set(categories) else 'normal']}
 
 
 def main():
@@ -389,18 +432,7 @@ def main():
         print(json.dumps({'content': text[args.offset:end], 'complete': end == len(text),
                           'nextOffset': end if end < len(text) else None}))
     else:
-        pattern = re.compile(args.pattern)
-        names = [p for p in tree(scope.repo, commit(scope.repo, args.ref)) if p.startswith(args.path_prefix)]
-        matches = scope.matching(names)
-        hits = []
-        for name in names:
-            if matches[name]['excluded']:
-                continue
-            result = scope.read(name, args.ref, limit=2**31)
-            for number, line in enumerate(result.get('content', '').splitlines(), 1):
-                if pattern.search(line):
-                    hits.append({'path': name, 'line': number, 'text': line})
-        text = json.dumps(hits)
+        text = json.dumps(scope.search(args.ref, args.pattern, args.path_prefix))
         end = min(len(text), args.offset + args.limit)
         print(json.dumps({'content': text[args.offset:end], 'complete': end == len(text),
                           'nextOffset': end if end < len(text) else None}))
