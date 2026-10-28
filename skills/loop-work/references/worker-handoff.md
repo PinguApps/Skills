@@ -5,7 +5,8 @@ Read when launching or repairing a ticket. Supply actual values and requirement 
 ```text
 Complete this one ticket using $complete-work at <resolved skill path>.
 Follow its required skills through verified implementation, PR creation, CI,
-and finish-pr review convergence. Leave the PR open for the coordinator to merge.
+and finish-pr review convergence. You own the protected merge unless the supplied
+merge policy is manual. The coordinator verifies outcomes and never merges for you.
 Follow create-pr's Linear ticket title-prefix rule, carrying the supplied issue
 identifier and any other qualifying tickets into PR creation or reuse.
 Follow create-pr's user story rules for the PR description: require a brief story
@@ -26,8 +27,10 @@ Execution:
   initial checkout before implementation; report both base SHAs in STARTED so
   the coordinator can verify and update its ledger. Preserve unexpected work.
 - Applicable instructions: <AGENTS.md paths and material repository rules>.
-- Nested-agent capacity: <explicit allocation; zero unless coordinator granted
-  slots; report every allocated task/thread handle before yielding>.
+- Merge policy: <automatic, or explicit manual/human-review hold>.
+- Nested-reviewer capacity: <explicit allocated slots and request/release protocol;
+  mandatory reviews may run serially, but must never be skipped for capacity>.
+  Report every task/thread handle before yielding. Own, record and settle them.
 - Stop constraint: <deadline/timezone or none; how stop events arrive>.
 
 Ticket scope:
@@ -52,10 +55,15 @@ Ownership and integration:
   consistent with complete-work. Do not create a second PR on resume.
 - The coordinator manages Linear. Make no tracker transitions, comments,
   follow-up tickets, assignment changes, or dependency edits.
-- Do not merge the PR. Keep reviewer-owned thread resolution unchanged.
+- Commit coherent chunks regularly; complete-work invokes
+  [$review-work](../../review-work/SKILL.md) once in this exact worktree for proof,
+  filtering, reviewers, accounting and cleanup. No delegated post-PR reviews.
+- Merge only through finish-pr's current-head gate and only when policy permits.
+  Handle Copilot quota and narrow evidence-backed thread settlement under that
+  skill; never resolve human-owned threads to force a merge.
 - Register the PR in your worker thread. Use its PR watcher for finish-pr waits;
   before yielding, report WAITING with PR/head, pending condition and live handles.
-  Stop worker PR watches and mutating follow-ups before reporting READY.
+  Stop worker PR watches and mutating follow-ups before reporting MERGED or READY.
 - Read the full source issue and required references; the brief does not excuse
   skipping complete-work's scope checks. If source requirements drift, report it.
 - Routine implementation choices are yours. If completion needs a material user
@@ -69,17 +77,23 @@ Ownership and integration:
 
 Reporting:
 - Top-level threads have no automatic completion delivery to the coordinator.
-- Send STARTED, WAITING, READY or BLOCKED via t3_thread_send to the supplied
+- Send STARTED, WAITING, MERGED, READY or BLOCKED via t3_thread_send to the supplied
   coordinator thread ID, mode queue, using a stable clientRequestId per report.
   Include the run/issue/attempt/result IDs. Reuse that ID on uncertain retries.
-- READY means the required PR audit passed and no nested work, worker watcher,
-  queued turn or background mutator remains. BLOCKED preserves the exact gap.
+- For reviewer capacity, send WAITING with requested slots and pending model
+  assignments. Wait for the coordinator's explicit grant; release slots after
+  recorded completion/cleanup and request again for fresh review tasks.
+- MERGED means GitHub confirms the actual merge, with final head, merge commit
+  and method. READY means the audit passed but an explicit manual hold prevents
+  merging. Both require no live nested work, worker watcher or queued mutator.
+  BLOCKED preserves the exact gap; a queued merge is WAITING, not MERGED.
 - Keep the complete result below in your final answer even if notification fails.
 
 Return:
 - Issue ID; PR URL; exact branch and head SHA; worktree path.
 - Acceptance-criteria coverage and verification commands/results.
-- finish-pr's fresh conflict, checks, reviews, and reply-submission audit;
+- Merge policy; pre-PR receipt and per-round accounting; reviewer cleanup;
+  finish-pr's fresh conflict, checks, reviews, and reply-submission audit;
   any pending check, reviewer response, or blocker. Do not claim readiness early.
 - Outstanding changes or nested tasks, if any; enough state to resume safely.
 ```

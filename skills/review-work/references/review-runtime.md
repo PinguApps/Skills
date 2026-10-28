@@ -1,0 +1,135 @@
+# OpenCode review runtime
+
+Read before the first reviewer launch. Requires OpenCode 2's plugin hooks and local
+API (validated with 2.1.4), Python 3 and T3 OpenCode delegation. Do not switch to a
+CLI inference request or another model when those prerequisites are unavailable.
+
+Create the scope and usage ledger first. Record each unique run before dispatch:
+`id` (opaque filename-safe ID), integer `round`, `Review-Run-ID: <opaque>` marker,
+exact `model`/`effort`, `base`, `from`, `head`, absolute `scope` manifest, absolute
+`briefFile` inside the external run directory and succinct
+`R<n>: <model>` title. Do not quote another run marker as its own
+dedicated line in a later brief.
+Save the complete review contract, requirements, open findings and paging rules
+in that brief file before prepare. The runtime freezes it into the run config and
+re-injects it in primary/compaction context. Native summaries can be lossy; the
+original obligations must not depend on a summary retaining them. Source paging
+progress is retained separately as metadata and supplied at compaction, not as a
+parent-authored summary. Primary system instructions stay stable so changing page
+cursors do not invalidate the cached conversation prefix; tool responses carry
+the current cursors between summaries.
+
+Before **every dispatch batch**, record all new runs, including new rounds and
+escalations, then prepare with no live reviewer. Record terminal T3 task statuses
+for previously dispatched runs before preparing. Use fresh run IDs/markers for
+retried launches; do not recycle a marker into another child.
+
+```powershell
+& <absolute-python> <skill>/scripts/review_runtime.py --ledger <ledger> prepare
+& <absolute-opencode> api plugin.list --param 'location[directory]=<actual-worktree>'
+```
+
+The helper freezes the trusted reader/policy/runtime in the external run directory
+and adds one uniquely named loader under the worktree's `.opencode/plugins/`.
+It does not edit existing configuration or global settings. Retain its ownership
+receipt. Never stage this temporary loader; it is operational state, not task
+source. It adds only its unique loader filename to Git's `info/exclude`, preserving
+other entries; removal drops that owned rule. Verify the API reports
+`pingu.pre-pr-review` loaded for the actual location
+and the external `runtime-ready.json` records the running version before launch.
+A first location lookup may return while plugins load; make one follow-up lookup
+after setup and require `state.status: active` for this loader. Verify the ready
+file's runtime digest matches `runtime.json` and its location matches this worktree.
+A stale file alone is not proof. Require `registeredRuns` to contain every new run
+and `protectedModels` to cover its model. New registrations change the loader digest
+so OpenCode reloads and writes a fresh ready receipt. Preserve and investigate existing loaders/config;
+never overwrite a file owned by another run. Do not refresh helper copies while
+reviewers are live. After implementation changes to the runtime itself, remove the
+owned loader, prepare again and reverify the loaded plugin.
+
+The marker field is the complete single line `Review-Run-ID: <opaque>`, not a bare
+ID. Malformed or unknown marker-bearing prompts fail before inference. The plugin
+recognises only registered exact markers, binds their OpenCode sessions
+durably, and leaves unrelated sessions unchanged. It exposes only
+`pingu_review_source` to owned review requests and rejects other tool execution.
+The source tool calls the frozen reader without a shell and fixes the worktree,
+head and manifest. The model can choose `diff`, `read`, `search`, allowed historical
+ref and pagination. Reads require a path; searches require a nonempty pattern.
+Searches batch at most 200 allowed files/8 MB and request a narrower path prefix
+when those limits are exceeded. Read larger individual context files in pages.
+Give repository conventions explicitly in the brief or through
+that reader; ambient file instructions and prompt attachments are not review input.
+
+The HTTP hook leaves response bytes unchanged while recording only generation ID,
+numeric usage, model/effort, request kind, session ID and completion metadata in
+`<run-id>.transport.jsonl`. It never saves request headers, keys or response prose.
+Title generation uses the assigned title without an inference call. Other charged
+flows must use the assigned model/variant; an unexpected auxiliary model blocks.
+OpenRouter selects its hosting endpoint; the hook rejects hosting-provider pins.
+Each physical request is correlated by its exact native Request object, including
+overlapping summaries and retries. Unknown request kinds and auxiliary models
+block the review; their failure evidence remains in the ledger for investigation.
+
+## Automatic compaction below pricing tiers
+
+Keep OpenCode `compaction.auto` enabled (the default), with no alternate summary
+model and no experimental background summaries. Verify the actual worktree's
+applicable configuration before dispatch; incompatible overrides are a prerequisite
+to resolve, never silently accept costly requests. The runtime examines selected
+models' current catalogue context-price tiers. For the first increase, it lowers
+the effective input limit to the policy's 70% of that tier boundary using a temporary location
+model transform for all accepted models, including later escalation assignments.
+Flat-price models retain their full input window. Nothing is
+written to global configuration, and unloading the runtime removes the transform.
+
+For Haiku's 100,000-token tier, this sets a 70,000-token effective input limit.
+OpenCode's default 16,000-token reserve starts its own automatic summary near
+54,000 estimated tokens. Tier-priced requests also cap output at 8,192 tokens,
+including reasoning, through native `context`/`compaction` generation options, and verify the cap in
+the outgoing request. Effort remains high/medium as assigned. Limit aggregate
+source output to 12,000 characters per primary step for these models; parallel
+tool calls beyond that budget defer their unchanged cursor to the next step.
+This leaves room for answer growth, tool results and the summary request itself.
+Flat-price models keep their existing output limits. The harness writes/stores the summary itself; the parent
+does not call `compact`, fabricate summaries or launch another summarizer. Summary
+inference is charged and included in that model's review cost.
+In OpenCode 2.1.4 the later `model.request` hook only exposes routing URL/headers;
+it has no generation-options field. Keep the regression fixture aligned with
+`SessionModelRequest.prepare`, and verify recorded raw-request output caps live.
+Use the source tool's `nextOffset` as a character offset, never a line number.
+Omit `ref` for HEAD or supply an exact allowed SHA; search accepts either `path`
+or `pathPrefix` to narrow its repository area.
+
+These thresholds use the harness's estimates, not an exact provider tokenizer.
+Do not promise a hard token ceiling: record actual prompt-token peaks from transport
+usage, flag any pricing-tier crossing and adjust the safety margin/page size before
+reusing that policy. Compaction is lossy, so preserve covered paths/ranges, findings
+and next checks. Do not enable speculative background compaction: unused summaries
+would still cost money. Catalogue tiers can change; inspect live metadata each run.
+
+On T3 completion, save `task_status`'s structured result outside the repo, collect
+usage serially with `review_usage.py collect --task-state <file>`, and audit the
+guard/source transcript plus journal. A terminal task/session with final numeric
+provider usage, a generation ID and successful response for every physical request
+has complete billing evidence even when OpenCode cancels after that final usage
+event instead of draining to EOF. Missing/unfinished transport evidence is
+explicitly unavailable; retain it rather than manufacturing a zero or using an
+estimate as billed spend. `--allow-estimate` retains incomplete provider evidence
+separately and uses only a labelled OpenCode estimate when available; guard breaches
+and foreign-model/session evidence still fail. Billed and estimated subtotals are
+reported separately. Neither estimate recovery nor quota supplies review approval.
+
+After all reviewer tasks are terminal, results/accounting are saved and children
+are settled, remove only this run's loader:
+
+```powershell
+& <absolute-python> <skill>/scripts/review_runtime.py --ledger <ledger> remove
+```
+
+Verify that loader disappeared and the worktree contains only intended task work.
+Retain the external ledger, journals, findings and coverage receipt for PR updates
+and resume. Never delete or disable another run's plugin or reviewer state.
+
+References: [OpenCode plugin hooks](https://dev.opencode.ai/v2/docs/build/plugins/server),
+[OpenCode 2.1.4 token and cost normalization](https://github.com/anomalyco/opencode/blob/v2.1.4/packages/core/src/session/usage.ts),
+[OpenRouter usage accounting](https://openrouter.ai/docs/cookbook/administration/usage-accounting).

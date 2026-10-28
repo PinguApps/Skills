@@ -1,448 +1,187 @@
 ---
 name: finish-pr
-description: Finish the GitHub pull request attached to the current branch; resolve merge conflicts, diagnose and fix failed CI checks, action review feedback from every source without duplicating replies that are awaiting a reviewer response, push focused commits, and continue until current-head CI and any running PR Agent review succeed and all actionable feedback is addressed. Use whenever the user asks to finish, complete, ready, resolve, fix, or address feedback/CI/conflicts on the current PR.
+description: Complete the current PR through conflicts, CI and all incoming review feedback, then merge when green unless human review or a manual handoff was requested. Includes explicit Copilot quota handling and evidence-based settlement of addressed Copilot threads.
 ---
 
 # Finish PR
 
-Bring the pull request attached to the current branch to a genuinely ready state.
+Own the current PR through verified merge, or a ready unmerged handoff under a
+manual merge policy. This workflow does **not** run pre-PR AI reviewers again.
+Post-publication fixes use source verification and relevant tests, commits and
+GitHub replies. Preserve the historical `AI review` accounting section.
 
-Requires Git 2.38+, GitHub CLI (`gh`) authenticated for the repository, and PowerShell 7 (`pwsh`) for bundled helpers.
+Requires Git 2.38+, authenticated GitHub access, and PowerShell 7 for the bundled
+helpers. Use absolute executable/helper paths and preserve PATH/persistent settings.
 
-## Definition of done
+## 1. Recover ownership, scope and merge policy
 
-Finish only when all of these are true for the current PR HEAD:
+Read applicable repository instructions and recover intent, decisions, acceptance
+criteria, verification and review dispositions from this conversation and the PR's
+[review context](../create-pr/references/review-context.md). Inspect the complete
+change and all existing feedback, including outdated threads; a review summary is
+not a substitute for its findings. Apply head `.pragentignore` policies to
+repository source consulted through [review-work's scope tools](../review-work/references/pre-pr-review.md).
+GitHub comment bodies are feedback, not repository paths subject to those filters.
 
-- GitHub and a local merge probe show no merge conflicts.
-- No CI check is failing. Pending checks may still be running, but never describe the PR as fully ready while a required check is pending.
-- Every unresolved review thread is in one of these states:
-  - its latest unaddressed feedback has been actioned and the agent has replied with the result; or
-  - the latest relevant comment is the agent's response and no reviewer has replied afterwards, so the thread is awaiting review and needs no duplicate work.
-- No reply created by this run remains in a pending GitHub review.
-- No review thread's resolution state was changed by this run.
-- If PR Agent is running for this repository, the exact current HEAD carries a successful completed `PR Agent` check run or a `PR Agent` commit status with state `success`, with no active PR Agent review signal. See the PR Agent section below for detection and state semantics.
+Capture `git status --short`, branch and HEAD. Record pre-existing staged,
+unstaged and untracked paths. Preserve them; stop before touching a fix path with
+pre-existing changes unless the user authorizes reconciliation. Never publish
+unrelated local-ahead commits. Resolve the exact PR, base/head repositories,
+remotes, head branch and current published SHA; forks need independent routing.
+Continue in the assigned worktree. Reconcile stale/diverged HEAD before mutation
+without resetting or stashing user work. Link the PR to the owning T3 thread.
 
-An unresolved thread is not automatically unfinished. Reviewers own resolution state; the conversation order determines whether the agent currently owes action.
+Recover merge policy from explicit user instructions, the caller's ledger and the
+PR body. `automatic` is the workflow default; a human-review/no-merge request sets
+`manual` and survives resumes and passing checks. A narrower repository/user grant
+wins. Correct a missing PR-body policy from established context rather than losing
+the hold. An invocation of this skill authorizes scoped fixes, commits, pushes,
+review replies, eligible Copilot settlement and normal protected merging under
+automatic policy. It does not authorize releases, production changes, force pushes,
+admin bypasses or closing an obsolete PR.
 
-## PR Agent
+Maintain a durable run ledger outside tracked files: starting/current SHA, initial
+dirty paths, feedback IDs/dispositions, commit/reply IDs, re-review requests,
+settlement evidence, watcher ownership and consumed convergence budget.
+Resolve the authenticated viewer login from the state helper. Capture every
+baseline thread ID and `isResolved` value (`-All`), and retain each observed change
+across pushes and resumes. Use viewer identity plus this run's recorded reply IDs
+to identify its responses; human comments under the same login remain feedback.
 
-PR Agent is a self-hosted reviewer that may or may not be running. Detect its check run named `PR Agent` or its legacy commit status with context `PR Agent` (configurable via its `CHECK_NAME`), posted on every PR head it reviews.
+## 2. Resolve conflicts, then failed checks
 
-- **Detection**: PR Agent is considered running for this PR when a `PR Agent` check run or commit status exists on the current HEAD or on any earlier commit of the pull request. If neither exists anywhere on the PR, it is not running — never wait for it, never post anything to trigger it, and skip every PR Agent rule below.
-- **Status semantics**: queued/in-progress check runs and legacy `pending` mean running. Completed `failure` means findings; completed `success` or legacy `success` approves that exact HEAD. `neutral`, cancelled, timed-out, skipped or otherwise non-successful/non-finding conclusions and legacy `error` mean incomplete, never approved. Inspect the service error and retry state rather than changing code to appease an infrastructure failure. Missing current-head signals after earlier activity mean await automatic review. When signals coexist, any active latest signal prevents publishing; all latest signals must succeed for approval.
-- **Feedback identification**: current PR Agent comments come from its GitHub App; older versions used the owner's login. Identify reviewer messages by the hidden `<!-- pr-agent:v1 -->` marker or PR Agent badge, never by author login alone. The bundled watcher includes marked reviewer feedback even when the login matches yours.
-- **Thread handling**: apply exactly the same logic as every other reviewer — agree and fix (one focused commit, then reply on the thread with the commit SHA and verification), or push back with concrete evidence. Never resolve PR Agent threads: it owns their resolution and resolves a thread automatically once it verifies a fix against the pushed HEAD or accepts a justified decline.
-- **Resolution memory**: distinguish verified fixes, false positives, intentional behaviour and accepted tradeoffs. A fixed defect may be reintroduced, and a decline applies only while its source-backed premises still hold. If PR Agent pushes back again, continue the debate only with new evidence; otherwise leave the thread awaiting its response.
-- **Superseded reviews**: the first review covers the full PR; subsequent automatic reviews inspect changes since the last completed ancestor plus context needed to verify findings. Rewritten history or incompatible saved work can require a full review. A push supersedes an active review. Preserve the running review with the automated-review gate below; do not request extra whole-PR passes by default.
+Fetch the intended base and head. Verify GitHub mergeability and perform a fresh
+local `git merge-tree --write-tree --messages HEAD <base-sha>` probe. When conflicts
+exist, integrate the base with a normal merge only after establishing a safe clean
+index/worktree. Resolve from intent and surrounding source; verify and commit the
+resolution. Do not silently rebase or overwrite another actor's push.
 
-## Operating rules
+Query all checks and required checks separately against the current head. Retrieve
+actual failure logs before editing; distinguish repository defects from external
+failures. Run the relevant local equivalent, fix confirmed causes and commit a
+coherent chunk. Do not modify code to appease an unrelated infrastructure failure.
+Check real consumers/deployment paths where the change affects them. AI review is
+not rerun for these post-PR fixes.
 
-- Use the conversation history as first-class task context. The skill is often invoked after implementation, so recover the user's intent, earlier decisions, tradeoffs, verification, known limitations, and reasons for the current design before judging PR feedback.
-- Read every applicable `AGENTS.md` plus repository-native requirements and design documents implicated by the PR. Discover these from the repository and PR; never assume a particular task directory, branch naming scheme, language, build system, or hosting provider.
-- Treat unresolved review threads as the authoritative inline-feedback list. Also inspect PR-level reviews and issue comments for standalone actionable feedback.
-- Preserve unrelated worktree changes. Commit only changes made during this run.
-- Resolve conflicts before failed checks, and failed checks before review feedback. Later evidence may require revisiting an earlier phase.
-- Prefer the smallest correct change. Add focused tests for behavioural or regression-prone fixes.
-- After confirming a defect, search the changed implementation and directly related PR code for other instances of the demonstrated cause. Fix verified instances within the same feedback unit's commit and test the shared failure where useful. Keep unrelated pre-existing defects outside the PR; this is a focused causal search, not a repository cleanup.
-- Use exactly one focused, unsquashed commit per action-required PR feedback unit whose disposition produces a change: one review thread or one standalone PR-level feedback item. Never combine multiple units into one commit, even when they are related. A justified disagreement requires a reply but no commit.
-- Never rebase, force-push, merge the pull request on GitHub, close, approve, or mark the PR ready for review unless the user explicitly requested that separate action. The conflict-resolution workflow may merge the latest base commit into the PR branch.
-- Never resolve or unresolve a review thread. Do not call `resolveReviewThread`, `unresolveReviewThread`, or an equivalent.
-- Reply directly to review threads, one at a time. Never create replies concurrently.
-- Apply the automated-review gate below before every push or PR comment, including thread replies, disagreements, acknowledgements, reminders, and deferred replies after a push.
-- Continue autonomously through new feedback from PR Agent and every other source after pushes, within the convergence bounds below.
-- Let PR automation initiate reviews. Do not ping any reviewer, automated or human, to request a review or response by default. For reviewers other than PR Agent and Copilot, only send one concise reminder when a reply is essential to finish the PR, no review is active, and the reviewer has been silent for at least 25 minutes for automation or one business day for a person. Measure a person's wait from PR creation or the latest agent reply across resumed runs of this skill; otherwise report the wait as a blocker. Never ping Copilot or manually request or trigger a Copilot review or re-review through GitHub controls, reviewer assignment or reassignment, comments, CLI commands, API calls, or any equivalent mechanism. `pinguapps-pr-agent` adopts every Copilot thread on creation; action its feedback and reply once with the fix or reasoned decline, then leave verification and further follow-up to that bot.
-- Never post trigger comments or fallbacks for PR Agent. It discovers PRs and pushes automatically when running; use its check run or legacy commit status and inline threads as terminal signals.
+## 3. Fetch and action feedback
 
-### Automated-review gate
-
-This gate covers only PR Agent. Other reviewers and unrelated CI checks do not block pushes or comments through this gate; the existing CI and feedback requirements still apply.
-
-Immediately before each push or PR comment, refresh the published PR head and its `PR Agent` check runs plus any legacy `PR Agent` commit status. Inspect all checks, including optional ones, using `gh pr checks`; use paginated check-run and commit-status API results when needed to establish the exact head, provider, or latest status. Skip the gate only when PR Agent is not running for this PR. When detected, a missing current-head signal is not proof of completion; wait for its automatic review.
-
-The bundled `scripts/wait-for-pr-review.ps1 -Inspect -PrNumber <number> -Repository <host/owner/repo>` produces a fresh head-verified snapshot and one `prAgentStatus` classification for check runs and legacy statuses: `pending`, `success`, `failure`, `incomplete` or `absent`. It paginates both APIs and selects the latest same-name run per App. Treat a read/authentication failure as unknown and blocking, never as absence. Historical detection still applies when the current signal is absent. Use this classification for the gate and fallback watcher instead of reconstructing incompatible status rules.
-
-- PR Agent is active while any of its latest current-head review check runs is not `completed`, including queued or in-progress runs, or its latest current-head legacy status is `pending`.
-- While PR Agent is active, keep all fixes, commits, and reply drafts local. Never push or post any PR comment, regardless of its recipient or whether it cites a commit. Work on available feedback from other reviewers whose reviews have completed; leave PR Agent feedback queued until its review finishes.
-- When PR Agent has completed, fetch feedback again, action the newly completed feedback, and repeat the feedback audit before publishing the batch. Completion can include findings or failure; this gate requires a finished review, not approval. The definition of done still requires clean terminal results.
-- Recheck the gate before the push and before each serial comment. A previous idle snapshot, captured baseline, watcher result, or successful push does not authorize the next mutation. A push may start a new review immediately; retain deferred replies until PR Agent finishes, then re-read their threads to avoid duplicate or superseded responses.
-- If completion cannot be established within the existing 25-minute wait or overall convergence bound, stop with the local commits and queued replies intact and report the blocker. A timeout never permits bypassing the gate.
-
-## 1. Establish state and intent
-
-1. Locate the repository root and read applicable instructions.
-2. Inspect:
-
-   ```powershell
-   git status --short
-   git rev-parse --abbrev-ref HEAD
-   git rev-parse HEAD
-   gh --version
-   gh auth status
-   gh pr view --json number,title,url,body,author,headRefName,headRefOid,headRepository,headRepositoryOwner,isCrossRepository,baseRefName,baseRefOid,mergeable,mergeStateStatus,reviews,comments
-   ```
-
-3. Record the starting SHA and every existing changed path, separating staged, unstaged, and untracked changes. Never include pre-existing changes in this run's commits.
-   A feedback or CI fix must not touch a path that had any pre-existing staged, unstaged, or untracked change. Stop and ask the user before editing that path; partial staging plus `git commit --only` does not preserve same-file hunk isolation.
-4. If the current branch has no PR, inspect `gh pr status`. Switch or check out a PR only when the mapping is unambiguous and local changes are safe; otherwise ask the user.
-5. Reconstruct the intended change from, in priority order:
-   - explicit user instructions and this conversation;
-   - applicable repository instructions;
-   - PR title, body, commits, and diff;
-   - linked issue/spec/design documents;
-   - surrounding code, tests, and conventions.
-6. Inspect the complete PR diff before evaluating conflicts, CI, or feedback.
-7. Detect PR Agent from current and earlier PR commits using the rules above. Treat its exact-HEAD check run or legacy status as the processing/completion boundary and read its findings from review threads.
-8. Resolve the authenticated GitHub viewer login. Treat comments from that login, or another agent login established unambiguously by the conversation/PR history, as agent responses.
-9. Resolve the base and head repositories independently from PR metadata:
-   - derive the base repository from the PR URL;
-   - use `headRepository.nameWithOwner` for the head repository;
-   - prefer existing configured remotes that match those exact repositories;
-   - otherwise use GitHub-provided clone URLs and configure Git to use the authenticated `gh` credential helper;
-   - retain the exact `headRefName`.
-
-   ```powershell
-   $pr = gh pr view --json number,url,headRefName,headRefOid,headRepository,headRepositoryOwner |
-     ConvertFrom-Json
-   $prNumber = [int]$pr.number
-   $prUri = [uri]$pr.url
-   $pathSegments = $prUri.AbsolutePath.Trim("/").Split("/")
-   $githubHostname = $prUri.Authority
-   $baseRepositoryName = "$($pathSegments[0])/$($pathSegments[1])"
-   $baseRepository = "$githubHostname/$baseRepositoryName"
-   $baseMetadata = gh api --hostname $githubHostname "repos/$baseRepositoryName" |
-     ConvertFrom-Json
-   $headMetadata = gh api --hostname $githubHostname "repos/$($pr.headRepository.nameWithOwner)" |
-     ConvertFrom-Json
-   gh auth setup-git --hostname $githubHostname
-   $baseFetchUrl = [string]$baseMetadata.clone_url
-   $headPushUrl = [string]$headMetadata.clone_url
-   ```
-
-   GitHub's `clone_url` preserves the server authority, including non-default ports, while `gh auth setup-git` makes HTTPS Git operations use the authenticated CLI identity. A verified matching SSH/configured remote may be used instead. Stop if authentication, repository identity, or the head repository is unavailable or ambiguous. Never assume `origin` points to either side of a fork-based PR.
-10. Align the checkout with the exact PR head before making any changes:
-
-   ```powershell
-   git fetch $headPushUrl $pr.headRefName
-   $remoteHeadSha = (git rev-parse FETCH_HEAD).Trim()
-   $lastObservedPrHeadSha = $remoteHeadSha
-   $localHeadSha = (git rev-parse HEAD).Trim()
-   git merge-base --is-ancestor $remoteHeadSha $localHeadSha
-   $localContainsRemoteHead = $LASTEXITCODE -eq 0
-
-   if ($localContainsRemoteHead -and $localHeadSha -ne $remoteHeadSha) {
-     $initialLocalAheadCommits = git log --oneline "$remoteHeadSha..$localHeadSha"
-     # Validate and record every commit against the recovered user intent and full PR diff.
-     # Stop for confirmation if any commit is unrelated, unfinished, or ambiguous.
-   }
-
-   if (-not $localContainsRemoteHead) {
-     git merge-base --is-ancestor $localHeadSha $remoteHeadSha
-     $canFastForward = $LASTEXITCODE -eq 0 -and -not (git status --porcelain)
-     if (-not $canFastForward) {
-       throw "Local HEAD is stale or diverged from the PR head; stop before mutation."
-     }
-
-     git merge --ff-only $remoteHeadSha
-   }
-   ```
-
-   Continue only when local `HEAD` matches the fetched PR head, is safely fast-forwarded to it, or every initially local-ahead commit was explicitly validated as intended PR work from conversation and repository evidence. Record those commits as pre-existing push scope; stop for confirmation on any uncertainty. Never silently publish local-ahead commits.
-11. Create one unique state directory outside the repository and retain it for the full run:
-
-   ```powershell
-   $runStateDirectory = Join-Path ([IO.Path]::GetTempPath()) (
-     "finish-pr-{0}-{1}" -f $prNumber, [guid]::NewGuid().ToString("N")
-   )
-   New-Item -ItemType Directory -Path $runStateDirectory | Out-Null
-   ```
-
-   Store every baseline, snapshot, and watcher-state file for this run inside this directory so concurrent runs cannot overwrite one another.
-
-## 2. Resolve merge conflicts
-
-Run this before CI or feedback:
-
-1. Refresh PR/base metadata and perform a non-mutating local probe:
-
-   ```powershell
-   $pr = gh pr view $prNumber --repo $baseRepository --json number,url,baseRefName,baseRefOid,headRefName,headRefOid,headRepository,headRepositoryOwner,mergeable,mergeStateStatus |
-     ConvertFrom-Json
-   git fetch $baseFetchUrl $pr.baseRefName
-   $baseCommit = (git rev-parse FETCH_HEAD).Trim()
-   git merge-tree --write-tree --messages HEAD $baseCommit
-   ```
-
-2. Investigate locally when GitHub reports `CONFLICTING`, `DIRTY`, or `UNKNOWN`, or when the probe reports conflicts.
-3. If conflicts exist, check the initial worktree baseline before merging. A normal merge requires a clean index: if any pre-existing staged change remains, stop before mutation and tell the user to commit or stash it, or request explicit permission to isolate and restore the index. Do not use `--autostash` on user work without that permission.
-
-   If the index is clean and unrelated local changes are safe, merge the latest base into the PR branch:
-
-   ```powershell
-   git merge --no-ff $baseCommit
-   ```
-
-4. Resolve each conflict using the recovered task intent, repository requirements, adjacent code, and tests. Do not mechanically prefer either side.
-5. Run focused verification, stage only the resolution, and commit it. Record the conflict summary, commit SHA, and checks run.
-6. If the merge is clean, keep any Git-created merge commit but do not create an extra empty commit.
-
-## 3. Fix failed CI
-
-1. Inspect all checks:
-
-   ```powershell
-   gh pr checks $prNumber --repo $baseRepository --json bucket,completedAt,description,event,link,name,startedAt,state,workflow
-   gh pr checks $prNumber --repo $baseRepository --required --json bucket,completedAt,description,event,link,name,startedAt,state,workflow
-   ```
-
-   Use the second query to distinguish required checks from optional checks. Treat “no required checks reported” as an empty required set, not a failure.
-
-2. For each failure, retrieve the actual logs before editing:
-
-   ```powershell
-   gh run list --repo $baseRepository --branch $pr.headRefName --commit $pr.headRefOid --json databaseId,name,workflowName,status,conclusion,url,headSha,event,createdAt -L 50
-   gh run view <run-id> --repo $baseRepository --json name,status,conclusion,jobs,url
-   gh run view <run-id> --repo $baseRepository --log-failed
-   ```
-
-3. For non-Actions checks, inspect the provider link or available check details.
-4. Fix the root cause, not merely the symptom. Work from the clearest upstream failure outward because one failure may cascade into others.
-5. Run the closest local equivalent, inspect the initial worktree baseline, and stage only that fix. Commit with an exact pathspec so pre-existing staged changes remain outside the CI commit:
-
-   ```powershell
-   git commit --only -m "fix(ci): address <failed check>" -- <exact-ci-fix-paths>
-   ```
-
-   If a CI fix path had pre-existing staged, unstaged, or untracked changes, stop before editing it. Record the check, cause, SHA, and verification.
-6. If a failure is external, flaky, permission-related, or not repository-fixable, capture evidence. Retry only when safe and supported; do not change code to appease an unrelated failure.
-
-## 4. Fetch and classify feedback
-
-Resolve the loaded skill's directory, then use its bundled helpers by absolute path; do not assume the skill lives inside the target repository.
-
-Capture every thread's read-only resolution baseline outside the repository:
+Use the paginated thread reader and inspect PR-level reviews and issue comments:
 
 ```powershell
-$threadBaseline = Join-Path $runStateDirectory "thread-resolution.json"
-$threadSnapshot = Join-Path $runStateDirectory "unresolved-threads.json"
-pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -Repository $baseRepository -Hostname $githubHostname -All |
-  Set-Content -Encoding utf8 $threadBaseline
-
-pwsh <skill-directory>/scripts/get-unresolved-pr-threads.ps1 -PrNumber $prNumber -Repository $baseRepository -Hostname $githubHostname |
-  Set-Content -Encoding utf8 $threadSnapshot
+& <absolute-pwsh> <skill-directory>/scripts/get-unresolved-pr-threads.ps1 `
+  -Repository <host/owner/repo> -PrNumber <number> -All
+& <absolute-pwsh> <skill-directory>/scripts/get-pr-review-state.ps1 `
+  -Repository <host/owner/repo> -PrNumber <number>
 ```
 
-For each unresolved thread, read all paginated comments in chronological order and classify it. Classify every comment carrying the hidden `<!-- pr-agent:v1 -->` marker or PR Agent badge as reviewer feedback regardless of author login. Then classify the thread:
+The state helper is read-only. It verifies a stable published head and returns
+Copilot state plus **candidate**, not automatically authorized, settlements.
+Read/authentication failures are blockers, not absence or approval. PR Agent is
+retired: never require its success, wait for historical activity, invoke its old
+watcher, or assume it will verify Copilot fixes. Historical marked PR Agent
+comments remain ordinary reviewer feedback even when posted under the user's login.
 
-- **Copilot handoff:** if Copilot created the thread, action its feedback and reply once with the fix or reasoned decline. `pinguapps-pr-agent` verifies the reply and handles further follow-up. Never request a Copilot review or send it a reminder.
-- **Awaiting reviewer:** the latest relevant comment is an agent response in a submitted review (`pullRequestReview.state != PENDING` with non-null `submittedAt`) and nobody has replied later. Do nothing. Do not post a reminder, repeat the fix, or duplicate the response. PR Agent messages count as reviewer messages for this rule: when PR Agent replies (verification result, push-back, or resolution note), the thread is awaiting your action or is already resolved by it.
-- **Action required:** there is reviewer feedback after the agent's latest submitted response, the agent has never responded, or its latest response exists only in a pending review. Apply this conversation-order rule to PR Agent too: an unresolved thread already awaiting its response needs no duplicate fix or reply. For newly owed feedback, agree and fix with a focused commit, or push back with evidence and let PR Agent re-evaluate.
-- **Superseded/non-actionable:** the later conversation explicitly withdraws, answers, or supersedes the point. Reply only if the thread still needs an agent acknowledgement; avoid duplicating an existing agent response. A PR Agent resolution note ("verified ... resolving this thread") on a thread it has just resolved needs no reply.
+For each thread, read its full paginated conversation and determine whether the
+agent owes action. New reviewer feedback after the agent's latest submitted reply
+requires action. A submitted agent response with no later feedback needs no
+duplicate fix/reply. A pending-review draft is not a submitted response. Apply the
+same evidence-based classification to standalone PR-level feedback, tracked by ID
+and permalink.
 
-Within action-required threads, identify each distinct feedback item. Judge it against the user's intent, conversation history, repository rules, linked requirements, PR scope, current code, conventions, and tests. The thread is the commit boundary: group all work required by one thread into that thread's single commit, but never include another thread's work.
+Validate each actionable finding against task scope and source. Fix real bugs,
+missed requirements and demonstrated causes in directly related changed code.
+Decline false positives or out-of-scope suggestions with concrete evidence; never
+agree just to end a discussion. Commit verified fixes incrementally. Preserve one
+focused regression check for behavioural or regression-prone fixes, reusing tests
+that already establish the requirement. Preserve one
+focused commit per changed feedback unit (one thread or standalone item); a single
+thread's related fixes belong together. Do not create empty traceability commits
+when another fix already addresses the concern: record the shared fixing SHA.
 
-Classify actionable PR-level review bodies and issue comments with the same rules. Each standalone feedback item is its own commit boundary; never combine it with a review thread or another standalone item. Track it by feedback ID and permalink because it has no review-thread ID.
+Push a coherent batch after verification and a fresh expected-head check; do not
+overwrite unexpected remote movement. Reply **after** the fixing commits are
+published, directly and serially, with SHA and actual verification. Use the bundled
+`reply-to-review-thread.ps1` with `-BodyFile` for multiline text. It verifies the
+reply is submitted rather than trapped in a pending review. Keep every created
+reply ID in the ledger; inspect PR-level feedback again after the batch.
 
-- Agree when it identifies a real bug, missed requirement, broken invariant, missing test, misleading behaviour, or scoped maintainability problem.
-- Disagree when it conflicts with requirements, established intent, repository invariants, or would produce a worse/out-of-scope design.
-- When uncertain, make a small scoped correctness fix if evidence supports it. Otherwise explain the uncertainty and why no change was made.
+## 4. Copilot completion, quota and thread settlement
 
-Do not skip outdated unresolved threads; determine whether their feedback still applies to current code.
+Read [the Copilot contract](references/copilot.md) before deciding completion or
+settling a thread. These cases are deliberately distinct:
 
-## 5. Fix and reply
+- A trusted Copilot message explicitly saying it could not review because of
+  quota exhaustion is **quota-pass**: that review is not coming and does not block
+  merging. Record the exemption honestly; do not claim source was reviewed. Do
+  not retry/ping Copilot for that quota outcome. Other actionable findings remain.
+- A review actually in progress must finish. A non-quota service failure remains
+  incomplete; unknown/missing evidence is not a quota exemption.
+- After fixing and replying to Copilot findings, allow its automatic re-review.
+  When needed, request one supported Copilot re-review for the new published head,
+  record the request and verify acceptance. Never repeatedly request the same head.
+- The parent may resolve an addressed **Copilot-originated** thread only after
+  the contract's current-head clean re-review and response checks pass. First post
+  a submitted `Settled: <fix, verification and clean-review evidence>` reply, then
+  resolve that specific thread through GitHub and verify the saved state.
+- Human-originated threads and threads with later unaddressed human/reviewer
+  feedback remain outside this settlement permission. Never blanket-resolve
+  threads, unresolve someone else's threads, or treat quota as proof of a fix.
 
-For each action-required review thread or standalone feedback item eligible under the automated-review gate:
+## 5. Wait and converge
 
-1. Make the smallest complete fix for every actionable item in that thread, with focused tests.
-2. Run the narrowest meaningful verification.
-3. Inspect and stage only files for that item:
+Only this PR-owning parent uses T3's `watch_pull_request`. Handle existing work,
+then watch and end the turn; resume on its event without polling, duplicate
+watchers or repeated status messages. A wake is a reason to re-fetch, not proof of
+readiness. Review children never watch PRs. Before final handoff, call
+`unwatch_pull_request`; preserve any still-needed watcher when yielding for events.
 
-   ```powershell
-   git status --short
-   git diff
-   git add <paths>
-   git diff --cached
-   ```
+After each fix/push, repeat checks, feedback classification and applicable Copilot
+handling. No delegated AI review sessions, post-PR round counters or extra review
+costs are introduced. Keep the initial review section tied to its actual reviewed
+revisions; record later fixes and proof without relabelling them as AI-reviewed.
 
-   Keep unrelated staged changes in other paths staged. Stop before editing any fix path that had a pre-existing staged, unstaged, or untracked change; never rely on partial staging followed by `git commit --only` for same-file isolation.
+Retain a maximum of five pushed repair batches or two hours overall across resumed
+runs. After three batches, identify the actual cause of churn and continue only
+with a concrete evidence-backed repair plan. Stop earlier for closure, a genuine
+blocker, exhausted bounds or unexpected head movement. Limits do not supply
+approval. Do not wait for an optional reviewer that never started, including
+Copilot when quota was explicitly exhausted. Human holds produce a ready handoff,
+not an indefinite wait or an automatic merge.
+When an essential human response is missing, report that precise blocker. On a
+later resume after one business day, one concise reminder in the existing PR
+conversation is permitted only within the caller's communication authorization.
+Record it to avoid duplicates; preserve the convergence budget and human hold.
 
-4. If the disposition produces a change, create exactly one commit for the feedback unit before moving to the next unit:
+## 6. Audit and merge, or hand off
 
-   ```powershell
-   git commit --only -m "fix(pr): address <thread summary>" -- <exact-thread-fix-paths>
-   ```
+Immediately before merge/handoff, re-fetch PR/base/head and verify:
 
-   Do not amend, squash, or combine feedback commits. If an earlier unit's change completely satisfies a later agreed unit and no distinct file change remains, create an explicit traceability commit with `--allow-empty` for that later unit rather than merging their commit history. Do not create a commit for a justified disagreement.
+- The intended complete change and verification still cover the exact current
+  published head; local/remote state and ownership are understood.
+- GitHub and a fresh local merge probe show no conflict. Reverify affected checks
+  after relevant base integration; another worker's merge is not evidence for this PR.
+- Applicable required checks pass; other applicable failures/pending work are
+  resolved. Respect legitimate skipped checks and repository protection semantics.
+- All started reviews have completed, with explicit Copilot quota-pass accepted
+  for its completion requirement. No outstanding changes-requested review remains.
+- Every actionable inline/PR-level comment is addressed, justified declines have
+  submitted replies, and no created reply remains pending.
+- Every review thread required by repository protection is resolved. Use only the
+  narrowly authorized Copilot settlement above; a human thread is not ours to close.
+- Compare current thread resolution states with the baseline and prior observations.
+  Account for each mutation by this run with its narrow Copilot settlement receipt.
+  Report other observed changes without claiming who made them. An unexplained
+  mutation made by this run blocks merge until reconciled.
+- No review child, queued repair or other owned work can still mutate the change.
 
-5. For review-thread feedback, reply directly to the thread after evaluating it and creating any relevant commit, subject to the automated-review gate and commit deferral below. Draft and queue the reply locally whenever either blocks posting:
+Under `manual`, leave the PR ready and unmerged. Under `automatic`, merge with the
+repository's permitted method and an expected-head guard, for example
+`gh pr merge <url> --match-head-commit <sha> <permitted-method-flag>`. Never bypass
+protections. Merge-queue admission or enabling auto-merge is still pending work:
+watch until GitHub actually reports the merge, then verify its target and merge SHA.
 
-   ```powershell
-   $body = @"
-   Agreed. I fixed this in commit <sha> by <specific change>.
-
-   Verification: <command and result>.
-   "@
-   pwsh <skill-directory>/scripts/reply-to-review-thread.ps1 -ThreadId "<thread-id>" -Hostname $githubHostname -Body $body
-   ```
-
-   For standalone feedback, post a PR-level reply that links the exact feedback permalink:
-
-   ```powershell
-   $body = @"
-   Regarding [this feedback](<feedback-permalink>): agreed. I fixed this in commit <sha> by <specific change>.
-
-   Verification: <command and result>.
-   "@
-   gh pr comment $prNumber --repo $baseRepository --body $body
-   ```
-
-   Use the same PR-level path for a standalone justified disagreement, retaining the feedback permalink and the disagreement wording below.
-
-   For a justified disagreement:
-
-   ```text
-   I don't think this change is correct for this PR.
-
-   Reason: <specific reason grounded in requirements, conversation, or code>.
-
-   No code change made.
-   ```
-
-   If any PR Agent feedback disposition created a commit that has not been pushed yet, defer its thread or PR-level reply until after the batch push and the automated-review gate clears. PR Agent cannot verify a local-only SHA; replying before it can see the commit may cause a misleading follow-up. A disagreement has no commit dependency but still requires the gate to clear. Keep all replies serial.
-
-6. Record the one-to-one feedback-unit ID → commit SHA mapping for changed dispositions, plus every disposition, verification, and returned comment ID. Use the thread ID for review threads and the feedback ID for standalone items. Record `no commit — disagreement` for justified disagreements.
-
-The reply helper uses GitHub's single-comment reply endpoint so it never submits or modifies a shared pending review. It then verifies `state != PENDING` plus a non-null `submittedAt`. A helper failure is blocking; a returned comment URL alone is not proof of submission.
-
-After each feedback batch, including when replies remain queued:
-
-1. Re-fetch all threads with `-All`, plus PR-level reviews and issue comments.
-2. Verify every reply created in this run belongs to a submitted review.
-3. Verify the authenticated user has no pending review on the PR, including reviews created before this run.
-4. For every thread ID present in the baseline, compare its `isResolved` value with the current value. Baseline resolution states must be unchanged; report external changes and never mutate them back. New thread IDs are expected during review convergence: classify them as additional feedback rather than treating their existence as a resolution mutation.
-5. If new action-required review threads or standalone feedback items appeared during the batch, action each eligible item in its own commit and repeat the audit. Push only once the automated-review gate clears and the refreshed feedback set has been fully actioned or is awaiting reviewer response. Items with completed local dispositions and queued replies count as actioned for this pre-push audit, but their replies remain mandatory once the commit deferral and gate clear; they are not awaiting reviewer response until posted.
-
-## 6. Push and converge with review
-
-1. Confirm the worktree contains no uncommitted changes created by this run. Do not push individual thread commits as they are created; batch-push all unsquashed thread commits only after any running PR Agent review has completed and the refreshed feedback audit is clear.
-2. Review commits after the starting SHA and every validated commit that was already local-ahead at invocation, then fetch the exact PR head before pushing:
-
-   ```powershell
-   git log --oneline <starting-sha>..HEAD
-   git fetch $headPushUrl $pr.headRefName
-   $remoteHeadSha = (git rev-parse FETCH_HEAD).Trim()
-   $localHeadSha = (git rev-parse HEAD).Trim()
-   $currentPrHeadSha = (gh pr view $prNumber --repo $baseRepository --json headRefOid --jq .headRefOid).Trim()
-   $pushRequired = $localHeadSha -ne $remoteHeadSha
-   git status --short --branch
-   ```
-
-   Stop if `$remoteHeadSha` and `$currentPrHeadSha` differ, or if either differs from `$lastObservedPrHeadSha`. Never overwrite `$lastObservedPrHeadSha` with an unexpected remote value. Use `$pushRequired`, not the starting-SHA commit range, to decide whether the PR head needs a push; the range is reporting context only.
-
-3. If `$pushRequired`, increment `$reviewRound` and capture a review baseline immediately before pushing:
-
-   ```powershell
-   $reviewRound++
-   $reviewState = Join-Path $runStateDirectory ("review-round-{0}.json" -f $reviewRound)
-   pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
-     -CaptureBaseline `
-     -StatePath $reviewState `
-     -PrNumber $prNumber `
-     -Repository $baseRepository `
-     -Hostname $githubHostname `
-     -PrAgentContext "PR Agent"
-   ```
-
-4. Recheck the automated-review gate against the published head immediately before pushing. If blocked, keep the batch local, wait for completion, and repeat the feedback audit and head checks before recapturing the baseline. Once clear, push without force and record the exact HEAD:
-
-   ```powershell
-   $reviewRequestedAt = [DateTimeOffset]::UtcNow
-   git push $headPushUrl "HEAD:refs/heads/$($pr.headRefName)"
-   $expectedHeadSha = git rev-parse HEAD
-   $lastObservedPrHeadSha = $expectedHeadSha
-   ```
-
-   Retain queued replies after the push. Recheck the automated-review gate before each reply; if the push has started a PR Agent review, wait for it to finish. Then re-read feedback and post only still-needed replies serially with the now-visible commit SHA and verification result. Verify thread replies are submitted and refresh feedback. Apply the same gate to disagreements and replies to any other reviewer.
-
-5. After pushing, wait for the exact-HEAD PR Agent result when it is running:
-
-   - **PR Agent check runs or legacy statuses:** use the environment's PR watcher when available and resume the exact-head audit on each wake. Otherwise use the bundled `-Wait` command below; it handles both signal types with the same classification as `-Inspect`. A successful exact-head result with no new feedback can proceed directly to final audit.
-   - **PR Agent not running:** refresh checks and feedback, then proceed to the final audit. Do not wait for an absent integration.
-
-   ```powershell
-   pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
-     -Wait `
-     -StatePath $reviewState `
-     -ExpectedHeadSha $expectedHeadSha `
-     -ReviewRequestedAt $reviewRequestedAt `
-     -TimeoutMinutes 25 `
-     -PollSeconds 20
-   ```
-
-   Run it as a long-lived tool call. While it runs, use only the environment's wait mechanism and remain silent unless the user interrupts. The watcher keeps repeated polling out of model context.
-
-6. Handle the selected wait path's result using the outcomes below. The bundled watcher delivers inline findings through `newFeedback` like every other reviewer's. Feedback may arrive while another review is still active; use the automated-review gate to determine which feedback is eligible and whether publishing is allowed:
-   - `feedback`: fetch all feedback for context, but action only newly owed feedback (`newFeedback` IDs when using the bundled watcher). This may include inline threads (from PR Agent, Copilot, or other reviewers), PR-level feedback from any reviewer, and a synthetic `pragent_status` item when PR Agent reported `failure` without captured comments. If a new comment extends an old unresolved thread, read the full thread and handle only feedback after the last agent response. PR Agent findings follow the same agree-and-fix / push-back rules, and it will re-verify pushed fixes and resolve its threads automatically. For Copilot threads, reply once with the disposition so `pinguapps-pr-agent` can follow up; never request Copilot re-review.
-   - `approved`: all latest exact-HEAD PR Agent signals succeeded. Re-fetch checks, PR-level feedback, and threads once; finish only if the full definition of done still holds.
-   - `incomplete`: the review ended without approval or a findings verdict. Inspect check output and retry state; wait for an already scheduled retry within the existing bounds, or report the service blocker. Do not convert this into code feedback or approval, and do not trigger a review by comment.
-   - `timeout`: inspect whether a required automated reviewer has remained silent for the full 25 minutes with no review active. For a person, require one business day since PR creation or the latest agent reply, including across resumed runs. Only when the reply is essential to finish the PR, consider the single-reminder exception for eligible reviewers in the operating rules; it excludes PR Agent and Copilot. Otherwise report the wait as a blocker and do not claim readiness.
-   - `head_changed`: fetch and inspect the new state. Stop when another actor's push makes continued mutation unsafe.
-   - `pr_closed`: stop and report the PR state.
-
-7. For new feedback, repeat eligible fix → verify → commit → queue or gated serial reply → completed reviews and refreshed audit → baseline → gated push → wait. Flush still-needed queued replies only when the gate and commit deferral clear; finish only after the reply audit passes.
-
-If no push is needed, use the same wait-path selection in step 5. A successful `PR Agent` check or legacy status on the exact current HEAD is sufficient once the gate clears and the remaining definition of done holds. When PR Agent is absent, proceed directly to the final audit. Otherwise capture the current state, wait read-only for its automatic review, and apply the same timeout rule without posting a default trigger.
-
-```powershell
-$expectedHeadSha = (git rev-parse HEAD).Trim()
-$reviewRound++
-$reviewState = Join-Path $runStateDirectory ("review-round-{0}.json" -f $reviewRound)
-pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
-  -CaptureBaseline `
-  -StatePath $reviewState `
-  -PrNumber $prNumber `
-  -Repository $baseRepository `
-  -Hostname $githubHostname
-```
-
-Run the following wait command for either signal type when the environment has no PR watcher:
-
-```powershell
-pwsh <skill-directory>/scripts/wait-for-pr-review.ps1 `
-  -Wait `
-  -StatePath $reviewState `
-  -ExpectedHeadSha $expectedHeadSha `
-  -ReviewRequestedAt ([DateTimeOffset]::MinValue) `
-  -TimeoutMinutes 25 `
-  -PollSeconds 20
-```
-
-The watcher verifies the expected PR head and classifies current check runs plus legacy statuses before reporting approval, findings or incomplete work. New feedback may wake it before review completes; the automated-review gate still governs every publication. API errors terminate the helper rather than pretending the integration is absent.
-
-After the third pushed review round, classify remaining feedback as new regressions, repeated disagreements, or previously missed instances. Check whether the approach or requirement interpretation is causing churn. Continue only with a concrete evidence-backed plan for the remaining work; otherwise report the blocker without claiming approval. This checkpoint does not request another full review or reset the counters. Retain the hard bounds of five pushed review rounds or two hours overall. Stop earlier for a clean result, timeout, closure, unexpected head movement, or a genuine blocker.
-
-## Final audit and response
-
-Refresh the saved PR's [review context](../create-pr/references/review-context.md) when review fixes changed behaviour, decisions, verification or recovery. Preserve the template and unrelated author content; follow the same automated-review gate before publishing this update. Record current-head verification and material gaps without duplicating the manual-test handoff. For occasional workflow assessment, record actual human interventions and approximate active minutes separately from PR Agent's model cost; elapsed waiting time is not human effort.
-
-Re-fetch rather than relying on cached state:
-
-- PR head, mergeability, and base;
-- latest base commit and a fresh local `git merge-tree --write-tree --messages HEAD <base-commit>` conflict probe;
-- all checks;
-- required checks queried separately with `gh pr checks --required`;
-- the exact-HEAD `PR Agent` check-run status/conclusion and any legacy commit status (when PR Agent is running for this repository);
-- PR-level reviews/comments;
-- all review threads and reply submission states;
-- local/remote branch state and worktree.
-
-Report concisely:
-
-- PR number and URL;
-- conflict and CI outcome, with commits;
-- thread counts: actioned, awaiting reviewer, and disagreed;
-- fixes, focused verification, and commit SHAs;
-- push result and review rounds;
-- terminal `PR Agent` result for current HEAD: completed successful check or legacy `success` (or `not running` when neither signal exists on the pull request);
-- pending review replies: `0`;
-- review-thread resolution mutations: `0`, with baseline audit result;
-- any blocker or required check still pending.
+Refresh the [observed proof](../review-work/references/proof.md), review context and manual-test handoff when fixes changed them,
+preserving template/user content and the pre-PR accounting history. Report the PR,
+merged SHA or manual hold, current-head CI/review outcome, fixes and verification,
+Copilot quota/settlement evidence, and blockers. Settle owned idle review children
+after their results are retained. Clean up this parent's watcher on handoff.
