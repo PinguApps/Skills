@@ -1,14 +1,22 @@
 {
+  "decisionDate": "2026-10-28",
   "documentationExtensions": [".md", ".markdown", ".mdown", ".mkd", ".json", ".jsonc", ".json5"],
   "bands": {
     "code": [["small", 500, 10], ["standard", 4000, 60], ["large", 10000, 120]],
     "documentation": [["small", 2000, 30], ["standard", 20000, 150]]
   },
   "roundCaps": {"normal": 3, "securityOrState": 5},
+  "mixing": {
+    "protectedCategories": ["security", "state"],
+    "minimumShare": 0.2,
+    "minimumLines": {"code": 100, "documentation": 250},
+    "minimumFiles": 5,
+    "documentationWeight": 0.5,
+    "fileWeight": 20
+  },
   "models": {
     "haiku": {"id": "openrouter/anthropic/claude-haiku-5.5", "efforts": ["medium", "high"]},
     "glm": {"id": "openrouter/z-ai/glm-5.3-flash", "efforts": ["high"]},
-    "ling": {"id": "openrouter/inclusionai/ling-3.1-flash", "efforts": ["thinking"]},
     "minimax": {"id": "openrouter/minimax/minimax-m3.1-flash", "efforts": ["medium", "high"]},
     "deepseek": {"id": "openrouter/deepseek/deepseek-v4.1-flash-1017", "efforts": ["high"]},
     "mimo": {"id": "openrouter/xiaomi/mimo-v2.6-flash", "efforts": ["thinking"]},
@@ -17,12 +25,49 @@
     "kimi": {"id": "openrouter/moonshotai/kimi-k3.1-pro", "efforts": ["high"]}
   },
   "routes": [
-    {"category": "security", "reviewers": [["haiku", "high"], ["mimo", "thinking"]], "escalation": ["sonnet", "high"]},
-    {"category": "state", "reviewers": [["deepseek", "high"], ["minimax", "high"]], "escalation": ["kimi", "high"]},
-    {"category": "compatibility", "reviewers": [["deepseek", "high"], ["haiku", "high"]], "escalation": ["sonnet", "high"]},
-    {"category": "agent-policy", "reviewers": [["haiku", "high"], ["minimax", "high"]], "escalation": ["sonnet", "high"]},
-    {"category": "ui", "reviewers": [["haiku", "high"], ["minimax", "medium"]], "escalation": ["sonnet", "high"]},
-    {"category": "general", "reviewers": [["haiku", "high"], ["minimax", "medium"]], "escalation": ["sonnet", "high"]},
-    {"category": "documentation", "reviewers": [["haiku", "medium"], ["ling", "thinking"]], "escalation": ["sonnet", "high"]}
+    {
+      "category": "security", "lead": "haiku",
+      "reviewers": [["haiku", "high"], ["mimo", "thinking"]],
+      "escalation": [["minimax", "high"], ["sonnet", "high"]],
+      "variants": [{"codeBands": ["large", "very large"],
+        "reviewers": [["haiku", "high"], ["minimax", "high"]],
+        "escalation": [["mimo", "thinking"], ["sonnet", "high"]]}]
+    },
+    {
+      "category": "state", "lead": "deepseek",
+      "reviewers": [["deepseek", "high"], ["minimax", "high"]],
+      "escalation": [["haiku", "high"], ["kimi", "high"]]
+    },
+    {
+      "category": "compatibility", "lead": "mimo",
+      "reviewers": [["deepseek", "high"], ["mimo", "thinking"]],
+      "escalation": [["haiku", "high"], ["sonnet", "high"]],
+      "variants": [{"codeBands": ["large", "very large"],
+        "reviewers": [["mimo", "thinking"], ["glm", "high"]]}]
+    },
+    {
+      "category": "agent-policy", "lead": "glm",
+      "reviewers": [["haiku", "high"], ["glm", "high"]],
+      "escalation": [["mimo", "thinking"], ["sonnet", "high"]]
+    },
+    {
+      "category": "ui", "lead": "minimax",
+      "reviewers": [["mimo", "thinking"], ["minimax", "medium"]],
+      "escalation": [["haiku", "high"], ["kimi", "high"]]
+    },
+    {
+      "category": "general", "lead": "deepseek",
+      "reviewers": [["deepseek", "high"], ["mimo", "thinking"]],
+      "escalation": [["haiku", "high"], ["sonnet", "high"]],
+      "variants": [{"codeBands": ["large", "very large"],
+        "reviewers": [["deepseek", "high"], ["glm", "high"]]}]
+    },
+    {
+      "category": "documentation", "lead": "haiku",
+      "reviewers": [["deepseek", "high"], ["haiku", "medium"]],
+      "escalation": [["glm", "high"], ["mimo", "thinking"]],
+      "variants": [{"documentationBands": ["large"],
+        "reviewers": [["haiku", "medium"], ["glm", "high"]]}]
+    }
   ]
 }

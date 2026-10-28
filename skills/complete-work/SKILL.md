@@ -33,7 +33,7 @@ Advance to step 3 only when the work fully satisfies that scope, relevant verifi
 
 ## 3. Complete pre-PR review
 
-Read and follow [the shared review procedure](references/pre-pr-review.md). Apply `pragent-ignore`, commit any justified policy changes, separate code/documentation volume and select the policy's primary reviewer pair. Delegate independent review-only tasks through T3/OpenCode against this actual worktree and committed snapshot. Validate findings, make minimal fixes and commit verified chunks. One clean round is sufficient; later rounds are incremental, with three/five maximum as specified there. The parent owns usage capture and settling/cancelling every review child.
+Read and follow [the shared review procedure](references/pre-pr-review.md). Apply `pragent-ignore`, commit any justified policy changes, separate code/documentation volume and select exactly two distinct initial reviewers. Use the policy's category pair or its substantial mixed-category assignment, preserving protected security/state pairs and category-specific escalations. Delegate independent review-only tasks through T3/OpenCode against this actual worktree and committed snapshot. Validate findings, make minimal fixes and commit verified chunks. One clean round is sufficient; later rounds are incremental, with three/five maximum as specified there. The parent owns usage capture and settling/cancelling every review child.
 
 Do not publish a PR until the final coverage receipt satisfies the shared procedure. Directly verified minor deltas must be recorded separately from model-reviewed revisions. Preserve round-by-round accounting, final reviewed scope, evidence-backed dispositions and the merge policy for the next steps.
 

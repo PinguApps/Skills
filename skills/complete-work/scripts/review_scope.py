@@ -230,8 +230,28 @@ def size_band(kind, files, lines):
     return 'very large' if kind == 'code' else 'large'
 
 
-def route_for(manifest, categories, cross_boundary):
+def category_profile(category, totals):
+    profile = next(r for r in POLICY['routes'] if r['category'] == category).copy()
+    for variant in profile.get('variants', []):
+        if ('codeBands' in variant and totals['code']['band'] not in variant['codeBands'] or
+                'documentationBands' in variant and totals['documentation']['band'] not in variant['documentationBands']):
+            continue
+        profile.update(variant)
+        break
+    return profile
+
+
+def route_for(manifest, categories, cross_boundary, areas=None):
     valid = {r['category'] for r in POLICY['routes']}
+    rules = []
+    categories = list(dict.fromkeys(categories))
+    for area in areas or []:
+        category, separator, prefix = area.partition('=')
+        if not separator or category not in valid:
+            raise ValueError('Expected --area <category>=<repository-relative-path-prefix>')
+        rules.append((category, safe_path(prefix).rstrip('/')))
+        if category not in categories:
+            categories.append(category)
     if set(categories) - valid:
         raise ValueError('Unknown review category')
     if not categories:
@@ -240,17 +260,70 @@ def route_for(manifest, categories, cross_boundary):
                 for row in manifest.get('selected', [])):
             raise ValueError('Classify code/configuration behaviour with explicit --category; JSON size alone is not a documentation route')
         categories = ['documentation']
-    chosen = next(r for r in POLICY['routes'] if r['category'] in categories)
-    reviewers = chosen['reviewers']
-    band = manifest['totals']['code']['band']
-    if chosen['category'] == 'general':
-        if band == 'small':
-            reviewers = [['haiku', 'medium'], ['glm', 'high']]
-        elif band in ('large', 'very large'):
-            reviewers = [['haiku', 'high'], ['minimax', 'high']]
-    return {'category': chosen['category'], 'checklists': categories, 'reviewers': reviewers,
-            'escalation': chosen['escalation'],
+    categories = [r['category'] for r in POLICY['routes'] if r['category'] in categories]
+    primary = categories[0]
+    totals = {kind: {**values, 'band': size_band(kind, values['files'], values.get('lines', 0))}
+              for kind, values in manifest['totals'].items()}
+    totals.setdefault('documentation', {'files': 0, 'lines': 0, 'band': 'none'})
+    groups = {}
+    for row in manifest.get('selected', []):
+        path = row.get('visiblePaths', [row['path']])[-1]
+        matches = [(len(prefix), category) for category, prefix in rules
+                   if path == prefix or path.startswith(prefix + '/')]
+        nearest = {category for length, category in matches if length == max(n for n, _ in matches)}
+        if len(nearest) > 1:
+            raise ValueError('Conflicting review areas for ' + path)
+        category = next(iter(nearest)) if nearest else primary
+        group = groups.setdefault(category, {'category': category, 'paths': [], 'totals': {
+            kind: {'files': 0, 'lines': 0} for kind in ('code', 'documentation')}})
+        group['paths'].append(path)
+        values = group['totals'][row['kind']]
+        values['files'] += 1
+        values['lines'] += row['additions'] + row['deletions']
+    mixing = POLICY['mixing']
+    for group in groups.values():
+        for kind, values in group['totals'].items():
+            values['band'] = size_band(kind, **values)
+        code, docs = group['totals']['code'], group['totals']['documentation']
+        group['score'] = (code['lines'] + mixing['documentationWeight'] * docs['lines'] +
+                          mixing['fileWeight'] * (code['files'] + docs['files']))
+    total_score = sum(group['score'] for group in groups.values())
+    for group in groups.values():
+        group['share'] = group['score'] / total_score if total_score else 0
+        group['substantial'] = (group['share'] >= mixing['minimumShare'] and (
+            sum(v['files'] for v in group['totals'].values()) >= mixing['minimumFiles'] or
+            any(v['lines'] >= mixing['minimumLines'][kind] for kind, v in group['totals'].items())))
+    substantive = sorted((g for g in groups.values() if g['substantial']),
+                         key=lambda g: (-g['score'], categories.index(g['category'])))
+    protected = bool(set(categories) & set(mixing['protectedCategories']))
+    mixed = not protected and len(substantive) >= 2
+    selected = [g['category'] for g in substantive[:2]] if mixed else [primary]
+    profiles = {category: category_profile(category, groups[category]['totals'] if category in groups else totals)
+                for category in categories}
+    if not mixed:
+        profiles[primary] = category_profile(primary, totals)
+        reviewers = profiles[primary]['reviewers']
+        assignments = [{'category': primary, 'model': model, 'effort': effort, 'coverage': 'full'}
+                       for model, effort in reviewers]
+    else:
+        assignments = []
+        for category in selected:
+            profile = profiles[category]
+            candidates = sorted(profile['reviewers'], key=lambda pair: pair[0] != profile['lead'])
+            model, effort = next(pair for pair in candidates if pair[0] not in {a['model'] for a in assignments})
+            assignments.append({'category': category, 'model': model, 'effort': effort, 'coverage': 'full'})
+        reviewers = [[a['model'], a['effort']] for a in assignments]
+    assigned = {model for model, _ in reviewers}
+    escalations = {category: [pair for pair in profile['escalation'] if pair[0] not in assigned]
+                   for category, profile in profiles.items()}
+    band = totals['code']['band']
+    return {'decisionDate': POLICY['decisionDate'], 'category': primary, 'checklists': categories,
+            'mixed': mixed, 'selectedCategories': selected, 'areas': list(groups.values()),
+            'reviewers': reviewers, 'reviewerAssignments': assignments,
+            'escalation': escalations[primary][0] if escalations[primary] else None,
+            'escalationByCategory': escalations,
             'integration': ['step', 'medium'] if cross_boundary and band in ('large', 'very large') else None,
+            'integrationMode': 'escalation',
             'roundCap': POLICY['roundCaps']['securityOrState' if {'security', 'state'} & set(categories) else 'normal']}
 
 
@@ -264,6 +337,7 @@ def main():
     manifest.add_argument('--previous')
     manifest.add_argument('--output', required=True)
     manifest.add_argument('--category', action='append', default=[])
+    manifest.add_argument('--area', action='append', default=[], help='Category=path-prefix; repeat for substantive mixed areas')
     manifest.add_argument('--cross-boundary-contract', action='store_true')
     manifest.add_argument('--path-prefix', action='append', default=[], help='Coherent batch; repeat for multiple areas')
     for name in ('read', 'diff', 'search'):
@@ -285,7 +359,10 @@ def main():
         result = scope.manifest(args.base, args.previous, args.path_prefix)
         for kind, values in result['totals'].items():
             values['band'] = size_band(kind, **values)
-        result['route'] = route_for(result, args.category, args.cross_boundary_contract)
+        # Classify the full task, even when serving one batch or an incremental fix.
+        # A small fix must not erase the original mixed/risk responsibilities.
+        routing_scope = result if result['from'] == result['base'] and not args.path_prefix else scope.manifest(args.base)
+        result['route'] = route_for(routing_scope, args.category, args.cross_boundary_contract, args.area)
         Path(args.output).write_text(json.dumps(result, indent=2), encoding='utf-8')
         print(json.dumps(result, indent=2))
     elif args.offset < 0 or args.limit < 1:

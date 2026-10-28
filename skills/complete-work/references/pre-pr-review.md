@@ -49,12 +49,20 @@ Code and JSON require explicit classification; the helper cannot infer behaviour
 risk from size. Use repeatable `--path-prefix` values on `scope` for coherent
 batches. Preserve the complete manifest and prove their union covers every selected
 path; policy changes appear in every batch. Both assigned reviewers cover each batch.
+For substantial independent areas, add repeatable `--area <category>=<path-prefix>`
+arguments, for example `--area ui=src/Client --area documentation=docs`.
+Use explicit file paths when a directory contains different behaviours. The longest
+matching prefix wins; conflicting equally specific assignments fail. Unmapped
+paths inherit the primary category. Area labels describe behaviour: a functional
+skill or auth JSON is not ordinary documentation. Every selected path is counted
+once, and excluded paths never contribute to a mixture.
 Other text belongs to code. Media/binaries must be explicitly covered by ignore
 rules before review; `needsExclusionAssessment` must be empty.
 
 Use the policy in [review-policy.json](review-policy.json) as the single source
 for models, effort variants, priority, size bands and caps. The helper selects the
-first applicable route, with other categories retained as checklists:
+first applicable risk category, with every applicable category retained as a
+checklist and its own escalation chain. It may combine two substantial areas:
 
 1. `security`: auth, permissions, tenancy, secrets and sensitive data.
 2. `state`: persistence, schema/data migrations, transactions, concurrency,
@@ -70,14 +78,40 @@ Code bands require both limits: small 500 lines/10 files, standard 4,000/60,
 large 10,000/120, very large above either large limit. Documentation uses small
 2,000/30, standard 20,000/150, then large. Count additions plus deletions after
 exclusions. Never add documentation volume to code thresholds. Batch large scopes
-by coherent areas; size alone does not change the primary pair. Keep generated or
+by coherent areas. Only the policy's explicit size variants change the pair. Keep generated or
 vendored text counted, but review provenance and real consumer compatibility when
 those are its meaningful risks. No meaningful source is excluded merely for size.
 
 Add `--cross-boundary-contract` only when the change alters a runtime/public
-contract across services or packages. The additional Step medium integration pass
-requires this flag **and** a large/very-large code band. It examines relationships
-between reviewed batches. Pure documentation growth does not trigger it.
+contract across services or packages. With a large/very-large code band, this adds
+integration checks to the same two initial reviewers' briefs. Step medium is a
+focused escalation for an unresolved cross-boundary concern, not an automatic third
+initial reviewer. Pure documentation growth does not trigger it.
+
+### Mixed categories
+
+Exactly two distinct models initially review all included content. For a mixture,
+each leads one selected category while both remain responsible for the complete
+diff, all checklists and interactions. A UI/documentation mixture therefore uses
+MiniMax medium and Haiku medium, not four reviewers or two disjoint partial reviews.
+
+The helper requires explicit area mappings to prove a mixture. Each selected area
+must represent at least 20% of review work and contain at least 100 changed code
+lines, 250 changed documentation lines, or five files. Review work is code lines
+plus half the documentation lines plus 20 per file. This weighting selects a
+mixture only; code/documentation size bands remain independent and unweighted.
+Choose the two largest qualifying areas, breaking ties by category priority.
+Smaller areas retain their checklists and escalation chains. The policy specifies
+each category's lead; if both leads use the same model, take the second category's
+other assigned model so two distinct reviewers remain.
+
+Any security or state checklist retains its full highest-priority protected pair,
+regardless of documentation/UI volume. Both still cover other categories. Without
+two substantial areas, use the primary category's complete pair. Variants use the
+selected area's volume when mixed and the complete task volume otherwise.
+Routing uses the full task range even for batches and incremental fix scopes;
+a small recheck must not erase original responsibilities. Record area mappings,
+shares, selected leads and exceptions in the receipt.
 
 ## Dispatch and own the reviewers
 
@@ -93,7 +127,7 @@ accepting coverage. A failed guard or unavailable plugin is an operational block
 Discover T3 capabilities once before first delegation. Use `delegate_task`, role
 `review`, shared isolation (the parent worktree), with OpenCode as the runner and
 the exact policy `openrouter/...` model. Set `target.options.variant` explicitly.
-Ling and MiMo use `thinking`; all other assignments use only `medium` or `high`.
+MiMo uses `thinking`; all other assignments use only `medium` or `high`.
 Never substitute GPT, free aliases, higher effort, or a different model silently.
 OpenRouter chooses its hosting provider; do not pin/order upstream hosts. Verify
 the effective variant/settings and no unexpected auxiliary model calls. Unsupported
@@ -122,6 +156,8 @@ Worktree: <absolute-current-worktree> Branch: <branch>
 Task base: <base> Review range: <from>..<head> Head ignore policy: <head>
 Intent/acceptance criteria: <complete concise review context>
 Checklists: <primary and other applicable responsibilities>
+Focus category: <assignment category>; both reviewers cover the full included diff.
+Area map/escalations: <scope route areas and escalationByCategory>
 Checks actually run: <evidence and limitations>
 Allowed source access: use only pingu_review_source (diff/read/search).
 Do not bypass exclusions using raw git diff/show, shell searches or file tools.
@@ -158,9 +194,16 @@ escalation calls on the same revision belong to that round.
 Validate findings against source and requirements. Fix confirmed scoped issues,
 run appropriate checks, and commit coherent fixes. Record evidence-backed declines
 and advisory dispositions; do not appease reviewers by expanding the task.
-Escalate through the route's assigned model for a suspected serious failure, a
+Escalate for a suspected serious failure, a
 dispute remaining after one focused evidence check, or unresolved uncertainty.
 Escalation gets the specific issue/range and evidence, not an automatic full rerun.
+Classify the finding by affected behaviour, then use that category's ordered
+`escalationByCategory` chain, skipping models already called on this revision.
+For example, a documentation issue in a UI/documentation mixture goes to GLM;
+a Blazor lifecycle issue goes to the UI chain (Kimi when Haiku already reviewed).
+If one issue crosses categories, use the highest-risk applicable category's chain
+and include the interaction evidence. Record the category and skipped models.
+An exhausted chain/cap is a blocker, not approval; do not substitute another model.
 
 For each returning reviewer, use its last covered SHA as `--previous` and the
 original task base as `--base`. The next scope is previous SHA to current HEAD,

@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('review_scope', Path(__file__).parents[1] / 'scripts/review_scope.py')
 review = importlib.util.module_from_spec(spec)
@@ -157,14 +158,122 @@ class ReviewScopeTests(unittest.TestCase):
             self.assertIn('VISIBLE', output)
 
     def test_category_precedence_and_size_gated_integration(self):
-        manifest = {'totals': {'code': {'files': 30, 'band': 'standard'}}}
+        manifest = {'totals': {'code': {'files': 30, 'lines': 1500, 'band': 'standard'},
+                               'documentation': {'files': 0, 'lines': 0, 'band': 'none'}}}
         route = review.route_for(manifest, ['ui', 'security'], True)
         self.assertEqual('security', route['category'])
         self.assertEqual([['haiku', 'high'], ['mimo', 'thinking']], route['reviewers'])
         self.assertEqual(5, route['roundCap'])
         self.assertIsNone(route['integration'])
-        manifest['totals']['code']['band'] = 'large'
+        manifest['totals']['code'].update(files=90, lines=4200, band='large')
         self.assertEqual(['step', 'medium'], review.route_for(manifest, ['compatibility'], True)['integration'])
+
+    def test_mixed_route_survives_incremental_and_batch_scopes(self):
+        self.write('src/Component.razor', 'component\n' * 400)
+        self.write('docs/guide.md', 'guide\n' * 800)
+        first = self.save()
+        self.write('docs/guide.md', 'guide\n' * 801)
+        head = self.save()
+        output = self.repo / 'scope.json'
+        command = [sys.executable, '-B', str(Path(review.__file__)), '--repo', str(self.repo),
+                   '--head', head, 'scope', '--base', self.base, '--category', 'ui',
+                   '--area', 'ui=src', '--area', 'documentation=docs', '--output', str(output)]
+        for args in (['--previous', first], ['--path-prefix', 'docs']):
+            result = json.loads(subprocess.check_output(command + args, text=True))
+            self.assertEqual(['docs/guide.md'], [row['path'] for row in result['selected']])
+            self.assertTrue(result['route']['mixed'])
+            self.assertEqual({'ui', 'documentation'}, set(result['route']['selectedCategories']))
+            self.assertEqual({'minimax', 'haiku'}, {pair[0] for pair in result['route']['reviewers']})
+
+
+class ReviewRoutingTests(unittest.TestCase):
+    def manifest(self, *rows):
+        totals = {kind: {'files': 0, 'lines': 0} for kind in ('code', 'documentation')}
+        selected = []
+        for path, kind, lines in rows:
+            totals[kind]['files'] += 1
+            totals[kind]['lines'] += lines
+            selected.append({'path': path, 'visiblePaths': [path], 'kind': kind,
+                             'additions': lines, 'deletions': 0})
+        for kind, values in totals.items():
+            values['band'] = review.size_band(kind, **values)
+        return {'totals': totals, 'selected': selected}
+
+    def test_ui_documentation_mixture_keeps_full_coverage_and_issue_routes(self):
+        manifest = self.manifest(('src/Form.razor', 'code', 400), ('docs/forms.md', 'documentation', 800))
+        route = review.route_for(manifest, ['ui'], False, ['ui=src', 'documentation=docs'])
+        self.assertTrue(route['mixed'])
+        self.assertEqual([['minimax', 'medium'], ['haiku', 'medium']], route['reviewers'])
+        self.assertTrue(all(a['coverage'] == 'full' for a in route['reviewerAssignments']))
+        # Haiku has already reviewed, so a UI escalation must move to Kimi.
+        self.assertEqual([['kimi', 'high']], route['escalationByCategory']['ui'])
+        self.assertEqual([['glm', 'high'], ['mimo', 'thinking']], route['escalationByCategory']['documentation'])
+        self.assertEqual(2, sum(len(a['paths']) for a in route['areas']))
+
+    def test_token_documentation_does_not_replace_a_ui_reviewer(self):
+        manifest = self.manifest(('src/Form.razor', 'code', 400), ('docs/note.md', 'documentation', 10))
+        route = review.route_for(manifest, ['ui'], False, ['documentation=docs'])
+        self.assertFalse(route['mixed'])
+        self.assertEqual([['mimo', 'thinking'], ['minimax', 'medium']], route['reviewers'])
+
+    def test_protected_risk_cannot_be_diluted_by_two_larger_areas(self):
+        manifest = self.manifest(('auth.cs', 'code', 5), ('src/Form.razor', 'code', 400),
+                                 ('docs/forms.md', 'documentation', 800))
+        for category in ('security', 'state'):
+            route = review.route_for(manifest, [category, 'ui'], False, ['ui=src', 'documentation=docs'])
+            self.assertFalse(route['mixed'])
+            self.assertEqual(category, route['category'])
+            self.assertEqual(5, route['roundCap'])
+            self.assertEqual({'security': {'haiku', 'mimo'}, 'state': {'deepseek', 'minimax'}}[category],
+                             {pair[0] for pair in route['reviewers']})
+
+    def test_explicit_area_mapping_prevents_functional_json_becoming_docs(self):
+        manifest = self.manifest(('appsettings.json', 'documentation', 900))
+        with self.assertRaisesRegex(ValueError, 'Classify'):
+            review.route_for(manifest, [], False)
+        route = review.route_for(manifest, ['security'], False)
+        self.assertEqual('security', route['category'])
+        self.assertFalse(route['mixed'])
+
+    def test_nested_area_override_and_conflict(self):
+        manifest = self.manifest(('src/Form.razor', 'code', 400), ('src/docs/form.md', 'documentation', 800))
+        route = review.route_for(manifest, ['ui'], False, ['ui=src', 'documentation=src/docs'])
+        self.assertTrue(route['mixed'])
+        with self.assertRaisesRegex(ValueError, 'Conflicting'):
+            review.route_for(manifest, ['ui'], False, ['ui=src', 'documentation=src'])
+        with self.assertRaises(ValueError):
+            review.route_for(manifest, ['ui'], False, ['documentation=../private'])
+
+    def test_ignored_volume_cannot_create_a_mixture(self):
+        manifest = self.manifest(('src/Form.razor', 'code', 400))
+        manifest['excluded'] = [{'path': 'docs/generated.md', 'excluded': True}]
+        route = review.route_for(manifest, ['ui'], False, ['documentation=docs'])
+        self.assertFalse(route['mixed'])
+        self.assertNotIn('docs/generated.md', str(route['areas']))
+
+    def test_policy_variants_and_duplicate_leads_keep_two_distinct_models(self):
+        manifest = self.manifest(('src/App.cs', 'code', 5000))
+        route = review.route_for(manifest, ['general'], True)
+        self.assertEqual([['deepseek', 'high'], ['glm', 'high']], route['reviewers'])
+        self.assertEqual('escalation', route['integrationMode'])
+        # Two categories can name the same lead; the other assigned model is used.
+        routes = json.loads(json.dumps(review.POLICY['routes']))
+        next(r for r in routes if r['category'] == 'compatibility')['lead'] = 'deepseek'
+        manifest = self.manifest(('src/App.cs', 'code', 200), ('eng/Verify.ps1', 'code', 200))
+        with patch.dict(review.POLICY, {'routes': routes}):
+            route = review.route_for(manifest, ['general'], False, ['general=src', 'compatibility=eng'])
+        self.assertTrue(route['mixed'])
+        self.assertEqual({'deepseek', 'mimo'}, {pair[0] for pair in route['reviewers']})
+
+    def test_only_two_largest_substantial_areas_choose_reviewers(self):
+        manifest = self.manifest(('src/Form.razor', 'code', 400), ('docs/form.md', 'documentation', 800),
+                                 ('core/App.cs', 'code', 300))
+        route = review.route_for(manifest, ['general'], False,
+                                 ['ui=src', 'documentation=docs', 'general=core'])
+        self.assertEqual(['ui', 'documentation'], route['selectedCategories'])
+        self.assertIn('general', route['checklists'])
+        self.assertIn('general', route['escalationByCategory'])
+        self.assertEqual(2, len(route['reviewers']))
 
 
 if __name__ == '__main__':
