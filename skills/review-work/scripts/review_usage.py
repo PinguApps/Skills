@@ -310,7 +310,10 @@ def totals_row(label, runs, include_estimates):
         values.append((f'{sum(known):,}' + (' (partial)' if partial else '')) if known else 'unavailable')
     for billed in ([True, False] if include_estimates else [True]):
         evidence = [r['usage'] for r in runs if r.get('usage') and bool(r['usage'].get('billed')) == billed]
-        values.append(money(sum((Decimal(u['costUSD']) for u in evidence), Decimal('0'))) if evidence else 'unavailable')
+        if evidence:
+            values.append(money(sum((Decimal(u['costUSD']) for u in evidence), Decimal('0'))))
+        else:
+            values.append('—' if not billed and all(not incomplete(r) for r in runs) else 'unavailable')
     return '| ' + label + ' | ' + ' | '.join(values) + ' |'
 
 
