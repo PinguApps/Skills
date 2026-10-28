@@ -68,6 +68,8 @@ class Scope:
             raise ValueError('--repo must be the current worktree root, not a subdirectory')
         self.head = commit(self.repo, head)
         self.head_tree = tree(self.repo, self.head)
+        self._trees = {self.head: self.head_tree}
+        self._matches = {}
         self.policies = {}
         digest = hashlib.sha256()
         for path, (mode, kind, sha) in sorted(self.head_tree.items()):
@@ -87,6 +89,8 @@ class Scope:
         paths = list(dict.fromkeys(safe_path(p) for p in paths))
         if not paths:
             return {}
+        if all(path in self._matches for path in paths):
+            return {path: self._matches[path] for path in paths}
         with tempfile.TemporaryDirectory(prefix='review-policy-') as directory:
             sandbox = Path(directory)
             template = sandbox / 'empty-template'
@@ -96,7 +100,7 @@ class Scope:
             for path, content in self.policies.items():
                 target = sandbox / PurePosixPath(path).parent / '.gitignore'
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(content, encoding='utf-8')
+                target.write_bytes(content.encode('utf-8'))
             for path in paths:
                 (sandbox / PurePosixPath(path).parent).mkdir(parents=True, exist_ok=True)
             raw = run_git(sandbox, '-c', 'core.ignoreCase=false', '-c',
@@ -114,6 +118,7 @@ class Scope:
             result[path] = {'excluded': excluded, 'policy': source.replace('.gitignore', '.pragentignore')
                             if source else None, 'line': int(line) if line else None,
                             'pattern': pattern or None}
+        self._matches.update(result)
         return result
 
     def read(self, path, ref, offset=0, limit=12000):
@@ -121,8 +126,10 @@ class Scope:
         match = self.matching([path])[path]
         if match['excluded']:
             return {**match, 'path': path, 'complete': True, 'nextOffset': None}
-        sha = commit(self.repo, ref)
-        entry = tree(self.repo, sha).get(path)
+        sha = ref if ref in self._trees else commit(self.repo, ref)
+        if sha not in self._trees:
+            self._trees[sha] = tree(self.repo, sha)
+        entry = self._trees[sha].get(path)
         if not entry:
             return {'path': path, 'exists': False, 'complete': True, 'nextOffset': None}
         if entry[0] not in ('100644', '100755') or entry[1] != 'blob':
@@ -138,8 +145,9 @@ class Scope:
         return {'path': path, 'ref': sha, 'content': text[offset:end], 'offset': offset,
                 'complete': end == len(text), 'nextOffset': end if end < len(text) else None}
 
-    def manifest(self, base, previous=None):
+    def manifest(self, base, previous=None, prefixes=None):
         base = commit(self.repo, base)
+        prefixes = [safe_path(prefix).rstrip('/') for prefix in prefixes or []]
         start = base
         reset = False
         if previous:
@@ -160,9 +168,21 @@ class Scope:
             if not name:
                 old, new = rows[i].decode('utf-8'), rows[i + 1].decode('utf-8')
                 i += 2
+            if prefixes and not any(p == prefix or p.startswith(prefix + '/')
+                                    for p in (old, new) for prefix in prefixes) and not any(
+                                        PurePosixPath(p).name == '.pragentignore' for p in (old, new)):
+                continue
             changes.append({'old': old, 'path': new, 'additions': additions.decode(),
                             'deletions': deletions.decode()})
         matches = self.matching(p for row in changes for p in (row['old'], row['path']))
+        original_policy = Scope(self.repo, base)
+        newly_excluded = []
+        if original_policy.digest != self.digest:
+            inventory = set(self.head_tree) | {row['old'] for row in changes}
+            current_matches = self.matching(inventory)
+            original_matches = original_policy.matching(inventory)
+            newly_excluded = [{'path': path, **current_matches[path]} for path in sorted(inventory)
+                              if current_matches[path]['excluded'] and not original_matches[path]['excluded']]
         totals = {kind: {'files': 0, 'lines': 0} for kind in ('code', 'documentation')}
         selected, excluded, assessments = [], [], []
         for row in changes:
@@ -173,6 +193,11 @@ class Scope:
             if not visible:
                 continue
             if row['additions'] == '-' or any(PurePosixPath(p).suffix.lower() in MEDIA for p in visible):
+                assessments.extend(visible)
+                continue
+            # Git can call non-UTF8 bytes text; never decode its diff with replacement.
+            if any(self.read(p, ref, limit=1).get('needsExclusionAssessment')
+                   for p in visible for ref in (start, self.head)):
                 assessments.extend(visible)
                 continue
             additions, deletions = int(row['additions']), int(row['deletions'])
@@ -190,6 +215,8 @@ class Scope:
                              'additions': additions, 'deletions': deletions})
         return {'repo': str(self.repo), 'base': base, 'from': start, 'head': self.head,
                 'policyDigest': self.digest, 'policyReset': reset, 'totals': totals,
+                'batchPrefixes': prefixes,
+                'newExclusionsRequiringJustification': newly_excluded,
                 'selected': selected, 'excluded': excluded,
                 'needsExclusionAssessment': sorted(set(assessments))}
 
@@ -208,7 +235,11 @@ def route_for(manifest, categories, cross_boundary):
     if set(categories) - valid:
         raise ValueError('Unknown review category')
     if not categories:
-        categories = ['general' if manifest['totals']['code']['files'] else 'documentation']
+        if manifest['totals']['code']['files'] or any(
+                PurePosixPath(row['path']).suffix.lower() in ('.json', '.jsonc', '.json5')
+                for row in manifest.get('selected', [])):
+            raise ValueError('Classify code/configuration behaviour with explicit --category; JSON size alone is not a documentation route')
+        categories = ['documentation']
     chosen = next(r for r in POLICY['routes'] if r['category'] in categories)
     reviewers = chosen['reviewers']
     band = manifest['totals']['code']['band']
@@ -234,6 +265,7 @@ def main():
     manifest.add_argument('--output', required=True)
     manifest.add_argument('--category', action='append', default=[])
     manifest.add_argument('--cross-boundary-contract', action='store_true')
+    manifest.add_argument('--path-prefix', action='append', default=[], help='Coherent batch; repeat for multiple areas')
     for name in ('read', 'diff', 'search'):
         child = sub.add_parser(name)
         child.add_argument('--offset', type=int, default=0)
@@ -250,7 +282,7 @@ def main():
     args = parser.parse_args()
     scope = Scope(args.repo, args.head)
     if args.command == 'scope':
-        result = scope.manifest(args.base, args.previous)
+        result = scope.manifest(args.base, args.previous, args.path_prefix)
         for kind, values in result['totals'].items():
             values['band'] = size_band(kind, **values)
         result['route'] = route_for(result, args.category, args.cross_boundary_contract)
@@ -265,7 +297,8 @@ def main():
         if saved['head'] != scope.head or saved['policyDigest'] != scope.digest or Path(saved['repo']).resolve() != scope.repo:
             raise ValueError('Scope does not belong to this worktree/head/policy')
         # Rebuild instead of trusting editable visiblePaths in a saved manifest.
-        fresh = scope.manifest(saved['base'], saved['from'] if saved['from'] != saved['base'] else None)
+        fresh = scope.manifest(saved['base'], saved['from'] if saved['from'] != saved['base'] else None,
+                               saved.get('batchPrefixes'))
         if fresh['needsExclusionAssessment']:
             raise ValueError('Assess and commit missing artifact exclusions before review')
         chunks = []

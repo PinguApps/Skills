@@ -12,11 +12,17 @@ Assert-True (-not (Test-CopilotQuota 'human' $quotaText)) 'A human mentioning qu
 Assert-True (-not (Test-CopilotQuota 'copilot' 'Quota remains available.')) 'Quota words alone are not an exemption.'
 $stale = Get-CopilotReviewState @((New-Review 'Approved' 'APPROVED' 'old-head')) 'head'
 Assert-True ($stale.state -eq 'absent' -and -not $stale.clean) 'Old-head approval cannot approve current fixes.'
+$requested = Get-CopilotReviewState @() 'head' @(@{login='copilot-pull-request-reviewer[bot]'})
+Assert-True ($requested.state -eq 'running' -and -not $requested.clean) 'A requested review is in flight even before REST contains a submitted review.'
+$expected = Get-CopilotReviewState @() 'head' -AwaitingRereview
+Assert-True ($expected.state -eq 'running') 'A known accepted re-request cannot be mistaken for an absent reviewer.'
 $failed = Get-CopilotReviewState @((New-Review 'Authentication failed; unable to review.' 'COMMENTED')) 'head'
 Assert-True (-not $failed.clean) 'Service failures cannot provide clean-review evidence.'
 Assert-True ($failed.state -eq 'incomplete') 'A non-quota review failure remains incomplete.'
 $clean = Get-CopilotReviewState @((New-Review 'Copilot reviewed 8 files and generated no new comments.')) 'head'
 Assert-True $clean.clean 'A current-head explicit no-new-comments review is clean.'
+$noComments = Get-CopilotReviewState @((New-Review 'Copilot reviewed 8 files and generated no comments.')) 'head'
+Assert-True $noComments.clean 'The regular Copilot no-comments summary is clean.'
 $thread = [pscustomobject]@{id='thread';isResolved=$false;comments=@{nodes=@(
     [pscustomobject]@{author=@{login='copilot-pull-request-reviewer[bot]'};createdAt='2026-10-27T10:00:00Z'},
     [pscustomobject]@{author=@{login='agent'};createdAt='2026-10-27T11:00:00Z';pullRequestReview=@{state='COMMENTED';submittedAt='2026-10-27T11:00:00Z'}}

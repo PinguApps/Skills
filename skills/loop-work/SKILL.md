@@ -1,6 +1,6 @@
 ---
 name: loop-work
-description: Loop through a Linear team's project backlog using coordinator-controlled T3 threads in isolated worktrees and complete-work, merge verified PRs, and reassess until a stopping condition applies.
+description: Coordinate a Linear backlog through isolated T3 workers using complete-work; workers review and merge their PRs, and the coordinator verifies outcomes and reassesses the backlog.
 ---
 
 # Loop Work
@@ -69,6 +69,12 @@ A reservation remains outstanding through implementation, review, repair and mer
 Use `linear-ticket`'s full-scope estimate assessment and native write procedure for each selected ticket, including its fallback scale and error handling. Record its estimate, rationale, assumptions or specific failure in the run ledger. Insufficient scope for honest sizing makes the ticket Needs input; skip it.
 
 For each selection:
+
+Keep at least one slot free from ticket workers while an accepted ticket still
+needs pre-PR review. Before each launch, check projected worker plus allocated
+reviewer capacity against the limit. Use that reserved slot for serial independent
+reviews, granting a second reviewer slot only when capacity permits. Do not fill
+all slots with workers and then wait for review capacity that cannot become free.
 
 1. Re-fetch the issue and confirm scope, status, ownership, dependencies, and requirements still match its assessment. Check for an existing exact branch/PR and live worker thread before creating anything. Skip another actor's claim; if a concurrent claim appears, halt this ticket's dispatch and reconcile it.
 2. Fetch the current default branch. Derive the branch from Linear's branch suggestion: replace its leading owner namespace (for example `pingu/`) with `agent/`, preserve an existing `agent/` prefix, or prepend `agent/` to an unnamespaced suggestion. Preserve the issue-identifying suffix. If no suggestion exists, use `agent/<lowercase-issue-id>-<short-title-slug>`. Validate with `git check-ref-format --branch`. A collision requires ownership reconciliation, not an arbitrary new suffix or overwrite.

@@ -45,6 +45,10 @@ Honour a repository restriction or narrower user grant.
 Repeat `--category` for all applicable checklists. Select categories from actual
 changed behaviour and requirements, not extension or title alone. JSON remains in
 the documentation size bucket even when its contents change auth or deployment.
+Code and JSON require explicit classification; the helper cannot infer behavioural
+risk from size. Use repeatable `--path-prefix` values on `scope` for coherent
+batches. Preserve the complete manifest and prove their union covers every selected
+path; policy changes appear in every batch. Both assigned reviewers cover each batch.
 Other text belongs to code. Media/binaries must be explicitly covered by ignore
 rules before review; `needsExclusionAssessment` must be empty.
 
@@ -76,6 +80,15 @@ requires this flag **and** a large/very-large code band. It examines relationshi
 between reviewed batches. Pure documentation growth does not trigger it.
 
 ## Dispatch and own the reviewers
+
+Before dispatch, read [the OpenCode runtime setup](review-runtime.md). Prepare its
+worktree-local loader and verify it is loaded in that exact OpenCode location.
+It supplies `pingu_review_source`, restricts owned review sessions to that reader,
+removes ambient repository instruction text/attachments from model context, and
+captures OpenRouter response usage without saving headers or response prose.
+This is an application guard, not an operating-system sandbox; configuration and
+other installed plugins remain trusted. Review metadata and transcripts before
+accepting coverage. A failed guard or unavailable plugin is an operational blocker.
 
 Discover T3 capabilities once before first delegation. Use `delegate_task`, role
 `review`, shared isolation (the parent worktree), with OpenCode as the runner and
@@ -110,9 +123,9 @@ Task base: <base> Review range: <from>..<head> Head ignore policy: <head>
 Intent/acceptance criteria: <complete concise review context>
 Checklists: <primary and other applicable responsibilities>
 Checks actually run: <evidence and limitations>
-Allowed source access: use only review_scope.py read/diff/search with this head.
+Allowed source access: use only pingu_review_source (diff/read/search).
 Do not bypass exclusions using raw git diff/show, shell searches or file tools.
-Scope/reader command: <absolute Python/helper paths and manifest path>
+The runtime fixes the actual worktree, manifest, head and historical refs.
 Review only this range, with unchanged context needed to understand its effects.
 Find concrete scoped failures, broken callers and unmet requirements; avoid scope
 creep and style-only churn. Do not inspect unrelated earlier reviewed changes.
@@ -126,6 +139,13 @@ their IDs and dispositions, ensure no live/queued work remains, then settle that
 owned child with `t3_thread_organize`. Cancel obsolete/running tasks with
 `task_cancel` and verify termination before settling. Settling is not cancellation.
 Never touch unrelated threads. Reviewers never own fixes or PR lifecycle actions.
+Read the complete tool transcript; a direct source-access bypass invalidates the
+review and must be investigated. Retain guard/session/transport evidence. Review
+changed ignore rules and their excluded path inventory before accepting any newly
+hidden source; record the narrow artifact justification without opening it.
+The manifest's `newExclusionsRequiringJustification` includes newly hidden paths,
+including unchanged context files. Account for each rule/path group in the receipt;
+an ignore edit cannot silently erase relevant source or an outstanding finding.
 
 ## Findings and incremental rounds
 
@@ -163,6 +183,9 @@ finding dispositions, verification evidence, child cleanup and ledger location.
 Publication requires complete scope coverage and no unresolved actionable finding.
 If all changed content is explicitly excluded and no finding is outstanding, make
 no model calls and record that result; policy files themselves still get reviewed.
+Write this as `<run-directory>/coverage-receipt.json`. Include explicit per-run
+IDs, model ranges, finding dispositions, verification and child cleanup. This is
+the parent's evidence document, not a model-generated approval or a ledger reset.
 
 ## Usage and PR handoff
 
@@ -170,27 +193,33 @@ Use [review_usage.py](../scripts/review_usage.py) to maintain one run ledger:
 
 ```powershell
 & <absolute-python> <absolute-skill>/scripts/review_usage.py --ledger <ledger> init `
-  --repo <actual-worktree-root> --merge-policy automatic
-# Add --sensitive for a route with a five-round cap; manual preserves a human hold.
+  --repo <actual-worktree-root> --merge-policy automatic --scope <scope-json>
+# The classified scope supplies its round cap; manual preserves a human hold.
 & <absolute-python> <absolute-skill>/scripts/review_usage.py --ledger <ledger> record --run-file <run-json>
 & <absolute-python> <absolute-skill>/scripts/review_usage.py --ledger <ledger> collect `
-  --run-id <run-id> --opencode <absolute-opencode-executable>
+  --run-id <run-id> --opencode <absolute-opencode-executable> --task-state <saved-terminal-task-status-json>
 & <absolute-python> <absolute-skill>/scripts/review_usage.py --ledger <ledger> render --output <summary-md>
 ```
 
 Run JSON requires `id`, integer `round`, unique `marker`, exact policy `model`,
-`effort`, `from` and `head`. Add returned `taskId`/`threadId`, verdict and finding
+`effort`, `from` and `head`; runtime setup also needs `base`, absolute `scope` and
+`title`. Add returned `taskId`/`threadId`, verdict and finding
 evidence on completion. Session correlation requires the exact unique marker in
-one saved user message, never guessed titles/timestamps or a T3 thread ID used as
+the first saved user message, never guessed titles/timestamps or a T3 thread ID used as
 an OpenCode session ID. The helper reads session/message metadata without making
 inference requests. Capture every charged step/retry/compaction, deduplicate IDs,
 and detect unexpected auxiliary models. Do not double-count session totals and
-message totals, or add reasoning to completion tokens twice.
+message totals. OpenCode 2 stores visible output separately from reasoning; add
+them once for its output total. OpenRouter completion tokens already include
+reasoning. Input totals include cache tokens, which are also shown separately.
 
-Prefer OpenRouter's returned `usage.cost` (the amount charged), preserving request
-generation IDs. OpenCode's reported cost must be labelled as such until actual
-billing provenance is verified; an estimate is not measured spend. Missing usage
-is unavailable, never zero. Keep cost precision internally and round displayed
+Use the runtime journal's OpenRouter `usage.cost` and generation IDs for actual
+billed totals. The collector requires a saved owned terminal T3 task and a terminal
+OpenCode session, so collection cannot silently cut off ongoing work. Serialize
+all ledger writes in the parent. OpenCode's catalogue estimate is separate and
+is never labelled billed spend. `--allow-estimate` can retain failed-run evidence
+when transport usage is unavailable; disclose that limitation in the PR. Missing
+usage is unavailable, never zero. Keep cost precision internally and round displayed
 model/round/grand totals to cents. Exclude implementation-agent and CI costs.
 
 Append `## AI review` after `## Test changes`: one subsection per actual round,

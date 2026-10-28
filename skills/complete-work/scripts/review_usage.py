@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import re
 
 POLICY = json.loads((Path(__file__).parents[1] / 'references/review-policy.json').read_text(encoding='utf-8'))
 
@@ -42,11 +43,16 @@ def pages(executable, operation, **params):
     seen = set()
     while True:
         response = api(executable, operation, **params)
+        if set(response) - {'data', 'cursor'}:
+            raise ValueError('Unexpected OpenCode pagination fields')
         data = response.get('data', [])
         if not isinstance(data, list):
             raise ValueError('Unexpected OpenCode list response')
         yield from data
-        cursor = response.get('cursor', {}).get('next') if isinstance(response.get('cursor'), dict) else None
+        cursor_info = response.get('cursor', {})
+        if not isinstance(cursor_info, dict) or set(cursor_info) - {'next', 'previous'}:
+            raise ValueError('Unexpected OpenCode cursor shape')
+        cursor = cursor_info.get('next')
         if not cursor:
             return
         if cursor in seen:
@@ -58,6 +64,8 @@ def pages(executable, operation, **params):
 def user_text(message):
     if message.get('type') != 'user':
         return ''
+    if isinstance(message.get('text'), str):
+        return message['text']
     content = message.get('content', [])
     if isinstance(content, str):
         return content
@@ -66,16 +74,22 @@ def user_text(message):
 
 def correlate(executable, run, directory):
     matches = []
-    for session in pages(executable, 'session.list', directory=directory, limit=100):
+    for session in pages(executable, 'session.list', directory=Path(directory).as_posix(), limit=100):
+        if Path(session['location']['directory']).resolve() != Path(directory).resolve():
+            continue
+        if run.get('sessionID') and session['id'] != run['sessionID']:
+            continue
         messages = list(pages(executable, 'session.message.list', sessionID=session['id'], limit=100))
-        if any(run['marker'] in user_text(message) for message in messages):
+        users = sorted((m for m in messages if m.get('type') == 'user'), key=lambda m: m['time']['created'])
+        lines = re.findall(r'^Review-Run-ID: \S+$', user_text(users[0]), flags=re.MULTILINE) if users else []
+        if lines == [run['marker']]:
             matches.append((session, messages))
     if len(matches) != 1:
         raise ValueError(f'Expected one session containing the exact run marker; found {len(matches)}')
     return matches[0]
 
 
-def reported_usage(messages, expected_model):
+def reported_usage(messages, expected_model, expected_effort=None):
     totals = {'input': 0, 'output': 0, 'reasoning': 0, 'cacheRead': 0, 'cacheWrite': 0}
     cost = Decimal('0')
     ids = set()
@@ -88,10 +102,13 @@ def reported_usage(messages, expected_model):
             continue
         ids.add(identifier)
         model = message.get('model', {})
-        if model and model.get('providerID', '') + '/' + model.get('modelID', '') != expected_model:
+        if model.get('providerID', '') + '/' + model.get('id', model.get('modelID', '')) != expected_model:
             raise ValueError('Unexpected auxiliary model in review session: ' + str(model))
+        if expected_effort and model.get('variant') != expected_effort:
+            raise ValueError('Unexpected review effort: ' + str(model))
         tokens = message.get('tokens')
-        if tokens is None or message.get('cost') is None:
+        if tokens is None or message.get('cost') is None or (
+                message['type'] == 'assistant' and not message.get('time', {}).get('completed')):
             # Streaming/tool-only messages without usage must not turn into $0.
             missing.append(identifier)
             continue
@@ -100,8 +117,57 @@ def reported_usage(messages, expected_model):
         totals['cacheRead'] += tokens.get('cache', {}).get('read', 0)
         totals['cacheWrite'] += tokens.get('cache', {}).get('write', 0)
         cost += Decimal(str(message['cost']))
-    return {**totals, 'costUSD': str(cost), 'source': 'OpenCode reported; billed-cost provenance requires verification',
+    # OpenCode 2.1.4 usage.ts uses visibleOutputTokens, separately from reasoning.
+    # OpenRouter completion_tokens already includes reasoning; never add it there.
+    totals['input'] += totals['cacheRead'] + totals['cacheWrite']
+    totals['output'] += totals['reasoning']
+    return {**totals, 'costUSD': str(cost), 'billed': False, 'source': 'OpenCode catalogue estimate, not billed spend',
             'messageIDs': sorted(ids), 'missingUsageMessageIDs': missing}
+
+
+def billed_usage(records, run, session_id):
+    responses, usage, finished = {}, {}, set()
+    guards = []
+    for entry in records:
+        if entry.get('event') == 'guard':
+            guards.append(entry)
+        if entry.get('event') not in ('request', 'response', 'usage', 'end'):
+            continue
+        if entry.get('sessionID') != session_id or entry.get('model') != run['model'] or entry.get('effort') != run['effort']:
+            raise ValueError('Transport record belongs to a different review session/model/effort')
+        request = entry['requestID']
+        if entry['event'] == 'request':
+            responses[request] = entry
+        elif entry['event'] == 'usage':
+            usage[request] = entry
+        elif entry.get('complete'):
+            finished.add(request)
+    if not responses or not guards or any(g['tools'] != ['pingu_review_source'] for g in guards):
+        raise ValueError('Missing filtered-tool guard or transport evidence')
+    totals = dict(input=0, output=0, reasoning=0, cacheRead=0, cacheWrite=0)
+    cost = Decimal('0')
+    generation_ids, missing = set(), []
+    for request in responses:
+        item = usage.get(request, {})
+        value = item.get('usage', {})
+        if request not in finished or value.get('cost') is None or not item.get('generationID'):
+            missing.append(request)
+            continue
+        generation = item['generationID']
+        if generation in generation_ids:
+            raise ValueError('Duplicate OpenRouter generation across physical requests; reconcile before summing')
+        generation_ids.add(generation)
+        if value.get('prompt_tokens') is None or value.get('completion_tokens') is None:
+            raise ValueError('Missing billed token counts')
+        totals['input'] += value['prompt_tokens']
+        totals['output'] += value['completion_tokens']
+        totals['reasoning'] += value.get('completion_tokens_details', {}).get('reasoning_tokens', 0)
+        for field, key in [('cacheRead', 'cached_tokens'), ('cacheWrite', 'cache_write_tokens')]:
+            amount = value.get('prompt_tokens_details', {}).get(key)
+            totals[field] = None if amount is None or totals[field] is None else totals[field] + amount
+        cost += Decimal(str(value['cost']))
+    return {**totals, 'costUSD': str(cost), 'billed': True, 'source': 'OpenRouter response usage.cost',
+            'generationIDs': sorted(generation_ids), 'missingUsageMessageIDs': missing}
 
 
 def money(value):
@@ -112,11 +178,12 @@ def render(ledger):
     lines = ['## AI review', '', 'Merge policy: ' + ledger['mergePolicy'], '']
     total = Decimal('0')
     unavailable = False
+    estimated = any(not run.get('usage', {}).get('billed', False) for run in ledger['runs'])
     for round_number in sorted(set(run['round'] for run in ledger['runs'])):
         runs = [run for run in ledger['runs'] if run['round'] == round_number]
         notes = []
         lines += [f'### Round {round_number}', '',
-                  '| Model | Effort | Input (reported) | Cache read | Cache write | Output (reported) | Cost USD |',
+                  '| Model | Effort | Input total | Cache read | Cache write | Output total | Cost USD |',
                   '|---|---|---:|---:|---:|---:|---:|']
         subtotal = Decimal('0')
         for run in runs:
@@ -127,12 +194,15 @@ def render(ledger):
                 lines.append(f"| {run['model']} | {run['effort']} | unavailable | unavailable | unavailable | unavailable | unavailable |")
                 continue
             subtotal += Decimal(usage['costUSD'])
-            lines.append(f"| {run['model']} | {run['effort']} | {usage['input']:,} | {usage['cacheRead']:,} | {usage['cacheWrite']:,} | {usage['output']:,} | {money(usage['costUSD'])} |")
+            counts = ['unavailable' if usage.get(key) is None else f'{usage[key]:,}' for key in ('input', 'cacheRead', 'cacheWrite', 'output')]
+            qualifier = '' if usage.get('billed') else ' estimate'
+            lines.append(f"| {run['model']} | {run['effort']} | " + ' | '.join(counts) + f" | {money(usage['costUSD'])}{qualifier} |")
             notes.append(f"Reviewed `{run['from']}` → `{run['head']}`; outcome: {run.get('verdict', 'not recorded')}. Cost source: {usage['source']}.")
         total += subtotal
         lines += ['', *notes, '', '**Round subtotal: ' + money(subtotal) + '**', '']
-    lines += ['**Total recorded review cost: ' + money(total) + '**', '',
-              'Review costs cover pre-PR sessions only. Output and reasoning are recorded separately; reasoning is not added to output a second time.']
+    label = 'Total recorded estimate (billed total unavailable)' if estimated else 'Total billed review cost'
+    lines += ['**' + label + ': ' + money(total) + '**', '',
+              'Pre-PR sessions only. Input total includes cache reads/writes; output total includes reasoning exactly once.']
     if unavailable:
         lines += ['', '**Accounting incomplete:** missing usage is not zero cost.']
     return '\n'.join(lines) + '\n'
@@ -145,20 +215,29 @@ def main():
     init = sub.add_parser('init')
     init.add_argument('--repo', required=True)
     init.add_argument('--merge-policy', choices=['automatic', 'manual'], default='automatic')
-    init.add_argument('--sensitive', action='store_true', help='Security/auth/permissions/data-loss/state route: cap at five')
+    init.add_argument('--scope', required=True, help='Use the classified scope route and its round cap')
     record = sub.add_parser('record')
     record.add_argument('--run-file', required=True)
     collect = sub.add_parser('collect')
     collect.add_argument('--run-id', required=True)
     collect.add_argument('--opencode', required=True)
+    collect.add_argument('--task-state', required=True, help='Saved terminal T3 task_status structured result')
+    collect.add_argument('--allow-estimate', action='store_true', help='Record incomplete billing evidence honestly; never supplies review approval')
     output = sub.add_parser('render')
     output.add_argument('--output', required=True)
     args = parser.parse_args()
     if args.command == 'init':
         if Path(args.ledger).exists():
             raise ValueError('Ledger exists; resume it rather than resetting review history')
+        scope = load(args.scope)
+        if Path(scope['repo']).resolve() != Path(args.repo).resolve():
+            raise ValueError('Scope belongs to another worktree')
+        cap = scope['route']['roundCap']
+        expected = POLICY['roundCaps']['securityOrState' if {'security', 'state'} & set(scope['route']['checklists']) else 'normal']
+        if cap != expected:
+            raise ValueError('Invalid route cap')
         save(args.ledger, {'repo': str(Path(args.repo).resolve()), 'mergePolicy': args.merge_policy,
-                           'roundCap': POLICY['roundCaps']['securityOrState' if args.sensitive else 'normal'], 'runs': []})
+                           'roundCap': cap, 'route': scope['route'], 'runs': []})
         return
     ledger = load(args.ledger)
     if args.command == 'record':
@@ -181,9 +260,24 @@ def main():
         save(args.ledger, ledger)
     elif args.command == 'collect':
         run = next(item for item in ledger['runs'] if item['id'] == args.run_id)
+        state = load(args.task_state)
+        if state.get('taskId') != run.get('taskId') or state.get('childThreadId') != run.get('threadId') or state.get('status') not in ('completed', 'failed', 'cancelled', 'interrupted') or state.get('hasPendingChildRuns') or state.get('hasPendingQuestion'):
+            raise ValueError('Usage collection requires the owned terminal T3 task, without live descendants/questions')
         session, messages = correlate(args.opencode, run, ledger['repo'])
         run['sessionID'] = session['id']
-        run['usage'] = reported_usage(messages, run['model'])
+        if not session.get('outcome') or not session.get('time', {}).get('idle'):
+            raise ValueError('OpenCode session is not terminal')
+        estimate = reported_usage(messages, run['model'], run['effort'])
+        journal = Path(args.ledger).parent / (run['id'] + '.transport.jsonl')
+        if journal.exists():
+            run['usage'] = billed_usage([json.loads(line) for line in journal.read_text(encoding='utf-8').splitlines()], run, session['id'])
+            if run['usage']['missingUsageMessageIDs'] and not args.allow_estimate:
+                raise ValueError('Incomplete OpenRouter billing evidence; retain journal and reconcile')
+        elif args.allow_estimate:
+            run['usage'] = estimate
+        else:
+            raise ValueError('Missing actual OpenRouter usage capture; no billed total can be claimed')
+        run['openCodeEstimate'] = estimate
         save(args.ledger, ledger)
         print(json.dumps({'runID': run['id'], 'sessionID': session['id'], 'usage': run['usage']}, indent=2))
     else:

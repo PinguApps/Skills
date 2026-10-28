@@ -26,7 +26,7 @@ class ReviewScopeTests(unittest.TestCase):
         target.write_bytes(content if isinstance(content, bytes) else content.encode())
 
     def save(self):
-        review.run_git(self.repo, 'add', '--all', '--force')
+        review.run_git(self.repo, '-c', 'core.autocrlf=false', 'add', '--all', '--force')
         review.run_git(self.repo, '-c', 'user.name=Review test', '-c',
                        'user.email=review@example.test', '-c', 'commit.gpgsign=false',
                        'commit', '--quiet', '-m', 'fixture')
@@ -63,6 +63,26 @@ class ReviewScopeTests(unittest.TestCase):
         self.assertNotIn('content', result)
         self.assertTrue(result['complete'])
         self.assertFalse(scope.matching(['visible.cs'])['visible.cs']['excluded'])
+
+    def test_crlf_policy_bytes_and_batch_boundaries(self):
+        self.write('.pragentignore', b'/secret.json\r\n*.pen\r\n')
+        self.write('secret.json', 'DO_NOT_LEAK\n')
+        self.write('area/a.cs', 'code\n')
+        self.write('area-other/a.cs', 'other\n')
+        scope = review.Scope(self.repo, self.save())
+        self.assertIn('\r\n', scope.policies['.pragentignore'])
+        self.assertTrue(scope.read('secret.json', scope.head)['excluded'])
+        batch = scope.manifest(self.base, prefixes=['area'])
+        self.assertEqual({'.pragentignore', 'area/a.cs'}, {row['path'] for row in batch['selected']})
+
+    def test_json_requires_behaviour_classification_and_non_utf8_is_assessed(self):
+        self.write('appsettings.json', '{}\n')
+        self.write('legacy.txt', b'not utf8 \xff\n')
+        manifest = review.Scope(self.repo, self.save()).manifest(self.base)
+        self.assertEqual(['legacy.txt'], manifest['needsExclusionAssessment'])
+        manifest['totals']['code']['band'] = 'none'
+        with self.assertRaisesRegex(ValueError, 'Classify'):
+            review.route_for(manifest, [], False)
 
     def test_incremental_range_and_policy_change_reset(self):
         self.write('.pragentignore', 'hidden.json\n')
@@ -104,6 +124,7 @@ class ReviewScopeTests(unittest.TestCase):
         result = review.Scope(self.repo, self.save()).manifest(self.base)
         self.assertEqual([], result['needsExclusionAssessment'])
         self.assertEqual(1, len(result['excluded']))
+        self.assertEqual(['design.pen'], [row['path'] for row in result['newExclusionsRequiringJustification']])
 
     def test_unreadable_policy_fails_closed_and_paths_cannot_escape(self):
         self.write('.pragentignore', b'\xff\xfe')

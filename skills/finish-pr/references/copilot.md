@@ -11,6 +11,9 @@ current published SHA. Keep these distinctions in the ledger:
   reviewed-source verdict, does not excuse other failing checks or human change
   requests, and cannot erase previously actionable findings.
 - **running:** a started current-head review remains pending. Wait for its event.
+  Inspect requested reviewers as well as submitted reviews: REST can contain no
+  review yet while Copilot is processing. Preserve an accepted re-request in the
+  ledger until its current-head result arrives; absence alone cannot end that wait.
 - **completed:** a submitted review supplies actual findings or a clean result.
 - **incomplete:** non-quota failure or insufficient evidence; do not invent approval.
 - **absent:** no current-head review is known; do not require an optional review
@@ -21,6 +24,8 @@ the thread reply. Wait for configured automatic re-review; if it does not start,
 use the available supported GitHub re-request mechanism once for that new head.
 Verify the request's outcome and do not repeatedly ping it. A quota response ends
 that review wait; report any remaining unresolved requirement separately.
+This workflow explicitly permits one supported re-request per newly fixed head;
+it replaces the retired policy that relied on PR Agent to verify Copilot fixes.
 
 The parent can settle a remaining Copilot thread only with all this evidence:
 

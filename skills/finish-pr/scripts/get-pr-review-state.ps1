@@ -46,21 +46,25 @@ function Test-CopilotQuota {
 }
 
 function Get-CopilotReviewState {
-    param([array]$Reviews, [string]$HeadSha)
+    param([array]$Reviews, [string]$HeadSha, [array]$RequestedReviewers = @(), [switch]$AwaitingRereview)
     $current = @($Reviews | Where-Object {
         (Test-CopilotLogin (Get-ReviewLogin $_)) -and (Get-ReviewSha $_) -eq $HeadSha
     } | Sort-Object { Get-ReviewTime $_ } -Descending)
-    if (-not $current.Count) { return [pscustomobject]@{ state = 'absent'; clean = $false; review = $null } }
+    $requested = @($RequestedReviewers | Where-Object { Test-CopilotLogin $_.login }).Count -gt 0
+    if (-not $current.Count) {
+        $state = if ($requested -or $AwaitingRereview) { 'running' } else { 'absent' }
+        return [pscustomobject]@{ state = $state; clean = $false; review = $null }
+    }
     $latest = $current[0]
     if (Test-CopilotQuota (Get-ReviewLogin $latest) $latest.body) {
         return [pscustomobject]@{ state = 'quota-pass'; clean = $false; review = $latest }
     }
-    if (@($current | Where-Object state -eq 'PENDING').Count) { $state = 'running' }
+    if ($requested -or @($current | Where-Object state -eq 'PENDING').Count) { $state = 'running' }
     elseif ($latest.body -match '(?is)(unable to review|could not review|review failed)') { $state = 'incomplete' }
     elseif ($latest.state -eq 'CHANGES_REQUESTED') { $state = 'changes-requested' }
     else { $state = 'completed' }
-    $clean = $latest.state -eq 'APPROVED' -or
-        ($latest.state -eq 'COMMENTED' -and $latest.body -match '(?is)(generated no new comments|(?:found no|no (?:new |additional )?)(?:issues|findings)|no new comments)')
+    $clean = $state -eq 'completed' -and ($latest.state -eq 'APPROVED' -or
+        ($latest.state -eq 'COMMENTED' -and $latest.body -match '(?is)(generated no (?:new )?comments|did not generate any comments|(?:found no|no (?:new |additional )?)(?:issues|findings)|no new comments)'))
     return [pscustomobject]@{ state = $state; clean = $clean; review = $latest }
 }
 
@@ -103,7 +107,7 @@ $threadArgs = @{ PrNumber = $PrNumber; Repository = $Repository; All = $true }
 if ($Hostname) { $threadArgs.Hostname = $Hostname }
 $threads = & "$PSScriptRoot/get-unresolved-pr-threads.ps1" @threadArgs | ConvertFrom-Json -Depth 100
 $viewer = Invoke-ReviewGhJson ($prefix + @('user'))
-$state = Get-CopilotReviewState -Reviews $reviews -HeadSha $pr.head.sha
+$state = Get-CopilotReviewState -Reviews $reviews -HeadSha $pr.head.sha -RequestedReviewers @($pr.requested_reviewers)
 $fresh = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/pulls/$PrNumber"))
 if ($fresh.head.sha -ne $pr.head.sha) { throw 'PR head changed while reading review state.' }
 [pscustomobject]@{
