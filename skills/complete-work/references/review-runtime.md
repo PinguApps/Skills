@@ -82,7 +82,7 @@ written to global configuration, and unloading the runtime removes the transform
 For Haiku's 100,000-token tier, this sets a 70,000-token effective input limit.
 OpenCode's default 16,000-token reserve starts its own automatic summary near
 54,000 estimated tokens. Tier-priced requests also cap output at 8,192 tokens,
-including reasoning, through the native model-request hook, and verify the cap in
+including reasoning, through native `context`/`compaction` generation options, and verify the cap in
 the outgoing request. Effort remains high/medium as assigned. Limit aggregate
 source output to 12,000 characters per primary step for these models; parallel
 tool calls beyond that budget defer their unchanged cursor to the next step.
@@ -90,6 +90,9 @@ This leaves room for answer growth, tool results and the summary request itself.
 Flat-price models keep their existing output limits. The harness writes/stores the summary itself; the parent
 does not call `compact`, fabricate summaries or launch another summarizer. Summary
 inference is charged and included in that model's review cost.
+In OpenCode 2.1.4 the later `model.request` hook only exposes routing URL/headers;
+it has no generation-options field. Keep the regression fixture aligned with
+`SessionModelRequest.prepare`, and verify recorded raw-request output caps live.
 Use the source tool's `nextOffset` as a character offset, never a line number.
 Omit `ref` for HEAD or supply an exact allowed SHA; search accepts either `path`
 or `pathPrefix` to narrow its repository area.

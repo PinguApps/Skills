@@ -153,12 +153,14 @@ test('tier reserve limits output and source bursts while the contract survives n
     });
     await hooks.get('prompt')({sessionID: 'session', prompt: {text: run.marker}});
     const model = {providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5', variant: 'high'};
-    const request = {sessionID: 'session', model, kind: 'primary', options: {maxTokens: 131072}};
-    await hooks.get('model.request')(request);
-    assert.equal(request.options.maxTokens, 8192);
+    // Mirrors SessionModelRequest.prepare in OpenCode 2.1.4: generation options
+    // belong to context/compaction, while model.request has only URL/headers.
+    const request = {sessionID: 'session', model, kind: 'primary', baseURL: 'https://openrouter.ai', headers: {}};
+    if (hooks.has('model.request')) await hooks.get('model.request')(request);
     for (const hook of ['context', 'compaction']) {
-      const event = {sessionID: 'session', model, tools: {pingu_review_source: {}}};
+      const event = {sessionID: 'session', model, options: {maxTokens: 131072}, tools: {pingu_review_source: {}}};
       await hooks.get(hook)(event);
+      assert.equal(event.options.maxTokens, 8192, hook + ' must cap generation before native protocol lowering');
       assert.ok(event.system.some(part => part.text.includes('G01 and G22')));
     }
     const native = body => new Request('https://openrouter.ai/api/v1/chat/completions', {method: 'POST', body: JSON.stringify(body)});
