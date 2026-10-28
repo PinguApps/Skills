@@ -19,8 +19,9 @@ Read applicable repository instructions and recover intent, decisions, acceptanc
 criteria, verification and review dispositions from this conversation and the PR's
 [review context](../create-pr/references/review-context.md). Inspect the complete
 change and all existing feedback, including outdated threads; a review summary is
-not a substitute for its findings. Apply head `.pragentignore` policies to review
-content access using the [shared scope tools](../complete-work/references/pre-pr-review.md).
+not a substitute for its findings. Apply head `.pragentignore` policies to
+repository source consulted through the [shared scope tools](../complete-work/references/pre-pr-review.md).
+GitHub comment bodies are feedback, not repository paths subject to those filters.
 
 Capture `git status --short`, branch and HEAD. Record pre-existing staged,
 unstaged and untracked paths. Preserve them; stop before touching a fix path with
@@ -42,6 +43,10 @@ admin bypasses or closing an obsolete PR.
 Maintain a durable run ledger outside tracked files: starting/current SHA, initial
 dirty paths, feedback IDs/dispositions, commit/reply IDs, re-review requests,
 settlement evidence, watcher ownership and consumed convergence budget.
+Resolve the authenticated viewer login from the state helper. Capture every
+baseline thread ID and `isResolved` value (`-All`), and retain each observed change
+across pushes and resumes. Use viewer identity plus this run's recorded reply IDs
+to identify its responses; human comments under the same login remain feedback.
 
 ## 2. Resolve conflicts, then failed checks
 
@@ -87,6 +92,8 @@ Validate each actionable finding against task scope and source. Fix real bugs,
 missed requirements and demonstrated causes in directly related changed code.
 Decline false positives or out-of-scope suggestions with concrete evidence; never
 agree just to end a discussion. Commit verified fixes incrementally. Preserve one
+focused regression check for behavioural or regression-prone fixes, reusing tests
+that already establish the requirement. Preserve one
 focused commit per changed feedback unit (one thread or standalone item); a single
 thread's related fixes belong together. Do not create empty traceability commits
 when another fix already addresses the concern: record the shared fixing SHA.
@@ -140,6 +147,10 @@ blocker, exhausted bounds or unexpected head movement. Limits do not supply
 approval. Do not wait for an optional reviewer that never started, including
 Copilot when quota was explicitly exhausted. Human holds produce a ready handoff,
 not an indefinite wait or an automatic merge.
+When an essential human response is missing, report that precise blocker. On a
+later resume after one business day, one concise reminder in the existing PR
+conversation is permitted only within the caller's communication authorization.
+Record it to avoid duplicates; preserve the convergence budget and human hold.
 
 ## 6. Audit and merge, or hand off
 
@@ -157,6 +168,10 @@ Immediately before merge/handoff, re-fetch PR/base/head and verify:
   submitted replies, and no created reply remains pending.
 - Every review thread required by repository protection is resolved. Use only the
   narrowly authorized Copilot settlement above; a human thread is not ours to close.
+- Compare current thread resolution states with the baseline and prior observations.
+  Account for each mutation by this run with its narrow Copilot settlement receipt.
+  Report other observed changes without claiming who made them. An unexplained
+  mutation made by this run blocks merge until reconciled.
 - No review child, queued repair or other owned work can still mutate the change.
 
 Under `manual`, leave the PR ready and unmerged. Under `automatic`, merge with the

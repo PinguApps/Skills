@@ -32,6 +32,26 @@ Assert-True (-not (Test-CopilotSettlement $thread $quota 'agent')) 'Quota must n
 $thread.comments.nodes += [pscustomobject]@{author=@{login='human'};createdAt='2026-10-27T12:30:00Z'}
 Assert-True (-not (Test-CopilotSettlement $thread $clean 'agent')) 'Later human feedback prevents automatic settlement.'
 $thread.comments.nodes = $thread.comments.nodes[0..1]
+$thread.comments.nodes[1].pullRequestReview.submittedAt = '2026-10-27T13:00:00Z'
+Assert-True (-not (Test-CopilotSettlement $thread $clean 'agent')) 'A draft created before the clean review but submitted afterwards cannot be settled.'
+$thread.comments.nodes[1].pullRequestReview.submittedAt = '2026-10-27T11:00:00Z'
 $thread.comments.nodes[0].author.login = 'human'
 Assert-True (-not (Test-CopilotSettlement $thread $clean 'agent')) 'Human-originated threads remain human-owned.'
+$botRequest = @(@{login='Copilot';type='Bot'})
+$staleRequest = Get-CopilotReviewState @((New-Review 'No new comments')) 'head' $botRequest -ReviewRequestedAt '2026-10-27T11:30:00Z'
+Assert-True ($staleRequest.state -eq 'completed') 'A submitted current-head result satisfies an earlier request even if the request list is stale.'
+$newRequest = Get-CopilotReviewState @((New-Review $quotaText)) 'head' $botRequest -ReviewRequestedAt '2026-10-27T12:30:00Z'
+Assert-True ($newRequest.state -eq 'running') 'A new request after quota must finish; stale quota is not a completion exemption.'
+$pending = Get-CopilotReviewState @((New-Review $quotaText), (New-Review '' 'PENDING')) 'head'
+Assert-True ($pending.state -eq 'running') 'A pending same-head review takes precedence over quota.'
+$ambiguous = Get-CopilotReviewState @((New-Review 'No new comments')) 'head' $botRequest
+Assert-True ($ambiguous.state -eq 'incomplete') 'Unknown request/result ordering must not permit a merge.'
+Assert-True (-not (Test-CopilotQuota 'Copilot' $quotaText 'User')) 'A human account named Copilot is not trusted.'
+$time = Get-CopilotRequestTime @(@{event='review_requested';requested_reviewer=@{login='Copilot';type='Bot'};created_at='2026-10-27T11:00:00Z'})
+Assert-True ($time -eq [DateTimeOffset]'2026-10-27T11:00:00Z') 'GitHub timeline bot identity and request timestamp must be recognized.'
+$message = @{headSha='head';user=@{login='Copilot';type='Bot'};body=$quotaText;createdAt='2026-10-27T12:00:00Z';url='https://github.com/example/quota'}
+$messageQuota = Get-CopilotReviewState @() 'head' -QuotaEvidence @($message)
+Assert-True ($messageQuota.state -eq 'quota-pass' -and -not $messageQuota.clean) 'Verified current-head quota-message evidence is a completion exemption, not a clean review.'
+$oldRequest = Get-CopilotReviewState @((New-Review 'No new comments' 'COMMENTED' 'old-head')) 'head' -ReviewRequestedAt '2026-10-27T11:00:00Z'
+Assert-True ($oldRequest.state -eq 'absent') 'A completed old-head request must not turn every future push into an in-flight review.'
 Write-Output 'PASS: Copilot quota and evidence-based settlement tests'

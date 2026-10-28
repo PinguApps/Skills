@@ -3,6 +3,9 @@
 Recognize Copilot by its trusted GitHub identity, not arbitrary comment text.
 Fetch all review pages and all thread comments. Match a clean review to the exact
 current published SHA. Keep these distinctions in the ledger:
+Use trusted bot identity/type, including GraphQL's `Bot` typename, rather than a
+human account with the same display/login spelling. The state helper returns the
+authenticated viewer login for reply ownership checks.
 
 - **quota-pass:** Copilot explicitly cannot review because quota is exhausted.
   A real observed message is: "Copilot was unable to review this pull request
@@ -26,6 +29,21 @@ Verify the request's outcome and do not repeatedly ping it. A quota response end
 that review wait; report any remaining unresolved requirement separately.
 This workflow explicitly permits one supported re-request per newly fixed head;
 it replaces the retired policy that relied on PR Agent to verify Copilot fixes.
+Preserve the accepted request timestamp. The helper reads paginated GitHub timeline
+`review_requested` events and compares the latest trusted Copilot request with the
+current-head result. A newer request or pending review takes precedence over an
+older quota/clean result. A later submitted result satisfies an older request even
+if GitHub's requested-reviewer list is stale. Unknown request/result ordering is
+incomplete, not a merge pass. Pass a verified ledger timestamp with
+`-ReviewRequestedAt` while a just-accepted request has not appeared in the timeline.
+
+Quota can also arrive in a trusted issue comment or check output. Record its link,
+identity, body and verified current-head association. An issue comment has no SHA
+by itself: do not infer one from quota words or an old message. Once the parent
+establishes the association to the accepted current-head request, it can pass
+`-QuotaEvidenceFile` with records containing `headSha`, `user.login`/`user.type`,
+`body`, `createdAt` and `url`. The helper accepts only matching-head trusted quota
+records; they never supply a clean re-review. Retain the supporting evidence.
 
 The parent can settle a remaining Copilot thread only with all this evidence:
 
@@ -34,7 +52,8 @@ The parent can settle a remaining Copilot thread only with all this evidence:
 2. The parent verified the fix against source/tests, and the fixing commit is
    published and an ancestor of current HEAD. Retain SHA and verification result.
 3. A subsequent **clean Copilot re-review on that HEAD** completed after the
-   parent's response. Require an approval or explicit no-new-findings/comments
+   parent's response was submitted (use the later of comment creation and review
+   submission timestamps, never a draft's creation time alone). Require an approval or explicit no-new-findings/comments
    result. Older-head approval, an unstarted review, mere silence, error, or quota
    alone does not establish this clean re-review.
 4. Re-fetch the thread/head just before acting. Post a direct submitted reply:
