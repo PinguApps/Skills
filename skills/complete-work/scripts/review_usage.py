@@ -147,6 +147,7 @@ def billed_usage(records, run, session_id):
     totals = dict(input=0, output=0, reasoning=0, cacheRead=0, cacheWrite=0)
     cost = Decimal('0')
     generation_ids, missing = set(), []
+    peak_prompt, compaction_calls = 0, 0
     for request in responses:
         item = usage.get(request, {})
         value = item.get('usage', {})
@@ -160,6 +161,8 @@ def billed_usage(records, run, session_id):
         if value.get('prompt_tokens') is None or value.get('completion_tokens') is None:
             raise ValueError('Missing billed token counts')
         totals['input'] += value['prompt_tokens']
+        peak_prompt = max(peak_prompt, value['prompt_tokens'])
+        compaction_calls += responses[request].get('kind') == 'compaction'
         totals['output'] += value['completion_tokens']
         totals['reasoning'] += value.get('completion_tokens_details', {}).get('reasoning_tokens', 0)
         for field, key in [('cacheRead', 'cached_tokens'), ('cacheWrite', 'cache_write_tokens')]:
@@ -167,6 +170,7 @@ def billed_usage(records, run, session_id):
             totals[field] = None if amount is None or totals[field] is None else totals[field] + amount
         cost += Decimal(str(value['cost']))
     return {**totals, 'costUSD': str(cost), 'billed': True, 'source': 'OpenRouter response usage.cost',
+            'peakPromptTokens': peak_prompt, 'modelCalls': len(responses), 'compactionCalls': compaction_calls,
             'generationIDs': sorted(generation_ids), 'missingUsageMessageIDs': missing}
 
 

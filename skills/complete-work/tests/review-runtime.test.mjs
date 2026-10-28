@@ -3,7 +3,16 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import runtime, { streamUsage } from '../scripts/review-runtime.mjs';
+import runtime, { streamUsage, pricingCeiling } from '../scripts/review-runtime.mjs';
+
+test('pricing bumps lower effective input limit; flat prices keep native window', () => {
+  const model = {limit: {context: 1_000_000}, cost: [
+    {input: .1, output: .5, cache: {read: .01}},
+    {tier: {type: 'context', size: 100_000}, input: .5, output: 2.5, cache: {read: .05}},
+  ]};
+  assert.deepEqual(pricingCeiling(model), {threshold: 100_000, input: 80_000});
+  assert.equal(pricingCeiling({...model, cost: [model.cost[0]]}), undefined);
+});
 
 test('stream capture preserves byte content and records final billed usage only', async () => {
   const text = 'data: {"id":"gen-1","choices":[{"delta":{"content":"private response"}}]}\r\n\r\n' +
@@ -26,12 +35,13 @@ test('stream capture preserves byte content and records final billed usage only'
 test('owned review gets only the source tool; another session keeps its tools', async () => {
   const state = mkdtempSync(join(tmpdir(), 'review-runtime-test-'));
   try {
-    const run = {id: 'run', marker: 'Review-Run-ID: opaque', title: 'Subagent Test R1 Haiku',
+    const run = {id: 'run', marker: 'Review-Run-ID: opaque', title: 'R1: Haiku',
       model: 'openrouter/anthropic/claude-haiku-5.5', effort: 'high'};
     const config = join(state, 'runtime.json');
     writeFileSync(config, JSON.stringify({state, runs: [run]}));
     const hooks = new Map();
     await runtime(config).setup({app: {version: 'test'},
+      model: {transform: async callback => callback({list: () => []}), list: async () => []},
       session: {hook: async (name, callback) => hooks.set(name, callback)},
       tool: {transform: async callback => callback({add() {}}),
         hook: async (name, callback) => hooks.set('tool.' + name, callback)},

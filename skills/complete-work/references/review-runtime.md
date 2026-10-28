@@ -7,7 +7,7 @@ CLI inference request or another model when those prerequisites are unavailable.
 Create the scope and usage ledger first. Record each unique run before dispatch:
 `id` (opaque filename-safe ID), integer `round`, `Review-Run-ID: <opaque>` marker,
 exact `model`/`effort`, `base`, `from`, `head`, absolute `scope` manifest and succinct
-`Subagent <owner> R<n> <model>` title. Do not quote another run marker as its own
+`R<n>: <model>` title. Do not quote another run marker as its own
 dedicated line in a later brief.
 
 With no live reviewer, prepare the run-local runtime:
@@ -45,6 +45,31 @@ numeric usage, model/effort, request kind, session ID and completion metadata in
 Title generation uses the assigned title without an inference call. Other charged
 flows must use the assigned model/variant; an unexpected auxiliary model blocks.
 OpenRouter selects its hosting endpoint; the hook rejects hosting-provider pins.
+
+## Automatic compaction below pricing tiers
+
+Keep OpenCode `compaction.auto` enabled (the default), with no alternate summary
+model and no experimental background summaries. Verify the actual worktree's
+applicable configuration before dispatch; incompatible overrides are a prerequisite
+to resolve, never silently accept costly requests. The runtime examines selected
+models' current catalogue context-price tiers. For the first increase, it lowers
+the effective input limit to 80% of that tier boundary using a temporary location
+model transform. Flat-price models retain their full input window. Nothing is
+written to global configuration, and unloading the runtime removes the transform.
+
+For Haiku's 100,000-token tier, this sets an 80,000-token effective input limit.
+OpenCode's default 16,000-token reserve starts its own automatic summary near
+64,000 estimated tokens. Source-tool pages are capped at 12,000 characters to
+limit sudden growth. The harness writes/stores the summary itself; the parent
+does not call `compact`, fabricate summaries or launch another summarizer. Summary
+inference is charged and included in that model's review cost.
+
+These thresholds use the harness's estimates, not an exact provider tokenizer.
+Do not promise a hard token ceiling: record actual prompt-token peaks from transport
+usage, flag any pricing-tier crossing and adjust the safety margin/page size before
+reusing that policy. Compaction is lossy, so preserve covered paths/ranges, findings
+and next checks. Do not enable speculative background compaction: unused summaries
+would still cost money. Catalogue tiers can change; inspect live metadata each run.
 
 On T3 completion, save `task_status`'s structured result outside the repo, collect
 usage serially with `review_usage.py collect --task-state <file>`, and audit the

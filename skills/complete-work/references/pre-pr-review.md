@@ -99,10 +99,10 @@ OpenRouter chooses its hosting provider; do not pin/order upstream hosts. Verify
 the effective variant/settings and no unexpected auxiliary model calls. Unsupported
 settings or an unavailable assigned model are operational blockers, not approval.
 
-Name every reviewer `Subagent <ticket-or-task-slug> R<n> <model-short-name>`;
-for example `Subagent ENG-123 R1 Haiku`. Without a ticket, use a short task slug.
-Keep model labels distinguishable. Titles identify ownership but never determine
-session correlation: each brief carries a unique opaque `Review-Run-ID` marker.
+Name every reviewer `R<n>: <model-short-name>`, for example `R1: Haiku`.
+Keep model labels distinguishable. Task ownership belongs in the brief and ledger,
+not the title. Titles never determine session correlation: each brief carries a
+unique opaque `Review-Run-ID` marker.
 
 Record launch intent/run ID before dispatch and retain task ID, child thread ID,
 model, variant, round, scope/batch, reviewed range and returned link. Use a new
