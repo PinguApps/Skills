@@ -1,4 +1,4 @@
 interface:
   display_name: "Finish PR"
-  short_description: "Finish current PR through CI and review"
-  default_prompt: "Use $finish-pr to resolve conflicts, failed CI, and all review feedback on the current PR, then continue until current-head CI and any running PR Agent review succeed and all actionable feedback is addressed."
+  short_description: "Finish PR feedback and CI, then permitted merge"
+  default_prompt: "Use $finish-pr to fix conflicts, CI and incoming feedback, handle Copilot quota and eligible thread settlement, then merge when all gates pass unless a human-review or manual handoff was requested."

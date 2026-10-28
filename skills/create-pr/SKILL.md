@@ -1,6 +1,6 @@
 ---
 name: create-pr
-description: Create a GitHub pull request using the repository's PR template or the standard categorisation and summary template. Use when opening a PR or preparing its title and description.
+description: Create a GitHub PR after the shared pre-publication review gate, preserving templates, user story, verification and round-by-round AI review costs. Use when opening a PR or preparing its title and description.
 ---
 
 # Create PR
@@ -10,6 +10,8 @@ Create a pull request for the completed work, with a description that preserves 
 ## 1. Establish the target and template
 
 Read applicable `AGENTS.md` and contribution requirements. Confirm the intended base repository, base branch, head repository, and published head branch from the caller or GitHub metadata. Check for an existing PR for that exact head and base before creating one; reuse it on resumed runs. This skill does not authorize implementation, commits, pushes, merging, or review requests beyond the caller's scope.
+
+For a **new** PR, read [the shared pre-PR review procedure](../complete-work/references/pre-pr-review.md). Require its final coverage receipt and usage ledger for the actual worktree/base/head and current head ignore-policy digest. Check all required reviewers/checklists, finding dispositions, verification and any parent-verified minor deltas. If absent, perform that procedure within the caller's authorization; return required fixes to the implementation owner. Never create a draft or partial PR to bypass the gate. Commit/push authority still belongs to the caller. Existing-PR metadata updates do not launch post-PR AI review rounds.
 
 Find and read the base repository's PR templates on its default branch, including case variants of `PULL_REQUEST_TEMPLATE.md` in `.github/`, the repository root, or `docs/`, and files in their `PULL_REQUEST_TEMPLATE/` subdirectories. Honour an explicitly selected template; otherwise use the default or the single clearly applicable template. Ask when multiple applicable templates remain ambiguous.
 
@@ -51,8 +53,10 @@ Write a concise title and summary around the concrete problem and resulting beha
 
 Read and apply [review context](references/review-context.md) to preserve requirements, deliberate tradeoffs, exclusions, evidence gaps and recovery where relevant. Reuse the template's existing sections before appending `## Review context`. Verify that the submitted brief describes the final change and distinguishes completed verification from instructions for future manual testing.
 
+Preserve the caller's literal `## Test changes` handoff, then append `## AI review` rendered from the usage ledger: one section per actual pre-PR round with reviewed ranges, model/effort, input/cache/output tokens, cost source and subtotal, followed by total recorded cost rounded to cents. Show unavailable accounting explicitly, never as zero. Include exclusion counts/provenance and material review limitations without dumping transcripts. Make `Merge policy: automatic` or `Merge policy: manual` visible and consistent with user intent. Preserve historical review ranges when updating a published PR; later fixes are not retrospectively AI-reviewed.
+
 ## 3. Create and verify the PR
 
-Review the title and completed body against the final diff, template, checkbox selections, and caller requirements, including the Linear ticket prefix and the user story's placement, brevity, clarity for readers without a technical background, and alignment with the delivered scope. Apply the same checks when adapting an original story. Write the body to a UTF-8 temporary file outside the worktree and pass it to `gh pr create` with `--title`, `--body-file`, an explicit `--repo`, `--base`, and `--head` (including the owner for a fork). This preserves literal backticks and newlines. Do not rely on automatic template insertion when passing a body. For an existing PR, update its title and description only as needed for the authorized task, using its already-discovered URL and the relevant flags: `gh pr edit <pr-url> --title <title> --body-file <body-file>`.
+Review the title and completed body against the final diff, template, checkbox selections, and caller requirements, including the Linear ticket prefix, user story, review receipt, usage summary and merge policy. Recheck the new PR's receipt against the published head immediately before submission. Write the body to a UTF-8 temporary file outside the worktree and pass it to `gh pr create` with `--title`, `--body-file`, an explicit `--repo`, `--base`, and `--head` (including the owner for a fork). This preserves literal backticks and newlines. Do not rely on automatic template insertion when passing a body. For an existing PR, update its title and description only as needed for the authorized task, using its already-discovered URL and the relevant flags: `gh pr edit <pr-url> --title <title> --body-file <body-file>`.
 
 Register the PR with the host's pull-request linking tool when available, including an existing PR reused by this run. Fetch its saved title, body, base, and head to verify the submitted content and target, including every qualifying ticket identifier at the start of the title. Remove the temporary body file after verification. Return the PR URL and any verification limitation to the caller; continue into review only when the caller's workflow requires it.

@@ -1,11 +1,11 @@
 ---
 name: complete-work
-description: Implement the work supplied alongside this skill on a new branch, commit incrementally, verify the result, push and open a GitHub PR, then use finish-pr to complete review and CI. Use for requests to take new work through the full branch-to-PR workflow.
+description: Implement supplied work in an isolated branch/worktree, commit coherent chunks, verify and review it through OpenRouter before opening a PR, then finish CI/feedback and merge unless human review or a manual handoff was requested.
 ---
 
 # Complete Work
 
-Take the task supplied with this invocation from a new branch through a verified implementation and a completed PR review cycle.
+Take the supplied task through implementation, pre-PR review, PR completion and permitted merge. Capture `merge policy: automatic` by default, or `manual` for any user-requested human review/no-merge handoff. Preserve that choice across child tasks, resumes and the PR body; a manual hold never expires merely because checks pass.
 
 ## 1. Establish scope and create a branch
 
@@ -13,7 +13,7 @@ Recover the requested work and acceptance criteria from the accompanying instruc
 
 If an issue with performing the task requires decisions from the user—such as material ambiguity, conflicting requirements, unresolved tradeoffs, or implementation risk—invoke `$grilling` and complete its interview before creating the branch or beginning implementation. Proceed only after the user confirms the shared understanding. This is a conditional aid, not a mandatory phase: skip it when the request and acceptance criteria are clear and executable, and handle purely operational blockers through the normal workflow.
 
-Inspect the worktree, current branch, and remotes. Preserve pre-existing changes and exclude unrelated commits from the new branch and PR. Identify the remote for the intended base repository and discover that repository's default branch from GitHub metadata or its remote HEAD (`git ls-remote --symref <base-remote> HEAD`). Fetch the default branch and create a new, descriptively named branch with `--no-track` directly from that freshly fetched commit before editing. The branch name must begin with `agent/`, for example `agent/add-login-validation`; follow repository naming conventions for the suffix and use the discovered default branch as the PR base. Verify that the new branch's initial HEAD matches the fetched default-branch commit; do not branch from a stale local copy of the default branch or the current feature branch. If the remote or default branch is ambiguous, the default branch is missing, or fetching fails, stop and report the blocker. Use an isolated worktree when needed to preserve existing work.
+Inspect the current worktree, branch and remotes. Continue an explicitly assigned task worktree/branch after verifying its ownership and base; do not create another checkout or branch. Otherwise create an isolated worktree and descriptive `agent/` branch directly from the freshly fetched intended default branch, using `--no-track`. Discover the base repository/default branch from metadata rather than assuming origin/main. Preserve unrelated changes/commits and verify a newly created branch starts at the fetched base. An ambiguous repository, base, ownership or failed fetch is a blocker.
 
 Confirm that the `create-pr` and `finish-pr` skills are available and GitHub CLI authentication supports the target repository. If a prerequisite is missing, report it explicitly rather than silently dropping a required phase.
 
@@ -25,20 +25,26 @@ Implement the supplied task, keeping changes within its scope. Commit at meaning
 
 Maintain the concise [review context](../create-pr/references/review-context.md) from the settled task: requirements, decisions, exclusions and verification evidence. Carry it through PR creation and `finish-pr`; use it to expose requirement gaps rather than restating the whole conversation.
 
-Choose additional pre-publication verification by concrete failure risk. Authentication, tenant isolation, billing, migrations and review-controller changes warrant a relevant check beyond the ordinary happy path: for example a real consumer test, a browser exercise, or one bounded fresh-context review when it answers an unresolved question. Reuse existing evidence when it covers that risk. Ordinary changes use the existing verification/review path. Additional AI review is optional, scoped and at most one pre-publication pass; it is not a default second review of every PR. State what the selected check could still miss. Execution belongs in the implementation's authorized test environment; this does not authorize a source-only reviewer to execute reviewed code.
+Choose actual verification by concrete failure risk, including real consumer/deployment paths and browser exercises where applicable. The implementation agent owns execution in its authorized test environment; source-only reviewers do not execute reviewed code. Passing AI review does not replace tests or real integration evidence.
 
 Before publishing implementation commits, review the complete diff against the intended base. Account for every requirement and acceptance criterion in the supplied Linear ticket, or every part of the user request when no Linear ticket was supplied, with the implementation and verification evidence that satisfies it. Run the relevant tests and repository-required checks, fix failures caused by the work, and inspect for accidental changes or omissions.
 
 Advance to step 3 only when the work fully satisfies that scope, relevant verification passes, and all task changes are committed. Complete any remaining work within scope before proceeding. If required information, access, decisions, or verification are missing, explain the specific gap and ask the user for what is needed; wait for it before advancing. Reporting a blocker or limitation does not satisfy this gate. Do not create or reuse a PR for partial work, including a draft PR: proceeding to PR creation is your assertion that everything requested is accounted for and complete.
 
-## 3. Push and open the PR
+## 3. Complete pre-PR review
+
+Read and follow [the shared review procedure](references/pre-pr-review.md). Apply `pragent-ignore`, commit any justified policy changes, separate code/documentation volume and select the policy's primary reviewer pair. Delegate independent review-only tasks through T3/OpenCode against this actual worktree and committed snapshot. Validate findings, make minimal fixes and commit verified chunks. One clean round is sufficient; later rounds are incremental, with three/five maximum as specified there. The parent owns usage capture and settling/cancelling every review child.
+
+Do not publish a PR until the final coverage receipt satisfies the shared procedure. Directly verified minor deltas must be recorded separately from model-reviewed revisions. Preserve round-by-round accounting, final reviewed scope, evidence-backed dispositions and the merge policy for the next steps.
+
+## 4. Push and open the PR
 
 Push the completed commits without force using the explicit destination `git push <head-remote> HEAD:refs/heads/<branch-name>`. Before writing the PR body, read and follow `test-changes` to produce the manual verification handoff for the completed work. Then load and follow `$create-pr` ([SKILL.md](../create-pr/SKILL.md)) to create or reuse the PR against the intended base, using its Linear ticket title-prefix, template selection, categorisation, brief plain-language user story, and submission verification rules. Ensure the story is understandable to readers without a technical background, including when adapting an original story. Supply the task intent, original user story when available, identifiers of Linear tickets that informed the task and which the PR fully completes, final diff, verification results, base/head repositories and branches, and full handoff. Always include that handoff in a literal `## Test changes` section: use that section when the template already contains it, otherwise append it after the template even if another testing section exists.
 
-An invocation requesting this workflow authorizes its commits, push, PR creation, and review replies; carry those steps through without redundant confirmation.
+An invocation requesting this workflow authorizes its scoped commits, pre-PR review calls, push, PR creation, feedback replies and normal protected merge, unless the user requested a manual/human-review handoff or a narrower restriction applies. Carry authorized steps through without redundant confirmation.
 
-## 4. Complete the PR with finish-pr
+## 5. Complete the PR with finish-pr
 
 Load and follow `$finish-pr` for the newly created PR in the same run. Carry forward the task intent, decisions, verification, and known limitations. Continue through its conflict, CI, feedback, and review-convergence workflow until its definition of done is met or one of its stopping conditions applies. Creating the PR alone does not complete this workflow.
 
-Leave the PR open for the user to merge unless merging was separately requested. Report the PR URL, a concise change and verification summary, and any remaining blocker or pending required check, using `finish-pr`'s final audit as the source of truth.
+Pass the merge policy explicitly. `finish-pr` handles post-publication fixes without additional delegated AI review rounds. Under automatic policy it merges only after its complete current-head gate passes, respecting protections/queues and verifying the merge. Under manual policy it leaves the ready PR unmerged. Report the verified outcome, PR URL, proof, review costs and any blocker; never count queue admission as a completed merge.

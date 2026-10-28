@@ -6,14 +6,20 @@ Opinionated skills I use in my setup each day.
 
 ### [complete-work](skills/complete-work/)
 
-Takes supplied work from a new branch through PR review completion.
+Takes supplied work through committed implementation, pre-PR review and protected
+PR completion. An explicit human-review or no-merge hold leaves the PR open.
 
 The skill:
 
 - Discovers and fetches the repository's default branch, then creates an `agent/` branch from that commit.
 - Implements the task with incremental commits and relevant verification.
-- Pushes the branch and uses `create-pr` to open a PR against the default branch.
-- Runs `finish-pr` to complete review and CI.
+- Uses root and nested `.pragentignore` rules before reading review content.
+- Counts documentation (including JSON) separately from code and assigns the
+  deterministic OpenRouter reviewer pair in its shared review policy.
+- Owns fresh T3/OpenCode reviewer children, incremental rechecks and cleanup.
+- Records tokens and costs per review round in the PR body.
+- Opens the PR only after review coverage is satisfied, then uses `finish-pr`
+  for CI and incoming comments, merging by default when permitted.
 
 ### [loop-work](skills/loop-work/)
 
@@ -28,6 +34,8 @@ The skill:
 - Selects independently actionable tickets that need no user input.
 - Uses fixed `agent/` branches derived from Linear and limits outstanding reservations.
 - Leaves In Review and Done transitions to verified GitHub–Linear automation.
+- Allocates reviewer capacity and verifies worker-owned merges; the coordinator
+  does not merge PRs itself. Human-review holds propagate to workers.
 - Reassesses after merges and stops with a concise completion and blocker ledger.
 
 ### [create-pr](skills/create-pr/)
@@ -53,9 +61,12 @@ The skill:
 - Uses the current conversation and repository-native context to judge feedback.
 - Actions unresolved review comments without duplicating an agent response that is
   awaiting reviewer follow-up.
-- Preserves human-owned thread resolution state and verifies replies are submitted.
-- Pushes focused commits and continues through review until current-head CI and
-  any running PR Agent review succeed, with all actionable feedback addressed.
+- Preserves human-owned threads, verifies submitted replies, and can settle
+  Copilot threads after a clean current-head re-review with recorded evidence.
+- Treats an explicit Copilot quota response as review completion; it does not
+  pretend the code was reviewed or erase earlier findings.
+- Pushes focused fixes and completes CI/feedback without delegated post-PR review
+  rounds. Merges when the protected gate passes, unless a human hold applies.
 
 ### [implement-task-linear](skills/implement-task-linear/)
 

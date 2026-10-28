@@ -10,7 +10,7 @@ Launch one ticket per `t3_thread_launch`, with a unique title containing the loo
 
 ```json
 {
-  "title": "loop:<run-id> <issue-id> attempt:1",
+  "title": "Subagent <issue-id> loop:<run-id> A1",
   "projectId": "<verified-project-id>",
   "workspaceStrategy": {
     "type": "worktree",
@@ -40,10 +40,10 @@ Top-level worker completion does **not** automatically notify this coordinator a
 
 - Send `STARTED` after workspace verification, including their thread/run IDs, worktree, branch and initial SHA.
 - Before yielding for CI/review, send `WAITING` with the PR/head, pending condition, watcher and nested-task handles. Waiting retains the worker slot.
-- Send `READY` only after `complete-work` / `finish-pr` completion and after disarming worker PR watches and other follow-ups that could mutate the PR. Otherwise send `BLOCKED` with the precise missing input or failure and retained state.
+- Send `MERGED` only after GitHub confirms the worker-owned protected merge, and `READY` only for a completed audit under an explicit manual hold. Disarm worker PR watches, settle completed reviewers and remove mutating follow-ups before either report. Otherwise send `WAITING` or `BLOCKED` with the precise remaining condition.
 - Use `t3_thread_send` to the coordinator with `mode:"queue"`, a stable `clientRequestId` for that report, and the run/issue/attempt IDs and result kind. Reuse the request ID on an uncertain retry. Keep the complete evidence in the worker's final answer too, so a failed notification can be recovered by reading its thread. A report-send failure must not discard completed work or cause a second PR.
 
-On notification, match the report to the ledger's owned worker/attempt. Read that thread, including the full final result: paginate with `afterPosition`/`nextPosition`, and recover truncated item text with `itemId` and `textOffset` until complete. Deduplicate reports by run/issue/attempt/result ID. Late reports from stopped or superseded attempts cannot restart dispatch or authorize a merge. Verify the current PR head and worker liveness independently; `READY` is evidence to audit, not authority to merge.
+On notification, match the report to the ledger's owned worker/attempt. Read the complete result, paginating and recovering truncated text. Deduplicate reports by run/issue/attempt/result ID. Late reports cannot restart stopped work. Verify GitHub merge state, current head and worker liveness independently. `READY` preserves a human hold; the coordinator never converts it into a merge. Record the durable outcome, then settle completed owned workers with no live/queued work.
 
 For a worker question, inspect `t3_pending_request_list` and `t3_pending_request_read` in that worker thread. Answer through `t3_pending_request_respond` only from settled requirements and existing authorization. A material user decision becomes a ticket blocker; do not invent an answer or approve a permission request through the question API.
 

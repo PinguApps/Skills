@@ -1,6 +1,6 @@
 ---
 name: implement-task-linear
-description: Implement one or more supplied Linear issues together in a single PR through complete-work, with per-issue state management and closing references.
+description: Implement supplied Linear issues together through complete-work's incremental commits, pre-PR review, PR completion and permitted merge, with per-issue state management and closing references.
 disable-model-invocation: true
 ---
 
@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Implement every supplied Linear issue together on one branch and in one PR. The supplied issues are the required input and combined scope boundary; each issue's provenance chain and repository context refine how to implement it without silently adding work. Complete all supplied issues before publishing the PR; a blocker on any target blocks publication of the combined change.
 
-Use this skill as a Linear-specific wrapper around [$complete-work](../complete-work/SKILL.md). Read that skill before planning delivery; it owns branch setup, incremental commits, verification, push, PR creation through `create-pr`, and review/CI convergence through `finish-pr`. If it or a required dependency is unavailable, report the missing prerequisite and resolve it before implementation rather than substituting a partial workflow. Invoking this skill authorizes that full workflow; leave merging, deployment, and release to a separate user request.
+Use this skill as a Linear-specific wrapper around [$complete-work](../complete-work/SKILL.md). Read it before planning delivery; it owns the assigned worktree/branch, coherent incremental commits, verification, mandatory pre-PR review, PR creation and CI/feedback completion. Invoking this skill authorizes its full workflow including normal protected merge by default. Capture a human-review/no-merge request as a persistent manual hold and pass it throughout. Deployment and release remain outside this grant. Resolve missing prerequisites rather than silently dropping a phase.
 
 Read and apply [$linear-ticket](../linear-ticket/SKILL.md) before any ticket draft or mutation. Pass each target's verified team/project boundary and this workflow's scoped authorization; it owns ticket content, numbering, metadata, estimates, native writes and read-back verification.
 
@@ -77,7 +77,7 @@ Keep the overview quick to scan; name consulted sources briefly and expand only 
 
 Map every acceptance criterion and durable constraint for every target to an implementation change or concrete verification. Plan dependencies and overlapping requirements across the supplied targets as one delivery. Confirm that the combined work can be delivered in one repository and PR; if it cannot, resolve that conflict with the user before implementation. Existing behaviour counts only after verification. If choosing a seam would create or materially change a public interface, confirm it with the user when the upstream artifacts did not already settle it.
 
-Prepare the concise [review context](../create-pr/references/review-context.md) for that combined delivery. Carry every target's criterion coverage, settled tradeoffs and exclusions into `complete-work` and the PR, with short source links and enough meaning for PR Agent to assess intent without Linear access. Preserve the full target ledger separately; the PR brief should expose material constraints without copying all discovery notes.
+Prepare the concise [review context](../create-pr/references/review-context.md) for that combined delivery. Carry every target's criterion coverage, settled tradeoffs and exclusions into `complete-work` and the PR, with short source links and enough meaning for independent reviewers to assess intent without Linear access. Preserve the full target ledger separately; the PR brief should expose material constraints without copying all discovery notes.
 
 This step is complete when the user has received the overview, every acceptance criterion has a delivery and verification path, and every material question has been answered.
 
@@ -88,6 +88,8 @@ Invoke `$complete-work` once for the combined scope, carrying every target's ful
 When implementation of the combined work starts, move every target to its team's resolved In Progress state, unless it is already further along or the user asked to preserve its status. Do this for all targets at the start, including those scheduled for later slices. Perform this and every later ticket write through `linear-ticket`, then record its verified result or failure in the ledger.
 
 Within `complete-work`, implement in verified vertical slices, working red then green at the agreed public seams for testable behaviour. Include required documentation, schemas, migrations, generated artifacts, and configuration. Before its PR-publication gate, audit the complete diff against repository standards, applicable ADRs, every criterion of every supplied target, and originating-spec constraints; fix findings and rerun affected checks. Required target work stays in this single change.
+
+Commit meaningful completed chunks rather than deferring a multi-step task into one final commit. Carry every target's acceptance coverage and durable decisions into the shared pre-PR review brief. The implementation worker owns review children and their cleanup; all reviewer titles begin `Subagent` and identify the ticket(s), round and model. Keep targets In Progress during local review; the following In Review reconciliation begins only after PR creation. Do not run a second review workflow inside this wrapper.
 
 ### Link every target and update review states at PR creation
 
@@ -138,6 +140,7 @@ Report:
 
 - every supplied target's identifier, URL, and verified final status;
 - the shared PR URL, verified closing references for all supplied targets, and `finish-pr`'s final audit, or the specific prerequisite blocking PR creation or workflow completion;
+- verified merge SHA and GitHub/Linear outcome under automatic policy, or the explicit manual hold and ready-unmerged state;
 - implemented outcome and changed surfaces;
 - verification commands and results;
 - acceptance-criteria coverage;

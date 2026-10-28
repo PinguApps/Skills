@@ -1,5 +1,8 @@
 import importlib.util
+import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -116,6 +119,21 @@ class ReviewScopeTests(unittest.TestCase):
         self.assertEqual('large', review.size_band('documentation', 500, 60000))
         self.assertEqual('large', review.size_band('code', 90, 4200))
         self.assertEqual('very large', review.size_band('code', 121, 100))
+
+    def test_reader_diff_and_search_do_not_expose_excluded_content(self):
+        self.write('.pragentignore', 'private/\n')
+        self.write('private/data.json', '{"secret":"DO_NOT_LEAK"}\n')
+        self.write('public.cs', 'VISIBLE\n')
+        head = self.save()
+        scope = review.Scope(self.repo, head)
+        manifest = self.repo / 'scope.json'
+        manifest.write_text(json.dumps(scope.manifest(self.base)), encoding='utf-8')
+        command = [sys.executable, '-B', str(Path(review.__file__)), '--repo', str(self.repo), '--head', head]
+        for args in (['diff', '--scope', str(manifest)],
+                     ['search', '--ref', head, '--pattern', 'DO_NOT_LEAK|VISIBLE']):
+            output = subprocess.check_output(command + args, text=True)
+            self.assertNotIn('DO_NOT_LEAK', output)
+            self.assertIn('VISIBLE', output)
 
     def test_category_precedence_and_size_gated_integration(self):
         manifest = {'totals': {'code': {'files': 30, 'band': 'standard'}}}
