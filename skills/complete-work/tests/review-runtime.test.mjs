@@ -143,6 +143,8 @@ test('tier reserve limits output and source bursts while the contract survives n
       effort: 'high', head: 'head', from: 'from', base: 'base', reviewContract: 'G01 and G22 must remain in the review contract.'};
     const config = join(state, 'runtime.json');
     writeFileSync(config, JSON.stringify({state, repo: state, helper: 'unused-reader.py', python: join(state, 'missing-python.exe'), pricingGuard, runs: [run]}));
+    writeFileSync(join(state, 'tiered.transport.jsonl'), JSON.stringify({event: 'source', operation: 'diff',
+      offset: 12000, nextOffset: 24000, complete: false}) + '\n');
     const hooks = new Map(); let source;
     await runtime(config).setup({app: {version: 'test'},
       model: {transform: async callback => callback({list: () => [{providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5',
@@ -162,6 +164,10 @@ test('tier reserve limits output and source bursts while the contract survives n
       await hooks.get(hook)(event);
       assert.equal(event.options.maxTokens, 8192, hook + ' must cap generation before native protocol lowering');
       assert.ok(event.system.some(part => part.text.includes('G01 and G22')));
+      const systemText = event.system.map(part => part.text).join('\n');
+      assert.equal(systemText.includes('Source paging progress'), hook === 'compaction',
+        'Only compaction needs changing progress metadata; primary prefixes remain stable for caching');
+      if (hook === 'compaction') assert.ok(systemText.includes('"nextOffset":24000'), 'Native summaries receive durable paging cursors');
     }
     const native = body => new Request('https://openrouter.ai/api/v1/chat/completions', {method: 'POST', body: JSON.stringify(body)});
     await assert.rejects(hooks.get('http.request')({...request, request: native({max_tokens: 32000})}), /output reserve/);

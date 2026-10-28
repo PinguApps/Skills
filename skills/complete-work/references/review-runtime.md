@@ -14,7 +14,10 @@ Save the complete review contract, requirements, open findings and paging rules
 in that brief file before prepare. The runtime freezes it into the run config and
 re-injects it in primary/compaction context. Native summaries can be lossy; the
 original obligations must not depend on a summary retaining them. Source paging
-progress is retained separately as metadata, not a parent-authored summary.
+progress is retained separately as metadata and supplied at compaction, not as a
+parent-authored summary. Primary system instructions stay stable so changing page
+cursors do not invalidate the cached conversation prefix; tool responses carry
+the current cursors between summaries.
 
 Before **every dispatch batch**, record all new runs, including new rounds and
 escalations, then prepare with no live reviewer. Record terminal T3 task statuses
