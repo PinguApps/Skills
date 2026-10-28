@@ -7,6 +7,7 @@
   },
   "roundCaps": {"normal": 3, "securityOrState": 5},
   "integration": {"model": ["step", "medium"], "codeBands": ["large", "very large"], "mode": "escalation"},
+  "pricingGuard": {"inputFraction": 0.7, "maxOutputTokens": 8192, "sourceCharactersPerStep": 12000},
   "mixing": {
     "protectedCategories": ["security", "state"],
     "minimumShare": 0.2,

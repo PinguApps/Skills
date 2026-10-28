@@ -245,6 +245,7 @@ def money(value):
 def render(ledger):
     lines = ['## AI review', '', 'Merge policy: ' + ledger['mergePolicy'], '']
     billed_total, estimate_total = Decimal('0'), Decimal('0')
+    billed_rows = 0
     unavailable = False
     estimated = False
     for round_number, label in sorted(set((r['round'], r.get('roundLabel', str(r['round']))) for r in ledger['runs'])):
@@ -254,6 +255,7 @@ def render(ledger):
                   '| Model | Effort | Input total | Cache read | Cache write | Output total | Cost USD |',
                   '|---|---|---:|---:|---:|---:|---:|']
         billed_subtotal, estimate_subtotal = Decimal('0'), Decimal('0')
+        round_billed_rows = 0
         for run in runs:
             usage = run.get('usage')
             if usage is None or usage.get('missingUsageMessageIDs') or run.get('accountingIncomplete'):
@@ -262,6 +264,7 @@ def render(ledger):
                 lines.append(f"| {run['model']} | {run['effort']} | unavailable | unavailable | unavailable | unavailable | unavailable |")
                 continue
             if usage.get('billed'):
+                round_billed_rows += 1
                 billed_subtotal += Decimal(usage['costUSD'])
             else:
                 estimated = True
@@ -271,12 +274,13 @@ def render(ledger):
             lines.append(f"| {run['model']} | {run['effort']} | " + ' | '.join(counts) + f" | {money(usage['costUSD'])}{qualifier} |")
             notes.append(f"Reviewed `{run['from']}` → `{run['head']}`; outcome: {run.get('verdict', 'not recorded')}. Cost source: {usage['source']}.")
         billed_total += billed_subtotal
+        billed_rows += round_billed_rows
         estimate_total += estimate_subtotal
-        lines += ['', *notes, '', '**Round billed subtotal: ' + money(billed_subtotal) + '**', '']
+        lines += ['', *notes, '', '**Round billed subtotal: ' + (money(billed_subtotal) if round_billed_rows else 'unavailable') + '**', '']
         if any(r.get('usage') and not r['usage'].get('billed') for r in runs):
             lines += ['**Round estimate subtotal (not billed): ' + money(estimate_subtotal) + '**', '']
     label = 'Recorded billed subtotal' if estimated or unavailable else 'Total billed review cost'
-    lines += ['**' + label + ': ' + money(billed_total) + '**', '']
+    lines += ['**' + label + ': ' + (money(billed_total) if billed_rows else 'unavailable') + '**', '']
     if estimated:
         lines += ['**Recorded estimate subtotal (not billed): ' + money(estimate_total) + '**', '']
     lines += [

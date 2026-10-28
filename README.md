@@ -90,6 +90,14 @@ in 13 files plus 1,134 documentation/JSON lines in 13 files. Costs below are act
 captured OpenRouter usage totals for that review, including charged tool-loop
 steps and compaction; they are not token list prices or average costs per PR.
 
+Runtime calibration on the same date found that an 80% input ceiling alone was
+insufficient: a long Haiku answer pushed its next native summary to 104,926 input
+tokens. Current tier-priced calls use a 70% input ceiling, an 8,192-token output
+cap and 12,000 source characters per step, retaining the original contract across
+native summaries. Effort is unchanged. The R1B measurements below predate those
+reserves; use the current runtime when benchmarking future replacements. These
+remain estimated safety margins, not an exact tokenizer guarantee.
+
 | Model | Measured effort | Measured review cost (USD) | Intended role |
 | --- | --- | ---: | --- |
 | [DeepSeek V4.1 Flash 1017](https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017) | high | $0.029357 | Inexpensive correctness and regression coverage |

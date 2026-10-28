@@ -4,6 +4,7 @@ param(
     [string]$Repository,
     [string]$Hostname,
     [string]$ReviewRequestedAt,
+    [string]$ReviewRequestedHead,
     [string]$QuotaEvidenceFile,
     [switch]$Library
 )
@@ -61,7 +62,8 @@ function Get-CopilotRequestTime {
 
 function Get-CopilotReviewState {
     param([array]$Reviews, [string]$HeadSha, [array]$RequestedReviewers = @(), [switch]$AwaitingRereview,
-        [DateTimeOffset]$ReviewRequestedAt = [DateTimeOffset]::MinValue, [array]$QuotaEvidence = @())
+        [DateTimeOffset]$ReviewRequestedAt = [DateTimeOffset]::MinValue, [array]$QuotaEvidence = @(),
+        [string]$ReviewRequestedHead)
     $quotaCurrent = @($QuotaEvidence | Where-Object {
         $type = if ($_.user.type) { $_.user.type } else { $_.author.__typename }
         (Get-ReviewSha $_) -eq $HeadSha -and (Test-CopilotQuota (Get-ReviewLogin $_) $_.body $type)
@@ -75,6 +77,7 @@ function Get-CopilotReviewState {
         $fulfilled = @($Reviews | Where-Object {
             $type = if ($_.user.type) { $_.user.type } else { $_.author.__typename }
             (Test-CopilotLogin (Get-ReviewLogin $_) $type) -and $_.state -ne 'PENDING' -and
+                (-not $ReviewRequestedHead -or (Get-ReviewSha $_) -eq $ReviewRequestedHead) -and
                 (Get-ReviewTime $_) -ge $ReviewRequestedAt
         }).Count -gt 0
         $unfinished = $ReviewRequestedAt -gt [DateTimeOffset]::MinValue -and -not $fulfilled
@@ -144,12 +147,14 @@ $viewer = Invoke-ReviewGhJson ($prefix + @('user'))
 $timelinePages = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/issues/$PrNumber/timeline?per_page=100", '--paginate', '--slurp'))
 $timeline = @($timelinePages | ForEach-Object { foreach ($item in $_) { $item } })
 $requestedAt = Get-CopilotRequestTime $timeline
+$requestHead = ''
 if ($ReviewRequestedAt) {
+    if (-not $ReviewRequestedHead) { throw 'An accepted request timestamp requires its recorded target head SHA.' }
     $recordedAt = [DateTimeOffset]::Parse($ReviewRequestedAt, [Globalization.CultureInfo]::InvariantCulture)
-    if ($recordedAt -gt $requestedAt) { $requestedAt = $recordedAt }
+    if ($recordedAt -ge $requestedAt) { $requestedAt = $recordedAt; $requestHead = $ReviewRequestedHead }
 }
 $quotaEvidence = if ($QuotaEvidenceFile) { @(Get-Content -LiteralPath $QuotaEvidenceFile -Raw | ConvertFrom-Json -Depth 100) } else { @() }
-$state = Get-CopilotReviewState -Reviews $reviews -HeadSha $pr.head.sha -RequestedReviewers @($pr.requested_reviewers) -ReviewRequestedAt $requestedAt -QuotaEvidence $quotaEvidence
+$state = Get-CopilotReviewState -Reviews $reviews -HeadSha $pr.head.sha -RequestedReviewers @($pr.requested_reviewers) -ReviewRequestedAt $requestedAt -QuotaEvidence $quotaEvidence -ReviewRequestedHead $requestHead
 $fresh = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/pulls/$PrNumber"))
 if ($fresh.head.sha -ne $pr.head.sha) { throw 'PR head changed while reading review state.' }
 if ((@($fresh.requested_reviewers.login | Sort-Object) -join ',') -ne (@($pr.requested_reviewers.login | Sort-Object) -join ',')) {
@@ -160,6 +165,7 @@ if ((@($fresh.requested_reviewers.login | Sort-Object) -join ',') -ne (@($pr.req
     pullRequest = $pr.html_url
     viewer = $viewer.login
     copilotRequestedAt = $requestedAt
+    copilotRequestedHead = $requestHead
     copilot = $state
     reviews = $reviews
     threads = $threads.threads

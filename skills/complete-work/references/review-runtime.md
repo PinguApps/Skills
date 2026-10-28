@@ -6,9 +6,15 @@ CLI inference request or another model when those prerequisites are unavailable.
 
 Create the scope and usage ledger first. Record each unique run before dispatch:
 `id` (opaque filename-safe ID), integer `round`, `Review-Run-ID: <opaque>` marker,
-exact `model`/`effort`, `base`, `from`, `head`, absolute `scope` manifest and succinct
+exact `model`/`effort`, `base`, `from`, `head`, absolute `scope` manifest, absolute
+`briefFile` inside the external run directory and succinct
 `R<n>: <model>` title. Do not quote another run marker as its own
 dedicated line in a later brief.
+Save the complete review contract, requirements, open findings and paging rules
+in that brief file before prepare. The runtime freezes it into the run config and
+re-injects it in primary/compaction context. Native summaries can be lossy; the
+original obligations must not depend on a summary retaining them. Source paging
+progress is retained separately as metadata, not a parent-authored summary.
 
 Before **every dispatch batch**, record all new runs, including new rounds and
 escalations, then prepare with no live reviewer. Record terminal T3 task statuses
@@ -68,17 +74,25 @@ model and no experimental background summaries. Verify the actual worktree's
 applicable configuration before dispatch; incompatible overrides are a prerequisite
 to resolve, never silently accept costly requests. The runtime examines selected
 models' current catalogue context-price tiers. For the first increase, it lowers
-the effective input limit to 80% of that tier boundary using a temporary location
+the effective input limit to the policy's 70% of that tier boundary using a temporary location
 model transform for all accepted models, including later escalation assignments.
 Flat-price models retain their full input window. Nothing is
 written to global configuration, and unloading the runtime removes the transform.
 
-For Haiku's 100,000-token tier, this sets an 80,000-token effective input limit.
+For Haiku's 100,000-token tier, this sets a 70,000-token effective input limit.
 OpenCode's default 16,000-token reserve starts its own automatic summary near
-64,000 estimated tokens. Source-tool pages are capped at 12,000 characters to
-limit sudden growth. The harness writes/stores the summary itself; the parent
+54,000 estimated tokens. Tier-priced requests also cap output at 8,192 tokens,
+including reasoning, through the native model-request hook, and verify the cap in
+the outgoing request. Effort remains high/medium as assigned. Limit aggregate
+source output to 12,000 characters per primary step for these models; parallel
+tool calls beyond that budget defer their unchanged cursor to the next step.
+This leaves room for answer growth, tool results and the summary request itself.
+Flat-price models keep their existing output limits. The harness writes/stores the summary itself; the parent
 does not call `compact`, fabricate summaries or launch another summarizer. Summary
 inference is charged and included in that model's review cost.
+Use the source tool's `nextOffset` as a character offset, never a line number.
+Omit `ref` for HEAD or supply an exact allowed SHA; search accepts either `path`
+or `pathPrefix` to narrow its repository area.
 
 These thresholds use the harness's estimates, not an exact provider tokenizer.
 Do not promise a hard token ceiling: record actual prompt-token peaks from transport

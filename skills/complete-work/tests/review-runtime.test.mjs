@@ -4,18 +4,19 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import runtime, { streamUsage, pricingCeiling } from '../scripts/review-runtime.mjs';
+const pricingGuard = JSON.parse(readFileSync(new URL('../references/review-policy.json', import.meta.url), 'utf8')).pricingGuard;
 
 test('pricing bumps lower effective input limit; flat prices keep native window', () => {
   const model = {limit: {context: 1_000_000}, cost: [
     {input: .1, output: .5, cache: {read: .01}},
     {tier: {type: 'context', size: 100_000}, input: .5, output: 2.5, cache: {read: .05}},
   ]};
-  assert.deepEqual(pricingCeiling(model), {threshold: 100_000, input: 80_000});
-  assert.equal(pricingCeiling({...model, cost: [model.cost[0]]}), undefined);
-  assert.deepEqual(pricingCeiling({...model, cost: [model.cost[1]]}), {threshold: 100_000, input: 80_000});
+  assert.deepEqual(pricingCeiling(model, pricingGuard.inputFraction), {threshold: 100_000, input: 70_000});
+  assert.equal(pricingCeiling({...model, cost: [model.cost[0]]}, pricingGuard.inputFraction), undefined);
+  assert.deepEqual(pricingCeiling({...model, cost: [model.cost[1]]}, pricingGuard.inputFraction), {threshold: 100_000, input: 70_000});
   assert.deepEqual(pricingCeiling({...model, cost: [
     {input: 1, output: 1}, {tier: {type: 'context', size: 100_000}, input: 1, output: 1, cache: {read: .1}},
-  ]}), {threshold: 100_000, input: 80_000});
+  ]}, pricingGuard.inputFraction), {threshold: 100_000, input: 70_000});
 });
 
 test('stream capture preserves byte content and records final billed usage only', async () => {
@@ -62,7 +63,7 @@ test('registered review markers fail closed and overlapping requests keep exact 
     const run = {id: 'owned', marker: 'Review-Run-ID: valid', title: 'R2: GLM',
       model: 'openrouter/z-ai/glm-5.3-flash', effort: 'high'};
     const config = join(state, 'runtime.json');
-    writeFileSync(config, JSON.stringify({state, models: ['openrouter/anthropic/claude-haiku-5.5'], runs: [run]}));
+    writeFileSync(config, JSON.stringify({state, pricingGuard, models: ['openrouter/anthropic/claude-haiku-5.5'], runs: [run]}));
     const hooks = new Map();
     const protectedModels = [];
     await runtime(config).setup({app: {version: 'test'},
@@ -72,7 +73,7 @@ test('registered review markers fail closed and overlapping requests keep exact 
       session: {hook: async (name, callback) => hooks.set(name, callback)},
       tool: {transform: async callback => callback({add() {}}), hook: async () => {}},
     });
-    assert.equal(protectedModels[0].limit.input, 80_000, 'Later escalation models receive ceilings before any session uses them');
+    assert.equal(protectedModels[0].limit.input, 70_000, 'Later escalation models receive ceilings before any session uses them');
     for (const marker of ['Review-Run-ID: unknown', 'Review-Run-ID: ', 'Review-Run-ID: valid\nReview-Run-ID: extra']) {
       await assert.rejects(async () => hooks.get('prompt')({sessionID: 'unbound', prompt: {text: marker}}), /Unregistered or malformed/);
     }
@@ -112,7 +113,7 @@ test('owned review gets only the source tool; another session keeps its tools', 
     const run = {id: 'run', marker: 'Review-Run-ID: opaque', title: 'R1: Haiku',
       model: 'openrouter/anthropic/claude-haiku-5.5', effort: 'high'};
     const config = join(state, 'runtime.json');
-    writeFileSync(config, JSON.stringify({state, runs: [run]}));
+    writeFileSync(config, JSON.stringify({state, pricingGuard, runs: [run]}));
     const hooks = new Map();
     let sourceTool;
     await runtime(config).setup({app: {version: 'test'},
@@ -133,4 +134,45 @@ test('owned review gets only the source tool; another session keeps its tools', 
     assert.deepEqual(Object.keys(unrelated.tools), ['shell']);
     assert.ok(readFileSync(join(state, 'runtime-ready.json'), 'utf8').includes('test'));
   } finally { rmSync(state, {recursive: true, force: true}); }
+});
+
+test('tier reserve limits output and source bursts while the contract survives native compaction', async () => {
+  const state = mkdtempSync(join(tmpdir(), 'review-runtime-test-'));
+  try {
+    const run = {id: 'tiered', marker: 'Review-Run-ID: tiered', model: 'openrouter/anthropic/claude-haiku-5.5',
+      effort: 'high', head: 'head', from: 'from', base: 'base', reviewContract: 'G01 and G22 must remain in the review contract.'};
+    const config = join(state, 'runtime.json');
+    writeFileSync(config, JSON.stringify({state, repo: state, helper: 'unused-reader.py', python: join(state, 'missing-python.exe'), pricingGuard, runs: [run]}));
+    const hooks = new Map(); let source;
+    await runtime(config).setup({app: {version: 'test'},
+      model: {transform: async callback => callback({list: () => [{providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5',
+        limit: {context: 1_000_000}, cost: [{input: 1}, {input: 2, tier: {type: 'context', size: 100_000}}]}],
+        update: (provider, id, callback) => callback({limit: {}})}), list: async () => []},
+      session: {hook: async (name, callback) => hooks.set(name, callback)},
+      tool: {transform: async callback => callback({add(tool) {source = tool;}}), hook: async () => {}},
+    });
+    await hooks.get('prompt')({sessionID: 'session', prompt: {text: run.marker}});
+    const model = {providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5', variant: 'high'};
+    const request = {sessionID: 'session', model, kind: 'primary', options: {maxTokens: 131072}};
+    await hooks.get('model.request')(request);
+    assert.equal(request.options.maxTokens, 8192);
+    for (const hook of ['context', 'compaction']) {
+      const event = {sessionID: 'session', model, tools: {pingu_review_source: {}}};
+      await hooks.get(hook)(event);
+      assert.ok(event.system.some(part => part.text.includes('G01 and G22')));
+    }
+    const native = body => new Request('https://openrouter.ai/api/v1/chat/completions', {method: 'POST', body: JSON.stringify(body)});
+    await assert.rejects(hooks.get('http.request')({...request, request: native({max_tokens: 32000})}), /output reserve/);
+    await hooks.get('http.request')({...request, request: native({max_tokens: 8192})});
+    const first = source.execute({operation: 'search', pattern: 'needle', path: 'scope/file.py'}, {sessionID: 'session'}).catch(error => error);
+    const second = await source.execute({operation: 'read', path: 'other.py'}, {sessionID: 'session'});
+    assert.equal(JSON.parse(second.content).deferred, true, 'Parallel source calls cannot exceed the reserved page budget');
+    const failedProcess = await first;
+    assert.equal(failedProcess.code, 'ENOENT');
+    const prefix = failedProcess.spawnargs.indexOf('--path-prefix');
+    assert.equal(failedProcess.spawnargs[prefix + 1], 'scope/file.py', 'A search path must not silently become a whole-repository search');
+  } finally {
+    assert.ok(state.startsWith(join(tmpdir(), 'review-runtime-test-')));
+    rmSync(state, {recursive: true, force: true});
+  }
 });

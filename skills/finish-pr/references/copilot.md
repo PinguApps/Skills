@@ -35,7 +35,11 @@ current-head result. A newer request or pending review takes precedence over an
 older quota/clean result. A later submitted result satisfies an older request even
 if GitHub's requested-reviewer list is stale. Unknown request/result ordering is
 incomplete, not a merge pass. Pass a verified ledger timestamp with
-`-ReviewRequestedAt` while a just-accepted request has not appeared in the timeline.
+`-ReviewRequestedAt` and its recorded `-ReviewRequestedHead` while a just-accepted
+request has not appeared in the timeline. Keep that target SHA with the request:
+an old-head review finishing later must not fulfil a request known to target the
+new head. Historical timeline requests without a known target retain their
+separate requested-reviewer/current-head evidence; do not invent a target SHA.
 
 Quota can also arrive in a trusted issue comment or check output. Record its link,
 identity, body and verified current-head association. An issue comment has no SHA

@@ -58,6 +58,7 @@ def main():
     policy = json.loads((refs / 'review-policy.json').read_text(encoding='utf-8'))
     config = {'repo': str(repo), 'state': str(state), 'python': sys.executable,
               'helper': str(scripts / 'review_scope.py'), 'runs': ledger['runs'],
+              'pricingGuard': policy['pricingGuard'],
               'models': [m['id'] for m in policy['models'].values()]}
     digest = hashlib.sha256()
     for file in (scripts / 'review-runtime.mjs', scripts / 'review_scope.py', refs / 'review-policy.json'):
@@ -68,21 +69,29 @@ def main():
                 raise ValueError('Runtime run requires ' + key)
         if not re.fullmatch(r'Review-Run-ID: \S+', run['marker']):
             raise ValueError('marker must be a complete Review-Run-ID: <opaque> line')
+        if not run.get('taskId') and not run.get('briefFile'):
+            raise ValueError('New reviewer runs require a durable briefFile before dispatch')
         if Path(run['id']).name != run['id'] or '/' in run['id'] or '\\' in run['id']:
             raise ValueError('Invalid run ID')
         manifest = json.loads(Path(run['scope']).read_text(encoding='utf-8-sig'))
         if Path(manifest['repo']).resolve() != repo or manifest['head'] != run['head']:
             raise ValueError('Runtime scope belongs to another worktree/head')
+        if run.get('briefFile'):
+            brief = Path(run['briefFile']).resolve()
+            if not brief.is_relative_to(state) or brief.stat().st_size > 64000:
+                raise ValueError('Review brief must be a bounded file in the owned external run directory')
+            run['reviewContract'] = brief.read_text(encoding='utf-8')
     # New registrations must reload the plugin and publish a fresh ready receipt.
-    digest.update(json.dumps([{k: r[k] for k in ('id', 'marker', 'model', 'effort', 'head', 'from', 'base', 'scope', 'title')}
+    digest.update(json.dumps([{k: r.get(k) for k in ('id', 'marker', 'model', 'effort', 'head', 'from', 'base', 'scope', 'title', 'reviewContract')}
                               for r in config['runs']], sort_keys=True).encode())
     config['runtimeDigest'] = digest.hexdigest()
     config_path.write_text(json.dumps(config, indent=2), encoding='utf-8')
     content = ('import runtime from ' + json.dumps((scripts / 'review-runtime.mjs').as_uri() + '?v=' + config['runtimeDigest']) + ';\n'
                'export default runtime(' + json.dumps(str(config_path)) + ');\n').encode()
-    prior = {}
+    prior = json.loads(receipt.read_text(encoding='utf-8')) if receipt.exists() else {}
+    if prior and prior.get('loader') != str(loader):
+        raise ValueError('Runtime ownership receipt belongs to another loader')
     if loader.exists():
-        prior = json.loads(receipt.read_text(encoding='utf-8')) if receipt.exists() else {}
         if prior.get('loader') != str(loader) or prior.get('sha256') != hashlib.sha256(loader.read_bytes()).hexdigest():
             raise ValueError('Existing loader is not owned by this run')
         loader.write_bytes(content)

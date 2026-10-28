@@ -249,7 +249,8 @@ Use [review_usage.py](../scripts/review_usage.py) to maintain one run ledger:
 ```
 
 Run JSON requires `id`, integer `round`, unique `marker`, exact policy `model`,
-`effort`, `from` and `head`; runtime setup also needs `base`, absolute `scope` and
+`effort`, `from` and `head`; runtime setup also needs `base`, absolute `scope`, a
+durable external `briefFile` containing the complete review contract and
 `title`. Add returned `taskId`/`threadId`, verdict and finding
 evidence on completion. Session correlation requires the exact unique marker in
 the first saved user message, never guessed titles/timestamps or a T3 thread ID used as

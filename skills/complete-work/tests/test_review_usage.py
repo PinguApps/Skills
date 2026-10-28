@@ -143,6 +143,18 @@ class UsageTests(unittest.TestCase):
         result = usage.reported_usage([message], 'openrouter/anthropic/claude-haiku-5.5', 'high')
         self.assertEqual('0.005', result['costUSD'])
 
+    def test_estimate_only_and_missing_rounds_do_not_imply_zero_billed_spend(self):
+        estimate = usage.reported_usage([self.message('one')], 'openrouter/anthropic/claude-haiku-5.5')
+        common = {'round': 2, 'model': 'Haiku', 'effort': 'high', 'from': 'before', 'head': 'after'}
+        for evidence in (estimate, None):
+            text = usage.render({'mergePolicy': 'manual', 'runs': [{**common, 'usage': evidence}]})
+            self.assertIn('Round billed subtotal: unavailable', text)
+            self.assertIn('Recorded billed subtotal: unavailable', text)
+            self.assertNotIn('billed subtotal: $0.00', text)
+        zero = {**estimate, 'billed': True, 'costUSD': '0'}
+        text = usage.render({'mergePolicy': 'manual', 'runs': [{**common, 'usage': zero}]})
+        self.assertIn('Total billed review cost: $0.00', text, 'Verified zero usage is distinct from missing usage')
+
 
 if __name__ == '__main__':
     unittest.main()

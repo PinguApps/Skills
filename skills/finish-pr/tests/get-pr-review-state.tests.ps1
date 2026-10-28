@@ -54,4 +54,6 @@ $messageQuota = Get-CopilotReviewState @() 'head' -QuotaEvidence @($message)
 Assert-True ($messageQuota.state -eq 'quota-pass' -and -not $messageQuota.clean) 'Verified current-head quota-message evidence is a completion exemption, not a clean review.'
 $oldRequest = Get-CopilotReviewState @((New-Review 'No new comments' 'COMMENTED' 'old-head')) 'head' -ReviewRequestedAt '2026-10-27T11:00:00Z'
 Assert-True ($oldRequest.state -eq 'absent') 'A completed old-head request must not turn every future push into an in-flight review.'
+$newHeadPending = Get-CopilotReviewState @((New-Review 'No new comments' 'COMMENTED' 'old-head')) 'head' -ReviewRequestedAt '2026-10-27T11:00:00Z' -ReviewRequestedHead 'head'
+Assert-True ($newHeadPending.state -eq 'running') 'A later result on an old head cannot fulfil an accepted request explicitly targeting the new head.'
 Write-Output 'PASS: Copilot quota and evidence-based settlement tests'

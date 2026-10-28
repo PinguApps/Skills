@@ -25,9 +25,12 @@ class RuntimePreparationTests(unittest.TestCase):
         self.scope = self.state / 'scope.json'
         self.scope.write_text(json.dumps({'repo': str(self.repo), 'head': 'head'}))
         self.ledger = self.state / 'ledger.json'
+        self.brief = self.state / 'brief.txt'
+        self.brief.write_text('G01: retain and verify the source guard.\n')
         self.run = {'id': 'one', 'marker': 'Review-Run-ID: unique', 'round': 2,
                     'model': 'openrouter/anthropic/claude-haiku-5.5', 'effort': 'high',
-                    'title': 'R2: Haiku', 'scope': str(self.scope), 'base': 'base', 'from': 'first', 'head': 'head'}
+                    'title': 'R2: Haiku', 'scope': str(self.scope), 'base': 'base', 'from': 'first', 'head': 'head',
+                    'briefFile': str(self.brief)}
 
     def save(self, runs):
         self.ledger.write_text(json.dumps({'repo': str(self.repo), 'runs': runs}))
@@ -55,6 +58,13 @@ class RuntimePreparationTests(unittest.TestCase):
         self.assertNotEqual(first_loader, loader.read_bytes())
         self.assertEqual({'one', 'two'}, {r['id'] for r in second['runs']})
         self.assertIn('openrouter/anthropic/claude-sonnet-5.5', second['models'])
+        self.assertIn('G01', second['runs'][0]['reviewContract'])
+        self.assertTrue(loader.is_relative_to(self.repo))
+        loader.unlink()  # Lost loader must not lose ownership of its exclusion rule.
+        self.brief.write_text('G01: updated durable contract.\n')
+        self.invoke('prepare')
+        third = json.loads((self.state / 'runtime.json').read_text())
+        self.assertNotEqual(second['runtimeDigest'], third['runtimeDigest'])
         self.invoke('remove')
         self.assertFalse(loader.exists())
         self.assertEqual('# user policy\n*.local\n', exclude.read_text())
