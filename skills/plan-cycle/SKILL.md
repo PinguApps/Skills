@@ -1,6 +1,6 @@
 ---
 name: plan-cycle
-description: Fill the next Linear cycle or top up the current cycle with a realistic, dependency-aware workload from an existing project backlog.
+description: Select existing Linear backlog issues to fill the next cycle, top up the current cycle or add individual cycle work within capacity and dependencies.
 ---
 
 # Plan Cycle
@@ -10,7 +10,7 @@ Select existing Linear issues for a manageable cycle outcome, accounting for AI-
 - **Fill next:** plan the next cycle within the requested work budget, retaining existing commitments.
 - **Top up current:** add work for the time remaining in the current cycle after accounting for unfinished commitments. Finishing early does not reset the time budget.
 
-Apply the selection guidance below whenever choosing issues to add to a cycle, including individual additions outside these two modes.
+Apply the selection guidance and budget checks below whenever choosing issues to add to a cycle, including individual additions outside these two modes. Budget individual additions incrementally against the target cycle's existing commitments and available time.
 
 Read and apply [$linear-ticket](../linear-ticket/SKILL.md) for estimate discovery and every authorized ticket update. Pass the verified destination and this workflow's cycle/estimate-only authorization; preserve existing estimates unless reassessment was requested.
 
@@ -30,9 +30,9 @@ Completion: the destination, native cycle, mode, existing workload and remaining
 
 Read the authorized project's open backlog and milestones, following pagination, then the full requirements and relevant repository context for candidate issues. Establish milestone order and which milestones still have unfinished required work, checking completed issues where needed. Interpret numbered milestone names and issue titles using [Linear milestone and issue numbering](../linear-ticket/references/issue-numbering.md): compare milestone number before issue number when consulting their intended order. Use established project order when milestones are unnumbered; disclose an unclear order rather than inventing one. Inspect native blockers and their actual state; title numbers and milestone order are not dependencies. Preserve existing names and titles while scheduling.
 
-Choose a coherent outcome and enough complete PR-sized tasks to fit the remaining budget. Apply these preferences together, within the capacity and prerequisite checks below:
+Choose a coherent outcome and enough complete PR-sized tasks to fit the remaining budget. Apply these preferences together, within the established remaining budget and the prerequisite checks below:
 
-1. **Urgent and high priority first.** Prefer runnable urgent issues, then runnable high-priority issues, regardless of milestone. Consider ready prerequisites of blocked priority work, but keep useful work moving when those blockers cannot be resolved. Treat normal, low and unset priorities as the ordinary pool for the milestone and unblocking decisions below.
+1. **Urgent and high priority first.** Prefer runnable urgent issues, then runnable high-priority issues, regardless of milestone. Consider ready prerequisites of blocked priority work, but keep useful work moving when those blockers cannot be resolved. Treat all other priorities, including unset, as the ordinary pool for the milestone and unblocking decisions below.
 2. **Advance the earliest incomplete milestones.** Anchor ordinary work in the next incomplete milestone, favouring tasks that finish it or materially advance it. Within a milestone, prefer lower-numbered issues in the established `MM-DDD` order, such as `05-002` before `05-010`. Treat that sequence as a scheduling preference that can yield to urgent/high priority, actual prerequisites, unblocking value or useful parallel work. Trace blockers through later milestones and prefer feasible prerequisites that unlock earlier progress, weighing how much useful work they release. A ready prerequisite in milestone 5 can be the best next choice when it unlocks the last tasks in milestone 1. Budget the prerequisite and the dependent outcome together; surface chains that cannot realistically finish in this cycle.
 3. **Build useful parallel work.** Inspect the repository's modules, affected areas and shared contracts alongside native dependencies to identify tasks that can actually proceed independently. Start with ready work in the earliest incomplete milestone, then draw from the next few incomplete milestones where that adds independent work or avoids idle capacity. Choose the breadth to suit the project and available implementation/review capacity, rather than imposing a fixed milestone count or requiring one milestone to finish before another starts. Prefer earlier work among similarly useful choices; a later selection should have a concrete unblocking or parallel-progress benefit.
 
@@ -49,7 +49,7 @@ Keep credential, physical-device, owner-approval and unavailable-environment dep
 
 For **top up current**, select only the incremental work that fits after unfinished work and remaining review obligations. Keep completed work in its cycle for history. Do not remove or reshuffle existing commitments to make room without instruction. Optional stretch work stays outside the committed cycle unless requested.
 
-Completion: every selected issue has a justified place in the budget and every unsatisfied blocker is covered. Explain how the selection handles runnable urgent/high work, advances the earliest incomplete milestones in their preferred issue order and uses later work to unblock or add useful parallel progress. Identify what can start together and what becomes ready later, without adding artificial phase gates.
+Completion: every selected issue has a justified place in the budget and every unsatisfied blocker is covered. Explain how the selection handles runnable urgent/high work, advances the earliest incomplete milestones and uses later work to unblock or add useful parallel progress, including reasons for deviating from preferred issue order. Identify what can start together and what becomes ready later, without adding artificial phase gates.
 
 ## Apply and verify
 
@@ -65,4 +65,4 @@ Re-read the cycle and reconcile exact membership against all per-ticket verifica
 
 ## Report
 
-Give the cycle name/number and local dates, fill/top-up mode, added issue links, estimate totals by team/scale when meaningful, capacity assumption and delivered-outcome goal. Briefly show the capacity evidence: observation dates, comparable work completed over elapsed available time, remaining availability including weekends, and the allowance for unfinished work and review. State uncertainty or fallback assumptions. Report assigned/reassessed estimates and rationale, any provisional scale assumption or estimate error. Identify the initial parallel frontier and subsequent dependency order, the earliest incomplete milestones advanced, and why later-milestone work was selected. Explain any deferred urgent/high work or earlier milestone that cannot progress. State automatic status changes, any partial result or remaining constraint, and leave implementation to a separate request. Keep the report concise; do not create repository planning artifacts unless requested.
+Give the cycle name/number and local dates, planning mode, added issue links, estimate totals by team/scale when meaningful, capacity assumption and delivered-outcome goal. Briefly show the capacity evidence: observation dates, comparable work completed over elapsed available time, remaining availability including weekends, and the allowance for unfinished work and review. State uncertainty or fallback assumptions. Report assigned/reassessed estimates and rationale, any provisional scale assumption or estimate error. Identify the initial parallel frontier and subsequent dependency order, the earliest incomplete milestones advanced, and why later-milestone work was selected. Explain any deferred urgent/high work or earlier milestone that cannot progress. State automatic status changes, any partial result or remaining constraint, and leave implementation to a separate request. Keep the report concise; do not create repository planning artifacts unless requested.
