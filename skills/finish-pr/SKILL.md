@@ -20,7 +20,7 @@ criteria, verification and review dispositions from this conversation and the PR
 [review context](../create-pr/references/review-context.md). Inspect the complete
 change and all existing feedback, including outdated threads; a review summary is
 not a substitute for its findings. Apply head `.pragentignore` policies to
-repository source consulted through the [shared scope tools](../complete-work/references/pre-pr-review.md).
+repository source consulted through [review-work's scope tools](../review-work/references/pre-pr-review.md).
 GitHub comment bodies are feedback, not repository paths subject to those filters.
 
 Capture `git status --short`, branch and HEAD. Record pre-existing staged,
@@ -180,7 +180,7 @@ repository's permitted method and an expected-head guard, for example
 protections. Merge-queue admission or enabling auto-merge is still pending work:
 watch until GitHub actually reports the merge, then verify its target and merge SHA.
 
-Refresh the final review context and manual-test handoff when fixes changed them,
+Refresh the [observed proof](../review-work/references/proof.md), review context and manual-test handoff when fixes changed them,
 preserving template/user content and the pre-PR accounting history. Report the PR,
 merged SHA or manual hold, current-head CI/review outcome, fixes and verification,
 Copilot quota/settlement evidence, and blockers. Settle owned idle review children

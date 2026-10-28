@@ -55,9 +55,9 @@ Ownership and integration:
   consistent with complete-work. Do not create a second PR on resume.
 - The coordinator manages Linear. Make no tracker transitions, comments,
   follow-up tickets, assignment changes, or dependency edits.
-- Commit coherent chunks regularly, then run complete-work's pre-PR reviews in
-  this exact worktree using its ignore policy, routing and usage ledger. Name
-  reviewers `R<n>: <model>`; put ownership in their brief/ledger. No delegated post-PR reviews.
+- Commit coherent chunks regularly; complete-work invokes
+  [$review-work](../../review-work/SKILL.md) once in this exact worktree for proof,
+  filtering, reviewers, accounting and cleanup. No delegated post-PR reviews.
 - Merge only through finish-pr's current-head gate and only when policy permits.
   Handle Copilot quota and narrow evidence-backed thread settlement under that
   skill; never resolve human-owned threads to force a merge.

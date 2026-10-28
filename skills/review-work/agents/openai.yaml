@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Work"
+  short_description: "Review completed work with proof and model accounting"
+  default_prompt: "Use $review-work to review the completed changes and return proof, findings and review costs before PR creation."

@@ -1,7 +1,7 @@
 # Review before PR publication
 
-Read after implementation and relevant verification, before creating a PR. This
-procedure is shared by `complete-work` and `create-pr`. It is not a new skill.
+Read from `review-work` after implementation and observed proof, before creating
+a PR. This is the shared review procedure for standalone and delivery workflows.
 It runs only before initial PR publication: `finish-pr` never launches these AI
 reviewers for subsequent CI or GitHub feedback fixes.
 
@@ -224,14 +224,14 @@ verification and why re-review adds no meaningful assurance. Substantial or
 uncertain fixes need another affected review within the cap. Do not claim a model
 approved a revision it did not see.
 
-The final coverage receipt records base/head/policy digest, primary route and all
+The final coverage receipt records base/head/policy digest, observed proof, primary route and all
 checklists, selected reviewers and covered ranges, parent-verified minor deltas,
 finding dispositions, verification evidence, child cleanup and ledger location.
 Publication requires complete scope coverage and no unresolved actionable finding.
 If all changed content is explicitly excluded and no finding is outstanding, make
 no model calls and record that result; policy files themselves still get reviewed.
 Write this as `<run-directory>/coverage-receipt.json`. Include explicit per-run
-IDs, model ranges, finding dispositions, verification and child cleanup. This is
+IDs, model ranges, finding dispositions, verification, proof location and child cleanup. This is
 the parent's evidence document, not a model-generated approval or a ledger reset.
 
 ## Usage and PR handoff
@@ -240,7 +240,8 @@ Use [review_usage.py](../scripts/review_usage.py) to maintain one run ledger:
 
 ```powershell
 & <absolute-python> <absolute-skill>/scripts/review_usage.py --ledger <ledger> init `
-  --repo <actual-worktree-root> --merge-policy automatic --scope <scope-json>
+  --repo <actual-worktree-root> --merge-policy automatic --scope <scope-json> `
+  --repository-url <verified-https-repository-web-url>
 # The classified scope supplies its round cap; manual preserves a human hold.
 & <absolute-python> <absolute-skill>/scripts/review_usage.py --ledger <ledger> record --run-file <run-json>
 & <absolute-python> <absolute-skill>/scripts/review_usage.py --ledger <ledger> collect `
@@ -252,7 +253,11 @@ Run JSON requires `id`, integer `round`, unique `marker`, exact policy `model`,
 `effort`, `from` and `head`; runtime setup also needs `base`, absolute `scope`, a
 durable external `briefFile` containing the complete review contract and
 `title`. Add returned `taskId`/`threadId`, verdict and finding
-evidence on completion. Session correlation requires the exact unique marker in
+evidence on completion. The collector records elapsed wall time from the owned
+OpenCode session's creation to terminal idle, including tools and native summaries,
+excluding the preceding dispatch queue. Missing timestamps are unavailable, never
+inferred from tokens. Save these timestamps for both successful and failed attempts.
+Session correlation requires the exact unique marker in
 the first saved user message, never guessed titles/timestamps or a T3 thread ID used as
 an OpenCode session ID. The helper reads session/message metadata without making
 inference requests. For an ambiguous match, set `sessionID` only after verifying
@@ -278,9 +283,26 @@ When any run has only estimated or incomplete accounting, keep billed and estima
 subtotals separate and omit a mixed grand total. Partial provider records remain
 evidence, never a complete billed total. Guard breaches still block coverage.
 
-Append `## AI review` after `## Test changes`: one subsection per actual round,
-reviewed range/outcome, model/effort, input, cache reads/writes, output, costs and
-round subtotal, then a grand total. No expected/unused rounds or post-PR rounds.
-Keep merge policy visible. Preserve this pre-publication history after subsequent
-GitHub fixes; their tests/commits/replies must not pretend those fixes were AI
-reviewed. Hand the receipt, ledger and final review context to `create-pr`.
+Hand [observed proof](proof.md) to `create-pr` for `## Proof`, followed by manual
+`## Test changes` and the rendered `## AI review`. Keep the AI review heading,
+merge policy, each `### Round …` heading and `### Totals` visible. Put each round's
+tables, provenance and subtotals inside a closed `<details>` block with a summary.
+
+The main round table shows the model name without its routing/company path,
+effort, outcome, elapsed time, input, cache reads/writes, output and cost. A second
+table names **Full review** or **Incremental review** (from task base or previous
+coverage respectively), with a linked short-SHA endpoint range. Keep full IDs in
+the ledger. Use short linked commits throughout human-facing PR prose, outside
+code spans. The verified repository web URL supplies comparison links; a legacy
+ledger may pass `render --repository-url <url>`. Resolve missing repository
+metadata before publication rather than inventing a remote.
+
+The visible totals table groups every model used across all actual rounds, sums
+its known tokens and costs, and ends with a total row. Billed and estimated dollars
+have separate columns when needed; partial counts are labelled. Calculate totals
+before rounding to cents. No expected/unused rounds or post-PR rounds. Preserve
+this history after GitHub fixes; their proof/commits/replies must not imply paid
+review of revisions the models never saw. Hand receipt, ledger, proof and final
+review context to `create-pr`.
+
+Short comparison links follow [GitHub's two-dot commit comparison](https://docs.github.com/en/pull-requests/how-tos/commit-changes/comparing-commits).

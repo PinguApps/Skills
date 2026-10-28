@@ -89,7 +89,7 @@ When implementation of the combined work starts, move every target to its team's
 
 Within `complete-work`, implement in verified vertical slices, working red then green at the agreed public seams for testable behaviour. Include required documentation, schemas, migrations, generated artifacts, and configuration. Before its PR-publication gate, audit the complete diff against repository standards, applicable ADRs, every criterion of every supplied target, and originating-spec constraints; fix findings and rerun affected checks. Required target work stays in this single change.
 
-Commit meaningful completed chunks rather than deferring a multi-step task into one final commit. Carry every target's acceptance coverage and durable decisions into the shared pre-PR review brief. The implementation worker owns review children and their cleanup; name reviewers `R<n>: <model>` per the shared procedure, keeping ticket ownership in their brief and ledger. Keep targets In Progress during local review; the following In Review reconciliation begins only after PR creation. Do not run a second review workflow inside this wrapper.
+Commit meaningful completed chunks rather than deferring a multi-step task into one final commit. Carry every target's acceptance coverage and durable decisions into [$review-work](../review-work/SKILL.md), invoked once by complete-work. It owns pre-PR proof, reviewers, naming, accounting and cleanup. Keep targets In Progress during local review; the following In Review reconciliation begins only after PR creation. Do not run a second review workflow inside this wrapper.
 
 ### Link every target and update review states at PR creation
 

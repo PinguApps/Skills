@@ -7,6 +7,7 @@ Use the PR's existing sections where they fit; otherwise append `## Review conte
 - **Outcome and requirements:** the observable change and acceptance criteria, with issue identifiers when supplied. Group related criteria without losing coverage.
 - **Decisions and exclusions:** deliberate tradeoffs, compatibility constraints and behaviour explicitly outside scope. Link an authoritative spec or ADR when useful; retain enough context for a reviewer without tracker access.
 - **Evidence and gaps:** actual verification commands/results or artifact links, the commit verified, and material behaviour those checks do not establish. Distinguish executed checks from proposed manual tests.
+- **Proof:** carry [review-work's observed evidence](../../review-work/references/proof.md) into `## Proof`, separate from future manual checks. Human-facing commits use short linked hashes; full machine identities remain in the receipt.
 - **Review and merge:** pre-PR coverage receipt and ledger location, exclusions and dispositions, model-reviewed ranges versus parent-verified minor follow-ups, and automatic/manual merge policy. Keep token/cost detail in `## AI review`, grouped by round rather than duplicated here. A human-review/no-merge request persists across resumptions.
 - **Recovery:** how to undo material runtime, data or configuration changes, including any irreversible migration or recovery limitation. Omit this for changes without a meaningful recovery concern.
 

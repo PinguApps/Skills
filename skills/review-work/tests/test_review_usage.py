@@ -155,6 +155,72 @@ class UsageTests(unittest.TestCase):
         text = usage.render({'mergePolicy': 'manual', 'runs': [{**common, 'usage': zero}]})
         self.assertIn('Total billed review cost: $0.00', text, 'Verified zero usage is distinct from missing usage')
 
+    def test_round_report_shows_outcome_time_scope_and_short_comparison_links(self):
+        first, second, third = 'a' * 40, 'b' * 40, 'c' * 40
+        common = {'model': 'openrouter/anthropic/claude-haiku-5.5', 'effort': 'high', 'base': first}
+        text = usage.render({'mergePolicy': 'manual', 'repositoryUrl': 'https://github.com/example/repo', 'runs': [
+            {**common, 'round': 1, 'from': first, 'head': second, 'verdict': 'CHANGES',
+             'timing': {'seconds': 65}},
+            {**common, 'round': 2, 'from': second, 'head': third, 'verdict': 'APPROVE'}]})
+        self.assertIn('| claude-haiku-5.5 | high | CHANGES | 1m 5s |', text)
+        self.assertIn('| claude-haiku-5.5 | high | APPROVE | unavailable |', text)
+        self.assertIn('| Full review | [aaaaaaa..bbbbbbb](https://github.com/example/repo/compare/aaaaaaa..bbbbbbb)', text)
+        self.assertIn('| Incremental review | [bbbbbbb..ccccccc]', text)
+        self.assertNotIn('openrouter/anthropic/', text)
+        self.assertNotIn(first, text)
+        # Headings remain visible while each round's tables/subtotals are closed.
+        inside = False
+        for line in text.splitlines():
+            if line == '<details>':
+                self.assertFalse(inside)
+                inside = True
+            elif line == '</details>':
+                inside = False
+            elif line.startswith(('## ', '### ', 'Merge policy:')):
+                self.assertFalse(inside, line)
+            elif line.startswith('| Model | Effort'):
+                self.assertTrue(inside)
+        self.assertFalse(inside)
+        self.assertEqual(2, text.count('<summary>Review details</summary>'))
+        self.assertNotIn('<details open', text)
+
+    def test_totals_group_models_across_rounds_and_sum_unrounded_billed_costs(self):
+        common = {'effort': 'high', 'base': 'a' * 40, 'from': 'a' * 40, 'head': 'b' * 40}
+        def run(round_number, model, cost):
+            return {**common, 'round': round_number, 'model': model,
+                    'usage': {'input': 100, 'cacheRead': 60, 'cacheWrite': 10, 'output': 20,
+                              'costUSD': cost, 'billed': True, 'source': 'provider'}}
+        text = usage.render({'mergePolicy': 'manual', 'runs': [
+            run(1, 'openrouter/anthropic/claude-haiku-5.5', '.124'),
+            run(1, 'openrouter/z-ai/glm-5.3-flash', '.06'),
+            run(2, 'openrouter/anthropic/claude-haiku-5.5', '.126')]})
+        self.assertIn('### Totals', text)
+        totals = text.split('### Totals', 1)[1]
+        self.assertIn('| claude-haiku-5.5 | 200 | 120 | 20 | 40 | $0.25 |', totals)
+        self.assertIn('| glm-5.3-flash | 100 | 60 | 10 | 20 | $0.06 |', totals)
+        self.assertIn('| **Total** | 300 | 180 | 30 | 60 | $0.31 |', totals)
+        self.assertNotIn('Estimate USD', totals)
+
+    def test_totals_preserve_partial_counts_and_separate_estimates(self):
+        common = {'model': 'openrouter/anthropic/claude-haiku-5.5', 'effort': 'high',
+                  'round': 1, 'from': 'before', 'head': 'after'}
+        record = {'input': 100, 'cacheRead': 60, 'cacheWrite': 10, 'output': 20, 'source': 'provider'}
+        text = usage.render({'mergePolicy': 'manual', 'runs': [
+            {**common, 'usage': {**record, 'costUSD': '.12', 'billed': True}},
+            {**common, 'usage': {**record, 'costUSD': '.02', 'billed': False}},
+            {**common, 'usage': None}]})
+        totals = text.split('### Totals', 1)[1]
+        self.assertIn('Estimate USD (not billed)', totals)
+        self.assertIn('| **Total** | 200 (partial) | 120 (partial) | 20 (partial) | 40 (partial) | $0.12 | $0.02 |', totals)
+        self.assertNotIn('$0.14', totals)
+
+    def test_timing_is_measured_not_inferred_from_tokens_or_missing_clocks(self):
+        self.assertEqual(5.5, usage.session_timing({'time': {'created': 1000, 'idle': 6500}})['seconds'])
+        for times in ({}, {'idle': 5000}, {'created': 5000, 'idle': 1000}, {'created': True, 'idle': 5000}):
+            self.assertIsNone(usage.session_timing({'time': times}))
+        self.assertEqual('unavailable', usage.duration({}))
+        self.assertEqual('0s', usage.duration({'timing': {'seconds': 0}}))
+
 
 if __name__ == '__main__':
     unittest.main()

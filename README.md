@@ -2,12 +2,18 @@
 
 Opinionated skills I use in my setup each day.
 
+Use [review-work](skills/review-work/SKILL.md) to review completed work even when
+the conversation did not start with a delivery skill. It owns observed proof,
+pre-PR model reviews and accounting; delivery skills call the same process.
+PRs keep proof separate from manual tests, with collapsed round details and
+visible per-model totals. Standalone review stops before push/PR/merge.
+
 ## Review model decision — 2026-10-28
 
 This dated decision records the review mix, reasons and cost baseline for future
 reassessment. The executable source of truth is
-[review-policy.json](skills/complete-work/references/review-policy.json); the
-[shared review procedure](skills/complete-work/references/pre-pr-review.md)
+[review-policy.json](skills/review-work/references/review-policy.json); the
+[shared review procedure](skills/review-work/references/pre-pr-review.md)
 defines classification, mixed areas, review rounds and accounting. Update this
 snapshot when changing that policy, and preserve dated decisions below it.
 
@@ -263,6 +269,18 @@ The skill:
 - Includes Pingu's weekends and budgets AI-assisted work from recent cycles, current-cycle delivery over elapsed time, and unfinished commitments.
 - Selects complete outcomes with real native dependencies and useful parallel work.
 - Adds issues through the native cycle field and verifies membership and preserved metadata.
+
+### [review-work](skills/review-work/)
+
+Reviews already completed work before PR creation, including ad hoc conversation
+work. The delivery workflows reference this skill as their review source of truth.
+
+The skill:
+
+- Captures observed proof and distinguishes it from future manual-test instructions.
+- Applies ignore policies and deterministic/mixed-category routing to two independent reviewers.
+- Owns incremental fixes, round caps, per-model usage/time and reviewer cleanup.
+- Hands off coverage, proof and collapsed-round reporting without creating or merging a PR.
 
 ### [test-changes](skills/test-changes/)
 

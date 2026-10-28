@@ -25,7 +25,7 @@ Implement the supplied task, keeping changes within its scope. Commit at meaning
 
 Maintain the concise [review context](../create-pr/references/review-context.md) from the settled task: requirements, decisions, exclusions and verification evidence. Carry it through PR creation and `finish-pr`; use it to expose requirement gaps rather than restating the whole conversation.
 
-Choose actual verification by concrete failure risk, including real consumer/deployment paths and browser exercises where applicable. The implementation agent owns execution in its authorized test environment; source-only reviewers do not execute reviewed code. Passing AI review does not replace tests or real integration evidence.
+Choose actual verification using [review-work's proof requirements](../review-work/references/proof.md), including real consumer/deployment paths and browser exercises where applicable. Keep the observed evidence for the PR handoff. The implementation agent owns execution in its authorized test environment; source-only reviewers do not execute reviewed code. Passing AI review does not replace tests or real integration evidence.
 
 Before publishing implementation commits, review the complete diff against the intended base. Account for every requirement and acceptance criterion in the supplied Linear ticket, or every part of the user request when no Linear ticket was supplied, with the implementation and verification evidence that satisfies it. Run the relevant tests and repository-required checks, fix failures caused by the work, and inspect for accidental changes or omissions.
 
@@ -33,9 +33,9 @@ Advance to step 3 only when the work fully satisfies that scope, relevant verifi
 
 ## 3. Complete pre-PR review
 
-Read and follow [the shared review procedure](references/pre-pr-review.md). Apply `pragent-ignore`, commit any justified policy changes, separate code/documentation volume and select exactly two distinct initial reviewers. Use the policy's category pair or its substantial mixed-category assignment, preserving protected security/state pairs and category-specific escalations. Delegate independent review-only tasks through T3/OpenCode against this actual worktree and committed snapshot. Validate findings, make minimal fixes and commit verified chunks. One clean round is sufficient; later rounds are incremental, with three/five maximum as specified there. The parent owns usage capture and settling/cancelling every review child.
+Invoke [$review-work](../review-work/SKILL.md) once with the completed task, actual worktree, committed range, requirements and verification. It is the source of truth for observed proof, pre-PR reviewers, routing, incremental fixes, accounting and child cleanup. Return to this workflow only with its complete coverage receipt, proof record and rendered report; do not duplicate its review loop here.
 
-Do not publish a PR until the final coverage receipt satisfies the shared procedure. Directly verified minor deltas must be recorded separately from model-reviewed revisions. Preserve round-by-round accounting, final reviewed scope, evidence-backed dispositions and the merge policy for the next steps.
+Do not publish a PR until that handoff satisfies the task. Preserve proof, round-by-round accounting, final reviewed scope, evidence-backed dispositions and merge policy for the next steps.
 
 ## 4. Push and open the PR
 

@@ -6,10 +6,13 @@ No inference requests or credentials are made/read by this helper.
 import argparse
 from decimal import Decimal, ROUND_HALF_UP
 import json
+from html import escape
+import math
 import os
 from pathlib import Path
 import subprocess
 import re
+from urllib.parse import urlsplit
 
 POLICY = json.loads((Path(__file__).parents[1] / 'references/review-policy.json').read_text(encoding='utf-8'))
 
@@ -242,26 +245,97 @@ def money(value):
     return '$' + str(Decimal(str(value)).quantize(Decimal('.01'), rounding=ROUND_HALF_UP))
 
 
+def session_timing(session):
+    times = session.get('time', {})
+    start, end = times.get('created'), times.get('idle')
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
+           for v in (start, end)) or end < start:
+        return None
+    return {'startMs': start, 'endMs': end, 'seconds': (end - start) / 1000,
+            'source': 'OpenCode session created to terminal idle; includes tools and compaction'}
+
+
+def duration(run):
+    seconds = (run.get('timing') or {}).get('seconds')
+    if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or seconds < 0:
+        return 'unavailable'
+    seconds = int(Decimal(str(seconds)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    return (f'{hours}h ' if hours else '') + (f'{minutes}m ' if hours or minutes else '') + f'{seconds}s'
+
+
+def cell(value):
+    return escape(str(value), quote=False).replace('|', '\\|').replace('\n', ' ').replace('\r', ' ')
+
+
+def repository_url(value):
+    if not value:
+        return None
+    parts = urlsplit(value)
+    if parts.scheme != 'https' or not parts.netloc or parts.username or parts.password or parts.query or parts.fragment or any(c.isspace() for c in value):
+        raise ValueError('Use the verified HTTPS repository web URL without query/fragment')
+    return value.rstrip('/')
+
+
+def model_name(run):
+    return cell(run['model'].rsplit('/', 1)[-1])
+
+
+def review_range(run, url):
+    before, after = str(run['from'])[:7], str(run['head'])[:7]
+    label = cell(before + '..' + after)
+    # GitHub's two-dot view matches the exact endpoint diff used by the reader.
+    if url and all(re.fullmatch(r'[0-9a-fA-F]{7,64}', str(run[key])) for key in ('from', 'head')):
+        return f'[{label}]({url}/compare/{before}..{after})'
+    return label
+
+
+def review_type(run):
+    if run.get('base'):
+        return 'Full review' if run['from'] == run['base'] else 'Incremental review'
+    return 'unavailable'
+
+
+def incomplete(run):
+    usage = run.get('usage')
+    return usage is None or bool(usage.get('missingUsageMessageIDs')) or bool(run.get('accountingIncomplete'))
+
+
+def totals_row(label, runs, include_estimates):
+    values = []
+    for key in ('input', 'cacheRead', 'cacheWrite', 'output'):
+        known = [r['usage'][key] for r in runs if r.get('usage') and r['usage'].get(key) is not None]
+        partial = len(known) != len(runs) or any(incomplete(r) for r in runs)
+        values.append((f'{sum(known):,}' + (' (partial)' if partial else '')) if known else 'unavailable')
+    for billed in ([True, False] if include_estimates else [True]):
+        evidence = [r['usage'] for r in runs if r.get('usage') and bool(r['usage'].get('billed')) == billed]
+        values.append(money(sum((Decimal(u['costUSD']) for u in evidence), Decimal('0'))) if evidence else 'unavailable')
+    return '| ' + label + ' | ' + ' | '.join(values) + ' |'
+
+
 def render(ledger):
     lines = ['## AI review', '', 'Merge policy: ' + ledger['mergePolicy'], '']
+    url = repository_url(ledger.get('repositoryUrl'))
     billed_total, estimate_total = Decimal('0'), Decimal('0')
     billed_rows = 0
     unavailable = False
     estimated = False
     for round_number, label in sorted(set((r['round'], r.get('roundLabel', str(r['round']))) for r in ledger['runs'])):
         runs = [run for run in ledger['runs'] if (run['round'], run.get('roundLabel', str(run['round']))) == (round_number, label)]
-        notes = []
         lines += [f'### Round {label}', '',
-                  '| Model | Effort | Input total | Cache read | Cache write | Output total | Cost USD |',
-                  '|---|---|---:|---:|---:|---:|---:|']
+                  '<details>', '<summary>Review details</summary>', '',
+                  '| Model | Effort | Outcome | Time | Input total | Cache read | Cache write | Output total | Cost USD |',
+                  '|---|---|---|---|---:|---:|---:|---:|---:|']
         billed_subtotal, estimate_subtotal = Decimal('0'), Decimal('0')
         round_billed_rows = 0
         for run in runs:
             usage = run.get('usage')
-            if usage is None or usage.get('missingUsageMessageIDs') or run.get('accountingIncomplete'):
+            if incomplete(run):
                 unavailable = True
+            prefix = f"| {model_name(run)} | {cell(run['effort'])} | {cell(run.get('verdict', 'unavailable'))} | {duration(run)} | "
             if usage is None:
-                lines.append(f"| {run['model']} | {run['effort']} | unavailable | unavailable | unavailable | unavailable | unavailable |")
+                lines.append(prefix + 'unavailable | unavailable | unavailable | unavailable | unavailable |')
                 continue
             if usage.get('billed'):
                 round_billed_rows += 1
@@ -271,20 +345,36 @@ def render(ledger):
                 estimate_subtotal += Decimal(usage['costUSD'])
             counts = ['unavailable' if usage.get(key) is None else f'{usage[key]:,}' for key in ('input', 'cacheRead', 'cacheWrite', 'output')]
             qualifier = '' if usage.get('billed') else ' estimate'
-            lines.append(f"| {run['model']} | {run['effort']} | " + ' | '.join(counts) + f" | {money(usage['costUSD'])}{qualifier} |")
-            notes.append(f"Reviewed `{run['from']}` → `{run['head']}`; outcome: {run.get('verdict', 'not recorded')}. Cost source: {usage['source']}.")
+            lines.append(prefix + ' | '.join(counts) + f" | {money(usage['costUSD'])}{qualifier} |")
         billed_total += billed_subtotal
         billed_rows += round_billed_rows
         estimate_total += estimate_subtotal
-        lines += ['', *notes, '', '**Round billed subtotal: ' + (money(billed_subtotal) if round_billed_rows else 'unavailable') + '**', '']
+        lines += ['', '| Model | Review type | Commit range |', '|---|---|---|']
+        lines += [f'| {model_name(run)} | {review_type(run)} | {review_range(run, url)} |' for run in runs]
+        sources = sorted({r['usage']['source'] for r in runs if r.get('usage')})
+        lines += ['', 'Cost sources: ' + '; '.join(cell(source) for source in sources) + '.' if sources else 'Cost source: unavailable.', '',
+                  '**Round billed subtotal: ' + (money(billed_subtotal) if round_billed_rows else 'unavailable') + '**', '']
         if any(r.get('usage') and not r['usage'].get('billed') for r in runs):
             lines += ['**Round estimate subtotal (not billed): ' + money(estimate_subtotal) + '**', '']
+        lines += ['</details>', '']
+    lines += ['### Totals', '',
+              '| Model | Input total | Cache read | Cache write | Output total | Cost USD (billed) |' + (' Estimate USD (not billed) |' if estimated else ''),
+              '|---|---:|---:|---:|---:|---:|' + ('---:|' if estimated else '')]
+    models = dict.fromkeys(r['model'] for r in ledger['runs'])
+    for model in models:
+        runs = [r for r in ledger['runs'] if r['model'] == model]
+        lines.append(totals_row(model_name(runs[0]), runs, estimated))
+    lines += [totals_row('**Total**', ledger['runs'], estimated), '']
     label = 'Recorded billed subtotal' if estimated or unavailable else 'Total billed review cost'
     lines += ['**' + label + ': ' + (money(billed_total) if billed_rows else 'unavailable') + '**', '']
     if estimated:
         lines += ['**Recorded estimate subtotal (not billed): ' + money(estimate_total) + '**', '']
     lines += [
-              'Pre-PR sessions only. Input total includes cache reads/writes; output total includes reasoning exactly once.']
+              'Pre-PR sessions only. Input total includes cache reads/writes; output total includes reasoning exactly once.',
+              'Time is session wall time, including tool steps and native compaction, excluding time queued before session creation.',
+              'Totals use unrounded costs; displayed dollars are rounded to cents. Partial token totals show known usage only.']
+    if not url:
+        lines += ['', 'Repository URL unavailable; short ranges are shown without explicit comparison links.']
     if unavailable:
         lines += ['', '**Accounting incomplete:** missing usage is not zero cost.']
     return '\n'.join(lines) + '\n'
@@ -298,6 +388,7 @@ def main():
     init.add_argument('--repo', required=True)
     init.add_argument('--merge-policy', choices=['automatic', 'manual'], default='automatic')
     init.add_argument('--scope', required=True, help='Use the classified scope route and its round cap')
+    init.add_argument('--repository-url', help='Verified HTTPS repository web URL for short commit comparison links')
     record = sub.add_parser('record')
     record.add_argument('--run-file', required=True)
     collect = sub.add_parser('collect')
@@ -307,6 +398,7 @@ def main():
     collect.add_argument('--allow-estimate', action='store_true', help='Record incomplete billing evidence honestly; never supplies review approval')
     output = sub.add_parser('render')
     output.add_argument('--output', required=True)
+    output.add_argument('--repository-url', help='Repository web URL when rendering a legacy ledger')
     args = parser.parse_args()
     if args.command == 'init':
         if Path(args.ledger).exists():
@@ -319,6 +411,7 @@ def main():
         if cap != expected:
             raise ValueError('Invalid route cap')
         save(args.ledger, {'repo': str(Path(args.repo).resolve()), 'mergePolicy': args.merge_policy,
+                           'repositoryUrl': repository_url(args.repository_url),
                            'roundCap': cap, 'route': scope['route'], 'runs': []})
         return
     ledger = load(args.ledger)
@@ -352,6 +445,7 @@ def main():
         run['sessionID'] = session['id']
         if not session.get('outcome') or not session.get('time', {}).get('idle'):
             raise ValueError('OpenCode session is not terminal')
+        run['timing'] = session_timing(session)
         run['status'] = state['status']
         try:
             estimate = reported_usage(messages, run['model'], run['effort'])
@@ -367,6 +461,8 @@ def main():
         save(args.ledger, ledger)
         print(json.dumps({'runID': run['id'], 'sessionID': session['id'], 'usage': run['usage']}, indent=2))
     else:
+        if args.repository_url:
+            ledger['repositoryUrl'] = repository_url(args.repository_url)
         Path(args.output).write_text(render(ledger), encoding='utf-8')
 
 
