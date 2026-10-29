@@ -25,7 +25,7 @@ Implement the supplied task, keeping changes within its scope. Commit at meaning
 
 Maintain the concise [review context](../create-pr/references/review-context.md) from the settled task: requirements, decisions, exclusions and verification evidence. Carry it through PR creation and `finish-pr`; use it to expose requirement gaps rather than restating the whole conversation.
 
-Choose actual verification using [review-work's proof requirements](../review-work/references/proof.md), including real consumer/deployment paths and browser exercises where applicable. Keep the observed evidence for the PR handoff. The implementation agent owns execution in its authorized test environment; source-only reviewers do not execute reviewed code. Passing AI review does not replace tests or real integration evidence.
+Choose actual verification using [review-work's proof requirements](../review-work/references/proof.md), including real consumer/deployment paths and browser exercises where applicable. Keep the observed evidence for the PR handoff. The implementation agent owns the initial proof and supplies review-work's runtime-check handoff so reviewers can independently exercise the work safely. Passing AI review does not replace tests or real integration evidence.
 
 Before publishing implementation commits, review the complete diff against the intended base. Account for every requirement and acceptance criterion in the supplied Linear ticket, or every part of the user request when no Linear ticket was supplied, with the implementation and verification evidence that satisfies it. Run the relevant tests and repository-required checks, fix failures caused by the work, and inspect for accidental changes or omissions.
 

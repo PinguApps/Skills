@@ -89,6 +89,13 @@ class UsageTests(unittest.TestCase):
         self.assertEqual('0.12345', result['costUSD'])
         self.assertEqual(['gen-exact'], result['generationIDs'])
         self.assertTrue(result['billed'])
+        execution_run = {**run, 'executionTools': ['shell', 'browser']}
+        execution_records = [{**records[0], 'tools': ['browser', 'pingu_review_source', 'shell']}, *records[1:]]
+        self.assertEqual(result, usage.billed_usage(execution_records, execution_run, 'session'))
+        with self.assertRaisesRegex(ValueError, 'filtered-tool guard'):
+            usage.billed_usage(execution_records, run, 'session')
+        with self.assertRaisesRegex(ValueError, 'filtered-tool guard'):
+            usage.billed_usage(records, execution_run, 'session')
         self.assertEqual(result, usage.billed_usage(records[:-1], run, 'session'), 'Final provider usage is authoritative without stream EOF')
         with self.assertRaises(usage.IncompleteUsage):
             usage.billed_usage(records[:-2], run, 'session')

@@ -119,7 +119,8 @@ shares, selected leads and exceptions in the receipt.
 
 Before dispatch, read [the OpenCode runtime setup](review-runtime.md). Prepare its
 worktree-local loader and verify it is loaded in that exact OpenCode location.
-It supplies `pingu_review_source`, restricts owned review sessions to that reader,
+It supplies `pingu_review_source`, restricts source access to that reader and
+permits only the assigned execution/browser tools for runtime checks,
 removes ambient repository instruction text/attachments from model context, and
 captures OpenRouter response usage without saving headers or response prose.
 This is an application guard, not an operating-system sandbox; configuration and
@@ -146,15 +147,17 @@ model, variant, round, scope/batch, reviewed range and returned link. Use a new
 to an old child. Initial reviewers are independent and do not see each other's
 findings. Supply the complete brief; children do not inherit the conversation.
 Follow the task's returned `next`; async completion wakes the parent. Do not poll
-running tasks. Under `loop-work`, acquire coordinator-allocated reviewer capacity;
-queue reviews when capacity is occupied instead of exceeding the shared limit.
+running tasks. Under `loop-work`, reviewers are children of the implementation
+worker; that worker owns their dispatch and cleanup.
 Before each new batch, re-prepare/reverify registration as required by the runtime
 setup. Record completed task status, usage and child cleanup before refreshing.
 
 The reviewer brief must contain:
 
 ```text
-Review only. Do not edit, commit, push, comment on GitHub, start agents or watch PRs.
+Review only. Keep source read-only. Do not commit, push, comment on GitHub, start
+agents or watch PRs. Non-destructive execution is authorized within the test
+environment and restrictions below; read-only does not mean source inspection only.
 Review-Run-ID: <unique-marker>
 Worktree: <absolute-current-worktree> Branch: <branch>
 Task base: <base> Review range: <from>..<head> Head ignore policy: <head>
@@ -163,15 +166,21 @@ Checklists: <primary and other applicable responsibilities>
 Focus category: <assignment category>; both reviewers cover the full included diff.
 Area map/escalations: <scope route areas and escalationByCategory>
 Checks actually run: <evidence and limitations>
+Runtime-check handoff: <concise commands/actions, expected and observed results,
+startup/configuration, test resources, URLs/ports, safety restrictions and cleanup
+from runtime-checks.md; full or focused incremental execution scope>
+Assigned execution/browser tools: <exact tool IDs matching executionTools>
 Allowed source access: use only pingu_review_source (diff/read/search).
-Do not bypass exclusions using raw git diff/show, shell searches or file tools.
+Execution tools are for checks and app interaction, never raw git diff/show,
+shell source searches or other bypasses of source exclusions.
 The runtime fixes the actual worktree, manifest, head and historical refs.
 Review only this range, with unchanged context needed to understand its effects.
 Find concrete scoped failures, broken callers and unmet requirements; avoid scope
 creep and style-only churn. Do not inspect unrelated earlier reviewed changes.
 Return APPROVE or CHANGES, and stable finding IDs with severity
 (blocker/actionable/advisory), file:line, failure scenario, evidence and suggested
-minimal fix. An excluded read is complete; omit claims needing excluded evidence.
+minimal fix. Report checks actually performed, observations and any verification
+gap. An excluded read is complete; omit claims needing excluded evidence.
 ```
 
 The parent owns every child until cleanup. Collect results and usage, persist
@@ -179,7 +188,8 @@ their IDs and dispositions, ensure no live/queued work remains, then settle that
 owned child with `t3_thread_organize`. Cancel obsolete/running tasks with
 `task_cancel` and verify termination before settling. Settling is not cancellation.
 Never touch unrelated threads. Reviewers never own fixes or PR lifecycle actions.
-Read the complete tool transcript; a direct source-access bypass invalidates the
+Read the complete tool transcript, including runtime actions and resource cleanup;
+a direct source-access bypass invalidates the
 review and must be investigated. Retain guard/session/transport evidence. Review
 changed ignore rules and their excluded path inventory before accepting any newly
 hidden source; record the narrow artifact justification without opening it.
@@ -252,7 +262,9 @@ Use [review_usage.py](../scripts/review_usage.py) to maintain one run ledger:
 Run JSON requires `id`, integer `round`, unique `marker`, exact policy `model`,
 `effort`, `from` and `head`; runtime setup also needs `base`, absolute `scope`, a
 durable external `briefFile` containing the complete review contract and
-`title`. Add returned `taskId`/`threadId`, verdict and finding
+`title`. Record `executionTools` as the exact assigned execution/browser tool IDs
+(an empty list for a source-only scope); follow [runtime checks](runtime-checks.md)
+when selecting permissions. Add returned `taskId`/`threadId`, verdict and finding
 evidence on completion. The collector records elapsed wall time from the owned
 OpenCode session's creation to terminal idle, including tools and native summaries,
 excluding the preceding dispatch queue. Missing timestamps are unavailable, never

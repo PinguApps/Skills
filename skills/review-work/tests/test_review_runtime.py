@@ -76,6 +76,19 @@ class RuntimePreparationTests(unittest.TestCase):
         self.assertIn('terminal owned tasks', self.invoke('prepare', False).stderr)
         self.assertIn('ownership receipt', self.invoke('remove', False).stderr)
 
+    def test_execution_permissions_are_frozen_and_force_a_runtime_reload(self):
+        self.save([self.run])
+        self.invoke('prepare')
+        first = json.loads((self.state / 'runtime.json').read_text())
+        self.save([{**self.run, 'executionTools': ['shell', 'browser']}])
+        self.invoke('prepare')
+        second = json.loads((self.state / 'runtime.json').read_text())
+        self.assertNotEqual(first['runtimeDigest'], second['runtimeDigest'])
+        self.assertEqual(['shell', 'browser'], second['runs'][0]['executionTools'])
+        for invalid in ('shell', ['shell', 'shell'], [''], ['pingu_review_source']):
+            self.save([{**self.run, 'executionTools': invalid}])
+            self.assertIn('executionTools', self.invoke('prepare', False).stderr)
+
 
 if __name__ == '__main__':
     unittest.main()
