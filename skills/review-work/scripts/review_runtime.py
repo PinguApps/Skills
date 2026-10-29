@@ -69,6 +69,11 @@ def main():
                 raise ValueError('Runtime run requires ' + key)
         if not re.fullmatch(r'Review-Run-ID: \S+', run['marker']):
             raise ValueError('marker must be a complete Review-Run-ID: <opaque> line')
+        execution_tools = run.get('executionTools', [])
+        if (not isinstance(execution_tools, list) or
+                any(not isinstance(tool, str) or not tool.strip() or tool == 'pingu_review_source'
+                    for tool in execution_tools) or len(set(execution_tools)) != len(execution_tools)):
+            raise ValueError('executionTools must contain unique execution/browser tool names')
         if not run.get('taskId') and not run.get('briefFile'):
             raise ValueError('New reviewer runs require a durable briefFile before dispatch')
         if Path(run['id']).name != run['id'] or '/' in run['id'] or '\\' in run['id']:
@@ -82,7 +87,7 @@ def main():
                 raise ValueError('Review brief must be a bounded file in the owned external run directory')
             run['reviewContract'] = brief.read_text(encoding='utf-8')
     # New registrations must reload the plugin and publish a fresh ready receipt.
-    digest.update(json.dumps([{k: r.get(k) for k in ('id', 'marker', 'model', 'effort', 'head', 'from', 'base', 'scope', 'title', 'reviewContract')}
+    digest.update(json.dumps([{k: r.get(k) for k in ('id', 'marker', 'model', 'effort', 'head', 'from', 'base', 'scope', 'title', 'reviewContract', 'executionTools')}
                               for r in config['runs']], sort_keys=True).encode())
     config['runtimeDigest'] = digest.hexdigest()
     config_path.write_text(json.dumps(config, indent=2), encoding='utf-8')

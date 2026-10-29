@@ -71,7 +71,7 @@ test('registered review markers fail closed and overlapping requests keep exact 
         limit: {context: 1_000_000}, cost: [{input: 1}, {input: 2, tier: {type: 'context', size: 100_000}}]}],
         update: (provider, id, callback) => {const draft = {limit: {}}; callback(draft); protectedModels.push(draft);}}), list: async () => []},
       session: {hook: async (name, callback) => hooks.set(name, callback)},
-      tool: {transform: async callback => callback({add() {}}), hook: async () => {}},
+      tool: {transform: async callback => callback({add() {}}), hook: async () => {}, list: async () => []},
     });
     assert.equal(protectedModels[0].limit.input, 70_000, 'Later escalation models receive ceilings before any session uses them');
     for (const marker of ['Review-Run-ID: unknown', 'Review-Run-ID: ', 'Review-Run-ID: valid\nReview-Run-ID: extra']) {
@@ -107,28 +107,37 @@ test('registered review markers fail closed and overlapping requests keep exact 
   }
 });
 
-test('owned review gets only the source tool; another session keeps its tools', async () => {
+test('review execution tools are scoped to their assignment; raw source access stays blocked', async () => {
   const state = mkdtempSync(join(tmpdir(), 'review-runtime-test-'));
   try {
     const run = {id: 'run', marker: 'Review-Run-ID: opaque', title: 'R1: Haiku',
-      model: 'openrouter/anthropic/claude-haiku-5.5', effort: 'high'};
+      model: 'openrouter/anthropic/claude-haiku-5.5', effort: 'high', executionTools: ['shell', 'browser']};
     const config = join(state, 'runtime.json');
     writeFileSync(config, JSON.stringify({state, pricingGuard, runs: [run]}));
     const hooks = new Map();
     let sourceTool;
+    const executionOptions = [];
     await runtime(config).setup({app: {version: 'test'},
       model: {transform: async callback => callback({list: () => []}), list: async () => []},
       session: {hook: async (name, callback) => hooks.set(name, callback)},
-      tool: {transform: async callback => callback({add(tool) { sourceTool = tool; }}),
-        hook: async (name, callback) => hooks.set('tool.' + name, callback)},
+      tool: {transform: async callback => callback({add(tool) { sourceTool = tool; },
+        update(name, change) { const tool = {options: {codemode: true}}; change(tool); executionOptions.push({name, ...tool.options}); }}),
+        hook: async (name, callback) => hooks.set('tool.' + name, callback),
+        list: async () => [{id: 'shell'}, {id: 'browser'}, {id: 'pingu_review_source'}]},
     });
     assert.equal(sourceTool.options.codemode, false, 'source reader must be directly visible, not hidden in Code Mode');
+    assert.deepEqual(executionOptions, [{name: 'shell', codemode: false}, {name: 'browser', codemode: false}]);
     await hooks.get('prompt')({sessionID: 'owned', prompt: {text: 'Wrapper\n' + run.marker + '\nReview'}});
     const event = {sessionID: 'owned', model: {providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5', variant: 'high'},
-      tools: {shell: {}, read: {}, pingu_review_source: {}}};
+      tools: {shell: {}, browser: {}, read: {}, edit: {}, delegate: {}, pingu_review_source: {}}};
     await hooks.get('context')(event);
-    assert.deepEqual(Object.keys(event.tools), ['pingu_review_source']);
+    assert.deepEqual(Object.keys(event.tools), ['shell', 'browser', 'pingu_review_source']);
+    await hooks.get('tool.execute.before')({sessionID: 'owned', tool: 'shell'});
+    await hooks.get('tool.execute.before')({sessionID: 'owned', tool: 'browser'});
     await assert.rejects(hooks.get('tool.execute.before')({sessionID: 'owned', tool: 'read'}), /only use/);
+    await assert.rejects(hooks.get('context')({...event, tools: {pingu_review_source: {}, shell: {}}}), /unavailable/);
+    writeFileSync(config, JSON.stringify({state, pricingGuard, runs: [{...run, executionTools: []}]}));
+    await assert.rejects(hooks.get('tool.execute.before')({sessionID: 'owned', tool: 'shell'}), /only use/);
     const unrelated = {...event, sessionID: 'other', tools: {shell: {}}};
     await hooks.get('context')(unrelated);
     assert.deepEqual(Object.keys(unrelated.tools), ['shell']);
@@ -151,7 +160,7 @@ test('tier reserve limits output and source bursts while the contract survives n
         limit: {context: 1_000_000}, cost: [{input: 1}, {input: 2, tier: {type: 'context', size: 100_000}}]}],
         update: (provider, id, callback) => callback({limit: {}})}), list: async () => []},
       session: {hook: async (name, callback) => hooks.set(name, callback)},
-      tool: {transform: async callback => callback({add(tool) {source = tool;}}), hook: async () => {}},
+      tool: {transform: async callback => callback({add(tool) {source = tool;}}), hook: async () => {}, list: async () => []},
     });
     await hooks.get('prompt')({sessionID: 'session', prompt: {text: run.marker}});
     const model = {providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5', variant: 'high'};

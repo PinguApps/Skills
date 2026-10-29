@@ -144,7 +144,8 @@ def billed_usage(records, run, session_id):
         if entry.get('event') == 'blocked-tool':
             raise ValueError('Review tool guard breach; investigate before accepting coverage')
         if entry.get('event') == 'guard':
-            if entry.get('tools') != ['pingu_review_source']:
+            expected = ['pingu_review_source', *run.get('executionTools', [])]
+            if sorted(entry.get('tools', [])) != sorted(expected):
                 raise ValueError('Invalid filtered-tool guard')
             guards.append(entry)
         if entry.get('event') not in ('request', 'response', 'usage', 'end', 'capture-error'):

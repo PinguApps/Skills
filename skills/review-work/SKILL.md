@@ -8,7 +8,8 @@ description: Review completed work before PR publication with two scoped OpenRou
 Review the work already completed in this conversation. This skill owns the
 pre-PR review process; it does not create a branch, push, open a PR, monitor GitHub
 or merge. Delivery skills call it once and resume their own workflow afterwards.
-An explicitly read-only review returns findings without modifying the work.
+An explicitly read-only review returns findings without modifying source; it may
+run non-destructive checks and inspect a running app within the supplied test environment.
 
 ## Establish the change and proof
 
@@ -23,6 +24,12 @@ Read [Proof](references/proof.md) and gather the most direct observed evidence f
 the change. Keep proof separate from future manual-test instructions and source
 review verdicts. Missing meaningful proof requires the specific user input or
 access needed to obtain it, rather than an approval claim.
+
+Prepare the [runtime-check handoff](references/runtime-checks.md): give reviewers
+a short account of the verification destined for the PR, with commands, expected
+results, environment/setup details and explicit safety restrictions. Full reviews
+exercise relevant executable behaviour independently; incremental reviews rerun
+only checks needed for the changed behaviour or an open finding.
 
 ## Run the review
 
