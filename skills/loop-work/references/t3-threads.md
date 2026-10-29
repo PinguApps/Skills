@@ -71,10 +71,12 @@ or BLOCKED with the specific gap. Completion is delivered automatically; no
 separate report message is required. Deduplicate by run/issue/attempt/task ID and
 verify GitHub and worker liveness independently before updating the ledger.
 
-Delegated workers never watch PRs. When a worker yields WAITING for CI, incoming
-reviews or a queued merge, first finish any actionable coordinator work. Then
-link/watch the PR from the coordinator and end the turn. On the host's next PR
-event, inspect readiness and resume the same implementation child using
+Delegated workers never watch PRs. For WAITING results covering CI, incoming
+reviews or a queued merge, the coordinator follows finish-pr's shared
+[watch handoff](../../finish-pr/references/watch-handoff.md), including its own
+fresh evidence and host guarantee check. The worker's earlier pending verdict
+is not current state. On a supported host's next PR event, refresh and resume the
+same implementation child using
 `t3_thread_send` with a stable request ID and full remaining context. Retain the
 new task ID returned for that child continuation. Keep any needed watch across
 wakes; remove it when the PR is done or before final handoff. The worker still
