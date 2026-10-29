@@ -10,12 +10,15 @@ coordinator waiting for a delegated worker. This is the shared handoff contract.
    Inspect the live host watch schema and its delivery guarantee before the final
    refresh. Require one of the supported mechanisms below; tool names alone do not
    prove support.
-2. Immediately before subscription, run `scripts/get-pr-review-state.ps1` with the
+2. Immediately before subscription, run `<skill-directory>/scripts/get-pr-review-state.ps1` with the
    exact PR and any recorded `-ReviewRequestedAt`/`-ReviewRequestedHead` and
-   `-QuotaEvidenceFile`. It fetches every page of reviews, requested reviewers,
+   `-QuotaEvidenceFile`. It fetches every page of reviews,
    issue comments, inline threads/comments, check runs, commit statuses and review
    request history, and verifies the published head/request list again. Retain its
-   complete output. Read/authentication failures or unexpected head movement block
+   complete output. Requested reviewers/teams come from the PR payload and are
+   re-verified between two reads. Checks/statuses read access is required; for fork
+   heads, verify their association with the base repository or report a blocker.
+   Read/authentication failures or unexpected head movement block
    the handoff; they do not mean approval. Check required-check/protection policy
    separately as part of the normal merge audit.
 3. Reclassify **every** pending condition from that fresh evidence, including new
@@ -107,3 +110,5 @@ The helper tests exercise real classification and collection with simulated
 GitHub transport; handoff tests model host interleavings. They are not evidence
 that the installed T3 watcher implements either guarantee. Keep that limitation
 in proof and delivery reports until the actual host integration passes.
+The optional installed-bundle probe exercises the evaluator; registration-boundary
+initialization is separate read-only inspection evidence, not a tested delivery path.

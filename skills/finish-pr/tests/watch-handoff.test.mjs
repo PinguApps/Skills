@@ -27,7 +27,7 @@ function classify(reviews) {
 
 // Model of the upstream subscribe/reconcile contract, not an installed watcher.
 // Barriers replace timing/sleeps; wakes cannot drain until the active turn ends.
-function modelHost() {
+function modelHost({ reconcile = true } = {}) {
   const reviews = [];
   let subscribed = false;
   let activeTurn = true;
@@ -38,7 +38,7 @@ function modelHost() {
     register(duringReconcile = () => {}) {
       subscribed = true;
       duringReconcile();
-      queued.add('reconcile');
+      if (reconcile) queued.add('reconcile');
     },
     endTurn() { activeTurn = false; },
     drain() { if (activeTurn) return []; const wakes = [...queued]; queued.clear(); return wakes; },
@@ -64,7 +64,9 @@ for (const phase of ['between refresh and registration', 'during reconciliation'
       if (phase === 'after registration') host.publish(result);
       assert.deepEqual(host.drain(), [], 'A wake must survive the still-active turn.');
       host.endTurn();
-      assert.ok(host.drain().length > 0, 'No later event may be needed to resume.');
+      const wakes = host.drain();
+      if (phase === 'between refresh and registration') assert.deepEqual(wakes, ['reconcile']);
+      else assert.ok(wakes.includes('change'));
       const resumed = classify(host.read());
       assert.equal(resumed.state, result === quota ? 'quota-pass' : 'completed');
       assert.equal(resumed.clean, result !== quota);
@@ -80,6 +82,15 @@ test('simulated atomic host: an ordinary pending review remains pending after re
   host.publish(clean);
   assert.ok(host.drain().length);
   assert.equal(classify(host.read()).state, 'completed');
+});
+
+test('negative control: later-events-only registration loses a result in the gap', () => {
+  const host = modelHost({ reconcile: false });
+  assert.equal(classify(host.read()).state, 'running');
+  host.publish(quota);
+  host.register(); host.endTurn();
+  assert.deepEqual(host.drain(), [], 'The unsafe contract cannot resume without another event.');
+  assert.equal(classify(host.read()).state, 'quota-pass', 'The result exists but was missed.');
 });
 
 // Optional read-only probe of the installed bundle's *actual* pure evaluator.

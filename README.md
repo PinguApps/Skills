@@ -221,6 +221,9 @@ The skill:
   Copilot threads after a clean current-head re-review with recorded evidence.
 - Treats an explicit Copilot quota response as review completion; it does not
   pretend the code was reviewed or erase earlier findings.
+- Shares a [watch handoff](skills/finish-pr/references/watch-handoff.md) with
+  coordinators: refresh state and require a race-free host subscription, or report
+  the missing capability explicitly.
 - Pushes focused fixes and completes CI/feedback without delegated post-PR review
   rounds. Merges when the protected gate passes, unless a human hold applies.
 

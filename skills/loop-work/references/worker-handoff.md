@@ -61,7 +61,9 @@ Ownership and integration:
 - Link each created/taken-over/pushed PR as the next tool call. As a delegated
   child, never call watch_pull_request. When checks/reviews/queue prevent immediate
   completion, return WAITING with exact PR/head and pending condition. The parent
-  owns the PR watch and resumes you on the event; retain finish-pr state.
+  owns the [watch handoff](../../finish-pr/references/watch-handoff.md) and resumes
+  you from fresh evidence. An unsupported host blocks the coordinator; retain
+  finish-pr state so this child remains resumable.
 - Read the full source issue and references; report requirement drift.
 - Make routine implementation choices. For a material user decision, permission,
   missing prerequisite or impossible verification, stop safely and return BLOCKED
