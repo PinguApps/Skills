@@ -178,19 +178,20 @@ The skill:
 
 ### [loop-work](skills/loop-work/)
 
-Loops through a Linear team's project backlog using isolated T3 worker threads and
+Loops through a Linear team's project backlog using isolated T3 child agents and
 `complete-work`, merging verified PRs and reassessing newly unblocked work.
 
 The skill:
 
-- Requires the Linear team/project, parallel thread limit, and ticket limit (or no max).
+- Requires the Linear team/project, parallel worker limit, and ticket limit (or no max).
 - Controls each worker's worktree, result delivery, repair and shutdown through T3.
-- Supports concurrency beyond native subagent slots; accepts the old limit parameter as an alias.
+- Uses app-owned delegation: coordinator → implementation workers → reviewers.
+- Counts implementation workers independently of their nested reviewers; accepts the old limit parameter as an alias.
 - Selects independently actionable tickets that need no user input.
 - Uses fixed `agent/` branches derived from Linear and limits outstanding reservations.
 - Leaves In Review and Done transitions to verified GitHub–Linear automation.
-- Allocates reviewer capacity and verifies worker-owned merges; the coordinator
-  does not merge PRs itself. Human-review holds propagate to workers.
+- Verifies worker-owned merges and handles their PR-event waits; human-review
+  holds propagate to workers. The coordinator does not merge PRs itself.
 - Reassesses after merges and stops with a concise completion and blocker ledger.
 
 ### [create-pr](skills/create-pr/)
@@ -279,6 +280,8 @@ The skill:
 
 - Captures observed proof and distinguishes it from future manual-test instructions.
 - Applies ignore policies and deterministic/mixed-category routing to two independent reviewers.
+- Gives reviewers a concise verification/safety handoff and tools to run
+  non-destructive checks and inspect apps while keeping source read-only.
 - Owns incremental fixes, round caps, per-model usage/time and reviewer cleanup.
 - Hands off coverage, proof and collapsed-round reporting without creating or merging a PR.
 

@@ -1,101 +1,97 @@
 # Worker handoff
 
-Read when launching or repairing a ticket. Supply actual values and requirement text, not an unresolved template or just a ticket title. A top-level T3 worker does not inherit the coordinator's conversation, so include everything it needs to establish scope and act independently. Select its isolated workspace in the launch call using [T3 thread control](t3-threads.md).
+Read when delegating or repairing a ticket. Supply actual requirements and values,
+not an unresolved template. A child has no coordinator conversation history.
+Use `delegate_task` with worktree isolation as described in
+[T3 subagent control](t3-threads.md).
 
 ```text
-Complete this one ticket using $complete-work at <resolved skill path>.
+Complete this one ticket using $complete-work at <accessible skill path>.
 Follow its required skills through verified implementation, PR creation, CI,
 and finish-pr review convergence. You own the protected merge unless the supplied
 merge policy is manual. The coordinator verifies outcomes and never merges for you.
-Follow create-pr's Linear ticket title-prefix rule, carrying the supplied issue
-identifier and any other qualifying tickets into PR creation or reuse.
-Follow create-pr's user story rules for the PR description: require a brief story
-in everyday language that readers without a technical background can understand,
-adapting any original wording as needed.
+Follow create-pr's Linear ticket title-prefix and plain-language user story rules.
 
 Execution:
-- Run/issue: <run ID; issue ID and URL; exact team/project IDs>.
-- Coordinator: <exact T3 thread ID; project ID; attempt/result identifiers>.
-- Repository/worktree: <repository identity; T3-created worktree to resolve and
-  verify through t3_worktree_status, or exact owned path on resume>.
+- Run/issue: <run ID; issue ID and URL; exact team/project IDs; attempt ID>.
+- Coordinator: <exact T3 parent thread/project IDs>.
+- Repository/worktree: <repository identity; verify the T3-created isolated
+  checkout through t3_worktree_status and actual shell path>.
 - Base: <base repository, remote, default branch, freshly fetched SHA>.
-- Head: <head repository, push remote, exact agent/... branch>.
-- Branch setup: T3 has created the supplied branch from the supplied fresh SHA.
-  Verify this satisfies complete-work's local branch/base setup, then finish its
-  same-name remote publication and upstream checks. Continue the owned branch
-  and PR on repair. If the default branch advanced, refresh only a still-clean
-  initial checkout before implementation; report both base SHAs in STARTED so
-  the coordinator can verify and update its ledger. Preserve unexpected work.
+- Head: <head repository, push remote, desired agent/... branch>.
+- Branch setup: T3 supplied a new checkout from the coordinator's committed HEAD.
+  Verify ownership and cleanliness, then align this new branch/name with the
+  freshly fetched default branch before implementation. Record initial and final
+  base SHAs. Stop and preserve unexpected work. Continue this assigned checkout
+  under complete-work; finish its remote publication and upstream checks.
+  On repair, retain the exact existing worktree, branch and PR.
 - Applicable instructions: <AGENTS.md paths and material repository rules>.
 - Merge policy: <automatic, or explicit manual/human-review hold>.
-- Nested-reviewer capacity: <explicit allocated slots and request/release protocol;
-  mandatory reviews may run serially, but must never be skipped for capacity>.
-  Report every task/thread handle before yielding. Own, record and settle them.
-- Stop constraint: <deadline/timezone or none; how stop events arrive>.
+- Delegation: you are a level-2 implementation child. Invoke review-work to launch
+  its reviewers as your own level-3 delegate_task children, shared isolation in
+  this checkout. Own their handles, accounting, results and cleanup. The worker
+  concurrency limit does not count your nested reviewers; respect host limits.
+- Stop constraint: <deadline/timezone or none>.
 
 Ticket scope:
-<Full description, original user story when available, and every acceptance
-criterion. Include comments or changes that refine the requirements, referenced
-specifications/designs, parent/subtask scope, attachments, and material exclusions. Provide accessible references and
-the requirement-bearing content already recovered from them.>
+<Full description, original user story, every acceptance criterion, comments that
+refine requirements, specifications/designs, attachments, parent/subtask scope,
+and exclusions. Provide accessible references and recovered requirement text.>
 
 Readiness and implementation context:
 <Why dependencies are satisfied on the merged base; relevant code/test/config
-paths; settled decisions; existing verification commands; suggested approach
-and risks; known parallel work and interfaces/files it affects. Distinguish
-suggestions from mandatory ticket requirements.>
+paths; settled decisions; existing verification commands; suggested approach,
+risks and concurrent work. Distinguish suggestions from mandatory requirements.>
 
 Ownership and integration:
-- Work only on this ticket and inside the supplied worktree. Verify the execution
-  workspace and exact base/head before editing. Send STARTED to the coordinator
-  with your thread/run IDs, actual path, branch and initial SHA. Stop on a binding
-  mismatch. Preserve unrelated work.
-- Use the exact supplied branch and issue linkage required by the repository's
-  GitHub–Linear integration. Keep local/remote branch identity and tracking
-  consistent with complete-work. Do not create a second PR on resume.
+- Work only on this ticket inside the T3-created checkout. Verify actual path,
+  branch and base before editing; include this workspace acknowledgement in your
+  result. Preserve unrelated work and stop on a binding mismatch.
+- Use the supplied branch and required GitHub–Linear linkage. Keep local/remote
+  identity and tracking consistent with complete-work. Reuse the PR on repair.
 - The coordinator manages Linear. Make no tracker transitions, comments,
-  follow-up tickets, assignment changes, or dependency edits.
-- Commit coherent chunks regularly; complete-work invokes
-  [$review-work](../../review-work/SKILL.md) once in this exact worktree for proof,
-  filtering, reviewers, accounting and cleanup. No delegated post-PR reviews.
-- Merge only through finish-pr's current-head gate and only when policy permits.
-  Handle Copilot quota and narrow evidence-backed thread settlement under that
-  skill; never resolve human-owned threads to force a merge.
-- Register the PR in your worker thread. Use its PR watcher for finish-pr waits;
-  before yielding, report WAITING with PR/head, pending condition and live handles.
-  Stop worker PR watches and mutating follow-ups before reporting MERGED or READY.
-- Read the full source issue and required references; the brief does not excuse
-  skipping complete-work's scope checks. If source requirements drift, report it.
-- Routine implementation choices are yours. If completion needs a material user
-  decision, permission, unavailable prerequisite, or impossible verification,
-  stop safely and return the precise blocker to the coordinator. Do not interview
-  the user or invent an answer; defer complete-work's grilling path to a later run.
-- Preserve convergence limits and prior attempt history on repair. Honour a
-  coordinator stop and check any deadline before external mutations; do not leave
-  unreported background mutators running. Launch no extra top-level threads and
-  delegate only within the explicit nested-agent allocation.
+  follow-up tickets, assignment changes or dependency edits.
+- Commit coherent chunks. complete-work invokes review-work once for proof,
+  filtering, reviewers, accounting and cleanup. Provide its concise verification
+  and runtime-check handoff so reviewers can run safe checks themselves.
+  No delegated post-PR reviews.
+- Merge only through finish-pr's current-head gate and when policy permits.
+  Handle Copilot quota and evidence-backed thread settlement under that skill;
+  never resolve human-owned threads to force a merge.
+- Link each created/taken-over/pushed PR as the next tool call. As a delegated
+  child, never call watch_pull_request. When checks/reviews/queue prevent immediate
+  completion, return WAITING with exact PR/head and pending condition. The parent
+  owns the PR watch and resumes you on the event; retain finish-pr state.
+- Read the full source issue and references; report requirement drift.
+- Make routine implementation choices. For a material user decision, permission,
+  missing prerequisite or impossible verification, stop safely and return BLOCKED
+  with the precise gap. Defer complete-work's grilling path to a later run.
+- Preserve convergence limits and prior attempts on repair. Check any deadline
+  before external mutations. Honour cancellation, stop your owned test processes
+  and report outstanding background work. Launch only the nested agents required
+  by the supplied workflow; do not create top-level threads.
 
 Reporting:
-- Top-level threads have no automatic completion delivery to the coordinator.
-- Send STARTED, WAITING, MERGED, READY or BLOCKED via t3_thread_send to the supplied
-  coordinator thread ID, mode queue, using a stable clientRequestId per report.
-  Include the run/issue/attempt/result IDs. Reuse that ID on uncertain retries.
-- For reviewer capacity, send WAITING with requested slots and pending model
-  assignments. Wait for the coordinator's explicit grant; release slots after
-  recorded completion/cleanup and request again for fresh review tasks.
+- Delegate completion delivers your result to the parent automatically. Return
+  MERGED, READY, WAITING or BLOCKED with run/issue/attempt IDs; no extra message
+  to the coordinator is necessary.
 - MERGED means GitHub confirms the actual merge, with final head, merge commit
   and method. READY means the audit passed but an explicit manual hold prevents
-  merging. Both require no live nested work, worker watcher or queued mutator.
-  BLOCKED preserves the exact gap; a queued merge is WAITING, not MERGED.
-- Keep the complete result below in your final answer even if notification fails.
+  merging. Both require no live nested work or queued mutator.
+- A queued merge is WAITING, not MERGED. Include any nested-task handles and exact
+  remaining conditions; a final turn with live children is not completed delivery.
 
 Return:
-- Issue ID; PR URL; exact branch and head SHA; worktree path.
+- Issue ID; PR URL; exact branch/head; worktree path and initial/final base SHAs.
 - Acceptance-criteria coverage and verification commands/results.
-- Merge policy; pre-PR receipt and per-round accounting; reviewer cleanup;
-  finish-pr's fresh conflict, checks, reviews, and reply-submission audit;
-  any pending check, reviewer response, or blocker. Do not claim readiness early.
-- Outstanding changes or nested tasks, if any; enough state to resume safely.
+- Merge policy; pre-PR receipt/accounting; reviewer cleanup; finish-pr's fresh
+  conflict/checks/reviews/reply audit; any pending condition or blocker.
+- Outstanding changes/processes/tasks and enough state to resume safely.
+- Last line: PR <full URL>, head <SHA>, checks and reviews <state>.
 ```
 
-For repairs, send the original brief, PR metadata, prior worker results, attempted fixes, review dispositions/replies, remaining findings, consumed convergence budget, and the reason readiness was rejected to the same owned T3 thread with `t3_thread_send` and a new stable request ID. Reconcile existing runs and queued messages first; retain the exact worktree, branch and PR. Use a replacement thread bound to that existing worktree only after proving the previous worker cannot resume mutation.
+For implementation/PR repairs, resume the same child using `t3_thread_send` with
+a new stable request ID after reconciling its existing tasks/queue. Retain the
+returned continuation task ID and the exact worktree/branch/PR, original brief,
+findings/dispositions, proof and consumed convergence budget. Reviewer rechecks
+use fresh review-work delegates, never repair messages to an old reviewer.
