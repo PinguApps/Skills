@@ -129,7 +129,13 @@ settling a thread. These cases are deliberately distinct:
 
 ## 5. Wait and converge
 
-Only this PR-owning parent uses T3's `watch_pull_request`. Handle existing work,
+When running as a delegated implementation child, return `WAITING` with the exact
+PR/head and pending condition; the coordinator watches and resumes this child.
+Delegated children never watch PRs. The watch/cleanup instructions in this skill
+apply to the top-level PR owner or coordinator; fixes and protected merges remain
+with the implementation owner.
+
+The top-level PR owner uses T3's `watch_pull_request`. Handle existing work,
 then watch and end the turn; resume on its event without polling, duplicate
 watchers or repeated status messages. A wake is a reason to re-fetch, not proof of
 readiness. Review children never watch PRs. Before final handoff, call
@@ -178,10 +184,11 @@ Under `manual`, leave the PR ready and unmerged. Under `automatic`, merge with t
 repository's permitted method and an expected-head guard, for example
 `gh pr merge <url> --match-head-commit <sha> <permitted-method-flag>`. Never bypass
 protections. Merge-queue admission or enabling auto-merge is still pending work:
-watch until GitHub actually reports the merge, then verify its target and merge SHA.
+the top-level owner watches until GitHub actually reports the merge; a delegated
+child returns `WAITING`. Then verify the target and merge SHA.
 
 Refresh the [observed proof](../review-work/references/proof.md), review context and manual-test handoff when fixes changed them,
 preserving template/user content and the pre-PR accounting history. Report the PR,
 merged SHA or manual hold, current-head CI/review outcome, fixes and verification,
 Copilot quota/settlement evidence, and blockers. Settle owned idle review children
-after their results are retained. Clean up this parent's watcher on handoff.
+after their results are retained. The top-level owner cleans up its watcher on handoff.

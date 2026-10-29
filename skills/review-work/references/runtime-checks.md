@@ -26,7 +26,9 @@ PR's `## Proof`, rather than making it rediscover how to run the work:
 
 Use exact available execution and browser tool IDs in the run's `executionTools`
 array and name them in the brief. Expose only the tools needed for those checks;
-omit raw source readers, editors, delegation and PR/tracker tools. Verify the
+omit raw source readers, editors, delegation and PR/tracker tools. The parent
+classifies these IDs: registration validates list shape and uniqueness, not tool
+capabilities. Verify the
 runtime exposes the assigned tools before accepting the review. An empty array
 retains source-only access when execution is irrelevant or unsafe; record why and
 any resulting verification gap. Tool availability is not a safety sandbox: the

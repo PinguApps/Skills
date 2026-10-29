@@ -107,6 +107,9 @@ Mark the loop stopping before cancellation or other shutdown actions. Use
 child's running/queued turns and descendants. Do not use `t3_thread_interrupt`
 on a delegated child. Reconcile terminal state and descendant/queue metadata;
 cancellation acceptance alone is not proof that background processes stopped.
+On cancellation delivery, read task state for owned tasks and thread metadata
+for known descendants. Require terminal states, no pending child work and no
+queued turns before reporting shutdown complete.
 Remove this run's coordinator PR watches, withdraw owned queued/auto-merges and
 reconcile racing merges from GitHub. Preserve commits, dirty files and worktrees.
 Report any remaining process, resource or mutation path that cannot be stopped.

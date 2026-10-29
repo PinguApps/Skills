@@ -60,7 +60,10 @@ owned loader, prepare again and reverify the loaded plugin.
 The marker field is the complete single line `Review-Run-ID: <opaque>`, not a bare
 ID. Malformed or unknown marker-bearing prompts fail before inference. The plugin
 recognises only registered exact markers, binds their OpenCode sessions
-durably, and leaves unrelated sessions unchanged. It exposes only
+durably, and applies review guards only to those sessions. Assigned execution
+tools become directly visible throughout this location, so their Code Mode
+grouping may also change in unrelated sessions until the loader is removed.
+It exposes only
 `pingu_review_source` plus that run's assigned `executionTools` to owned review
 requests and rejects other tools. Missing assigned tools block the review.
 Execution/browser tools are for non-destructive runtime checks under the brief's
