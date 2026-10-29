@@ -121,55 +121,90 @@ function Test-CopilotSettlement {
     return (Get-ReviewTime $CopilotState.review) -gt $replyTime
 }
 
-if ($Library) { return }
-if (-not $Repository -or $PrNumber -le 0) { throw 'Supply -Repository owner/name and -PrNumber.' }
-$parts = $Repository.Split('/')
-if ($parts.Count -eq 3) {
-    if ($Hostname -and $Hostname -ne $parts[0]) { throw 'Repository hostname mismatch.' }
-    $Hostname = $parts[0]
-    $Repository = "$($parts[1])/$($parts[2])"
-} elseif ($parts.Count -ne 2) { throw 'Repository must be owner/name or host/owner/name.' }
-$ghExecutable = (Get-Command gh -CommandType Application -ErrorAction Stop).Source
-[string[]]$prefix = @(if ($Hostname) { 'api'; '--hostname'; $Hostname } else { 'api' })
 function Invoke-ReviewGhJson {
     param([string[]]$Arguments)
     $text = & $ghExecutable @Arguments 2>&1
     if ($LASTEXITCODE -ne 0) { throw ($text -join [Environment]::NewLine) }
     return ($text -join [Environment]::NewLine) | ConvertFrom-Json -Depth 100
 }
-$pr = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/pulls/$PrNumber"))
-$pages = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/pulls/$PrNumber/reviews?per_page=100", '--paginate', '--slurp'))
-$reviews = @($pages | ForEach-Object { foreach ($item in $_) { $item } })
-$threadArgs = @{ PrNumber = $PrNumber; Repository = $Repository; All = $true }
-if ($Hostname) { $threadArgs.Hostname = $Hostname }
-$threads = & "$PSScriptRoot/get-unresolved-pr-threads.ps1" @threadArgs | ConvertFrom-Json -Depth 100
-$viewer = Invoke-ReviewGhJson ($prefix + @('user'))
-$timelinePages = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/issues/$PrNumber/timeline?per_page=100", '--paginate', '--slurp'))
-$timeline = @($timelinePages | ForEach-Object { foreach ($item in $_) { $item } })
-$requestedAt = Get-CopilotRequestTime $timeline
-$requestHead = ''
-if ($ReviewRequestedAt) {
-    if (-not $ReviewRequestedHead) { throw 'An accepted request timestamp requires its recorded target head SHA.' }
-    $recordedAt = [DateTimeOffset]::Parse($ReviewRequestedAt, [Globalization.CultureInfo]::InvariantCulture)
-    if ($recordedAt -ge $requestedAt) { $requestedAt = $recordedAt; $requestHead = $ReviewRequestedHead }
+
+function Invoke-ReviewThreads {
+    param([hashtable]$Arguments)
+    return & "$PSScriptRoot/get-unresolved-pr-threads.ps1" @Arguments | ConvertFrom-Json -Depth 100
 }
+
+function Get-PrReviewSnapshot {
+    param([int]$PrNumber, [string]$Repository, [string]$Hostname,
+        [string]$ReviewRequestedAt, [string]$ReviewRequestedHead, [array]$QuotaEvidence = @())
+    if (-not $Repository -or $PrNumber -le 0) { throw 'Supply -Repository owner/name and -PrNumber.' }
+    $parts = $Repository.Split('/')
+    if ($parts.Count -eq 3) {
+        if ($Hostname -and $Hostname -ne $parts[0]) { throw 'Repository hostname mismatch.' }
+        $Hostname = $parts[0]
+        $Repository = "$($parts[1])/$($parts[2])"
+    } elseif ($parts.Count -ne 2) { throw 'Repository must be owner/name or host/owner/name.' }
+    $ghExecutable = (Get-Command gh -CommandType Application -ErrorAction Stop).Source
+    [string[]]$prefix = @(if ($Hostname) { 'api'; '--hostname'; $Hostname } else { 'api' })
+    $readStartedAt = [DateTimeOffset]::UtcNow
+    $pr = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/pulls/$PrNumber"))
+    $pages = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/pulls/$PrNumber/reviews?per_page=100", '--paginate', '--slurp'))
+    $reviews = @($pages | ForEach-Object { foreach ($item in $_) { $item } })
+    $commentPages = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/issues/$PrNumber/comments?per_page=100", '--paginate', '--slurp'))
+    $comments = @($commentPages | ForEach-Object { foreach ($item in $_) { $item } })
+    $checkPages = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/commits/$($pr.head.sha)/check-runs?per_page=100&filter=all", '--paginate', '--slurp'))
+    $checkRuns = @($checkPages | ForEach-Object { foreach ($item in $_.check_runs) { $item } })
+    $statusPages = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/commits/$($pr.head.sha)/statuses?per_page=100", '--paginate', '--slurp'))
+    $statuses = @($statusPages | ForEach-Object { foreach ($item in $_) { $item } })
+    $threadArgs = @{ PrNumber = $PrNumber; Repository = $Repository; All = $true }
+    if ($Hostname) { $threadArgs.Hostname = $Hostname }
+    $threads = Invoke-ReviewThreads $threadArgs
+    $viewer = Invoke-ReviewGhJson ($prefix + @('user'))
+    $timelinePages = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/issues/$PrNumber/timeline?per_page=100", '--paginate', '--slurp'))
+    $timeline = @($timelinePages | ForEach-Object { foreach ($item in $_) { $item } })
+    $requestedAt = Get-CopilotRequestTime $timeline
+    $requestHead = ''
+    if ($ReviewRequestedAt) {
+        if (-not $ReviewRequestedHead) { throw 'An accepted request timestamp requires its recorded target head SHA.' }
+        $recordedAt = [DateTimeOffset]::Parse($ReviewRequestedAt, [Globalization.CultureInfo]::InvariantCulture)
+        if ($recordedAt -ge $requestedAt) { $requestedAt = $recordedAt; $requestHead = $ReviewRequestedHead }
+    }
+    $state = Get-CopilotReviewState -Reviews $reviews -HeadSha $pr.head.sha -RequestedReviewers @($pr.requested_reviewers) -ReviewRequestedAt $requestedAt -QuotaEvidence $QuotaEvidence -ReviewRequestedHead $requestHead
+    $fresh = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/pulls/$PrNumber"))
+    if ($fresh.head.sha -ne $pr.head.sha) { throw 'PR head changed while reading review state.' }
+    $requestIdentity = { param($value)
+        @($value.requested_reviewers | ForEach-Object { "$($_.type):$($_.login)" }) +
+            @($value.requested_teams | ForEach-Object { "team:$($_.id)" }) | Sort-Object
+    }
+    if ((@(& $requestIdentity $fresh) -join ',') -ne (@(& $requestIdentity $pr) -join ',')) {
+        throw 'Requested reviewers changed while reading review state; re-fetch before deciding completion.'
+    }
+    [pscustomobject]@{
+        readStartedAt = $readStartedAt
+        readCompletedAt = [DateTimeOffset]::UtcNow
+        head = $pr.head.sha
+        pullRequest = $pr.html_url
+        state = $fresh.state
+        merged = $fresh.merged
+        viewer = $viewer.login
+        copilotRequestedAt = $requestedAt
+        copilotRequestedHead = $requestHead
+        copilot = $state
+        reviews = $reviews
+        requestedReviewers = @($fresh.requested_reviewers)
+        requestedTeams = @($fresh.requested_teams)
+        issueComments = $comments
+        checkRuns = $checkRuns
+        commitStatuses = $statuses
+        timeline = $timeline
+        threads = $threads.threads
+        settlementCandidates = @($threads.threads | Where-Object {
+            Test-CopilotSettlement $_ $state $viewer.login
+        } | ForEach-Object { $_.id })
+    }
+}
+
+if ($Library) { return }
 $quotaEvidence = if ($QuotaEvidenceFile) { @(Get-Content -LiteralPath $QuotaEvidenceFile -Raw | ConvertFrom-Json -Depth 100) } else { @() }
-$state = Get-CopilotReviewState -Reviews $reviews -HeadSha $pr.head.sha -RequestedReviewers @($pr.requested_reviewers) -ReviewRequestedAt $requestedAt -QuotaEvidence $quotaEvidence -ReviewRequestedHead $requestHead
-$fresh = Invoke-ReviewGhJson ($prefix + @("repos/$Repository/pulls/$PrNumber"))
-if ($fresh.head.sha -ne $pr.head.sha) { throw 'PR head changed while reading review state.' }
-if ((@($fresh.requested_reviewers.login | Sort-Object) -join ',') -ne (@($pr.requested_reviewers.login | Sort-Object) -join ',')) {
-    throw 'Requested reviewers changed while reading review state; re-fetch before deciding completion.'
-}
-[pscustomobject]@{
-    head = $pr.head.sha
-    pullRequest = $pr.html_url
-    viewer = $viewer.login
-    copilotRequestedAt = $requestedAt
-    copilotRequestedHead = $requestHead
-    copilot = $state
-    reviews = $reviews
-    threads = $threads.threads
-    settlementCandidates = @($threads.threads | Where-Object {
-        Test-CopilotSettlement $_ $state $viewer.login
-    } | ForEach-Object { $_.id })
-} | ConvertTo-Json -Depth 100
+Get-PrReviewSnapshot -PrNumber $PrNumber -Repository $Repository -Hostname $Hostname `
+    -ReviewRequestedAt $ReviewRequestedAt -ReviewRequestedHead $ReviewRequestedHead `
+    -QuotaEvidence $quotaEvidence | ConvertTo-Json -Depth 100

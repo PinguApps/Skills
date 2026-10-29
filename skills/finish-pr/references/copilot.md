@@ -17,6 +17,8 @@ authenticated viewer login for reply ownership checks.
   Inspect requested reviewers as well as submitted reviews: REST can contain no
   review yet while Copilot is processing. Preserve an accepted re-request in the
   ledger until its current-head result arrives; absence alone cannot end that wait.
+  Before yielding, use the shared [watch handoff](watch-handoff.md) to refresh and
+  reclassify this state; a previous `running` verdict is not a subscription decision.
 - **completed:** a submitted review supplies actual findings or a clean result.
 - **incomplete:** non-quota failure or insufficient evidence; do not invent approval.
 - **absent:** no current-head review is known; do not require an optional review

@@ -135,11 +135,12 @@ Delegated children never watch PRs. The watch/cleanup instructions in this skill
 apply to the top-level PR owner or coordinator; fixes and protected merges remain
 with the implementation owner.
 
-The top-level PR owner uses T3's `watch_pull_request`. Handle existing work,
-then watch and end the turn; resume on its event without polling, duplicate
-watchers or repeated status messages. A wake is a reason to re-fetch, not proof of
-readiness. Review children never watch PRs. Before final handoff, call
-`unwatch_pull_request`; preserve any still-needed watcher when yielding for events.
+Before any PR-event wait, follow the shared [watch handoff](references/watch-handoff.md).
+It owns the final complete state refresh, reclassification, race-free subscription
+requirement and coordinator/worker ownership. A fresh read alone cannot close the
+subscription race; an unsupported host is a precise blocker, not an indefinite wait.
+Before final handoff, call `unwatch_pull_request`; preserve a supported still-needed
+watcher when yielding for events.
 
 After each fix/push, repeat checks, feedback classification and applicable Copilot
 handling. No delegated AI review sessions, post-PR round counters or extra review
@@ -184,8 +185,9 @@ Under `manual`, leave the PR ready and unmerged. Under `automatic`, merge with t
 repository's permitted method and an expected-head guard, for example
 `gh pr merge <url> --match-head-commit <sha> <permitted-method-flag>`. Never bypass
 protections. Merge-queue admission or enabling auto-merge is still pending work:
-the top-level owner watches until GitHub actually reports the merge; a delegated
-child returns `WAITING`. Then verify the target and merge SHA.
+the top-level owner uses the same [watch handoff](references/watch-handoff.md)
+until GitHub actually reports the merge; a delegated child returns `WAITING`.
+Then verify the target and merge SHA.
 
 Refresh the [observed proof](../review-work/references/proof.md), review context and manual-test handoff when fixes changed them,
 preserving template/user content and the pre-PR accounting history. Report the PR,

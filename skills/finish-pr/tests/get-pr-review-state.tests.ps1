@@ -8,6 +8,12 @@ $quotaText = 'Copilot was unable to review this pull request because the user wh
 $quota = Get-CopilotReviewState @((New-Review $quotaText)) 'head'
 Assert-True ($quota.state -eq 'quota-pass') 'Real Copilot quota exhaustion must satisfy its completion gate.'
 Assert-True (-not $quota.clean) 'Quota is not evidence that a fix received a clean re-review.'
+$oldQuota = Get-CopilotReviewState @((New-Review $quotaText 'COMMENTED' 'old-head')) 'head' -AwaitingRereview
+Assert-True ($oldQuota.state -eq 'running') 'An old-head submitted quota review cannot end the current-head wait.'
+$untrustedReview = New-Review $quotaText
+$untrustedReview.user.type = 'User'
+$untrusted = Get-CopilotReviewState @($untrustedReview) 'head' -AwaitingRereview
+Assert-True ($untrusted.state -eq 'running') 'Untrusted submitted quota text cannot end the current-head wait.'
 Assert-True (-not (Test-CopilotQuota 'human' $quotaText)) 'A human mentioning quota must not bypass review.'
 Assert-True (-not (Test-CopilotQuota 'copilot' 'Quota remains available.')) 'Quota words alone are not an exemption.'
 $stale = Get-CopilotReviewState @((New-Review 'Approved' 'APPROVED' 'old-head')) 'head'
