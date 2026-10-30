@@ -13,6 +13,14 @@ GitHub replies. Preserve the historical `AI review` accounting section.
 Requires Git 2.38+, authenticated GitHub access, and PowerShell 7 for the bundled
 helpers. Use absolute executable/helper paths and preserve PATH/persistent settings.
 
+For every PR-body update, read and follow create-pr's shared
+[Write and verify PR bodies](../create-pr/references/pr-body.md), including its
+Python helper (Python 3.10+). It owns LF normalization, UTF-8 writes with newline
+translation disabled, safe submission and exact saved-body comparison. Preserve
+existing Markdown spacing and consecutive checkboxes; repair and reverify any
+mismatch before reporting success. Use it for policy corrections, proof and
+handoff refreshes as well as other description edits.
+
 ## 1. Recover ownership, scope and merge policy
 
 Read applicable repository instructions and recover intent, decisions, acceptance

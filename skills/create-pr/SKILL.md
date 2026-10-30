@@ -1,6 +1,6 @@
 ---
 name: create-pr
-description: Create a GitHub PR after the shared pre-publication review gate, preserving templates, user story, verification and round-by-round AI review costs. Use when opening a PR or preparing its title and description.
+description: Create or edit a GitHub PR description with safe newline handling and saved-body verification, preserving templates, user story, proof and AI review costs. New PRs require the shared pre-publication review gate.
 ---
 
 # Create PR
@@ -57,6 +57,8 @@ Include literal `## Proof` using [review-work's proof record](../review-work/ref
 
 ## 3. Create and verify the PR
 
-Review the title and completed body against the final diff, template, checkbox selections, and caller requirements, including the Linear ticket prefix, user story, review receipt, usage summary and merge policy. Recheck the new PR's receipt against the published head immediately before submission. Write the body to a UTF-8 temporary file outside the worktree and pass it to `gh pr create` with `--title`, `--body-file`, an explicit `--repo`, `--base`, and `--head` (including the owner for a fork). This preserves literal backticks and newlines. Do not rely on automatic template insertion when passing a body. For an existing PR, update its title and description only as needed for the authorized task, using its already-discovered URL and the relevant flags: `gh pr edit <pr-url> --title <title> --body-file <body-file>`.
+Review the title and completed body against the final diff, template, checkbox selections, and caller requirements, including the Linear ticket prefix, user story, review receipt, usage summary and merge policy. Recheck the new PR's receipt against the published head immediately before submission. For every create or body edit, read and follow [Write and verify PR bodies](references/pr-body.md), using its shared helper to normalize line endings, write UTF-8 with translation disabled, and compare the saved GitHub body exactly. Keep consecutive checkboxes consecutive unless the template or user requests blank lines.
 
-Register the PR with the host's pull-request linking tool when available, including an existing PR reused by this run. Fetch its saved title, body, base, and head to verify the submitted content and target, including every qualifying ticket identifier at the start of the title. Remove the temporary body file after verification. Return the PR URL and any verification limitation to the caller; continue into review only when the caller's workflow requires it.
+Pass the normalized temporary file to `gh pr create` with `--title`, `--body-file`, an explicit `--repo`, `--base`, and `--head` (including the owner for a fork). Do not rely on automatic template insertion when passing a body. For an existing PR, update its title and description only as needed for the authorized task, using its already-discovered URL and the relevant flags: `gh pr edit <pr-url> --title <title> --body-file <body-file>`. A structured API body argument is also supported by the shared procedure; never interpolate multiline Markdown into shell command text.
+
+Register the PR with the host's pull-request linking tool when available, including an existing PR reused by this run. After every create or edit, fetch its saved title, body, base, and head to verify the submitted content and target, including every qualifying ticket identifier at the start of the title. Run the shared saved-body comparison; diagnose and repair any mismatch, then verify again before reporting success. Remove the temporary body file only after verification passes. Return the PR URL and any verification limitation to the caller; continue into review only when the caller's workflow requires it.
