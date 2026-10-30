@@ -38,7 +38,15 @@ Every new ticket, including Human and prefactoring work, and every authorized de
 
 Start with who needs what and why, in one or two short sentences understandable without a technical background. Use `As a <person>, I want <outcome> so that <benefit>` when natural; depart from it when clearer. Use familiar words and explain essential specialist terms. Put implementation details below the story. Avoid brittle paths and snippets. Leave an existing description untouched when its edit is not authorized; surface a missing or unclear story for approval instead of silently rewriting it.
 
-Show the title, existing/new status, opening story, delivered outcome, criteria, executor (`Agent` or `Human`), labels, provenance, native relations, estimate and brief sizing rationale. Identify changed estimates and provisional scale assumptions. For an update, distinguish each intended mutation from fields to preserve.
+Show the title, existing/new status, opening story, delivered outcome, criteria, executor (`Agent` or `Human`), labels, provenance, native relations, cycle choice, estimate and brief sizing rationale. Identify changed estimates and provisional scale assumptions. For an update, distinguish each intended mutation from fields to preserve.
+
+## Cycle choice
+
+Before creating any ticket, establish an explicit choice of **No cycle**, **Upcoming cycle** or **Current cycle**. Reuse a choice already authorized by the user or a calling workflow's approved proposal; otherwise ask which bucket to use before publication. No cycle is a deliberate choice, never a silent default. One choice may cover a whole batch when its scope is explicit; mixed batches need a choice for every ticket. Include the choice in the proposal so it is visible before writing.
+
+For Current or Upcoming, resolve the team's actual native cycle through the Linear MCP, using its dates and the team's timezone: Upcoming means the next cycle after Current. Retain the exact cycle ID, name/number and dates with the choice. If the requested cycle is missing or ambiguous, resolve that gap before creating the affected tickets; creating cycles or changing cadence requires separate authorization. For No cycle, leave the native cycle unset. Backlog status and milestone placement do not establish a cycle choice.
+
+Refresh the target cycle immediately before creation. If rollover or concurrent changes alter the approved cycle ID, name, dates or bucket, present the revised choice and obtain approval before writing. Apply the authorized native cycle assignment and verify the saved cycle ID, or verify that no cycle is assigned, before reporting success. Include each ticket's verified bucket and, when assigned, cycle name/number and dates in the result. For existing-ticket updates, preserve cycle membership unless its change is authorized; the mandatory three-bucket decision applies to creation.
 
 ## Metadata and relations
 
