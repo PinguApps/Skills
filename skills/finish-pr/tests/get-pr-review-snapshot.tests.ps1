@@ -7,10 +7,12 @@ $script:prReads = 0
 $script:changedHead = $false
 $script:changedRequest = $false
 $script:failComments = $false
+$script:copilotThread = $false
 $script:calls = @()
 function Invoke-ReviewGhJson {
     param([string[]]$Arguments)
     $script:calls += ,$Arguments
+    if ($Arguments[-1] -eq 'user') { return @{login='owner'} }
     $endpoint = $Arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1
     switch -Wildcard ($endpoint) {
         '*/pulls/37' {
@@ -28,12 +30,19 @@ function Invoke-ReviewGhJson {
         '*/check-runs?*' { return ,@(@{check_runs=@(@{id='check-1';head_sha='head';output=@{summary=$quotaText}})}, @{check_runs=@(@{id='check-2';status='in_progress'})}) }
         '*/statuses?*' { return ,@(@(@{id='status-1';state='pending'}), @(@{id='status-2';state='success'})) }
         '*/timeline?*' { return ,@(@(@{event='review_requested';requested_reviewer=@{login='Copilot';type='Bot'};created_at='2026-10-29T14:00:00Z'}), @()) }
-        default { if ($Arguments[-1] -eq 'user') { return @{login='owner'} }; throw "Unexpected call: $Arguments" }
+        default { throw "Unexpected call: $Arguments" }
     }
 }
 function Invoke-ReviewThreads {
     param([hashtable]$Arguments)
     Assert-True ($Arguments.All -and $Arguments.PrNumber -eq 37) 'The snapshot must request all inline threads, including resolved/outdated ones.'
+    if ($script:copilotThread) {
+        return @{threads=@(@{id='addressed-copilot';isResolved=$false;comments=@{nodes=@(
+            @{author=@{login='Copilot';__typename='Bot'};createdAt='2026-10-29T14:01:00Z'},
+            @{author=@{login='owner';__typename='User'};createdAt='2026-10-29T14:02:00Z';body='Cannot fix: external dependency; see linked evidence.';
+                pullRequestReview=@{state='COMMENTED';submittedAt='2026-10-29T14:02:00Z'}}
+        )}})}
+    }
     return @{threads=@(@{id='protected-thread';isResolved=$false;comments=@{nodes=@(@{body='Human concern';author=@{login='human';__typename='User'}})}})}
 }
 
@@ -46,6 +55,16 @@ Assert-True ($snapshot.readCompletedAt -ge $snapshot.readStartedAt -and $script:
 foreach ($call in $script:calls | Where-Object { $_ -match 'per_page=' }) {
     Assert-True ($call -contains '--paginate' -and $call -contains '--slurp') 'Collection must request all pages.'
 }
+
+$script:copilotThread = $true
+$script:reviews[0].commit_id = 'before-fix'
+$script:reviews[0].body = 'Copilot reviewed the changes and generated one comment.'
+$script:prReads = 0
+$addressed = Get-PrReviewSnapshot -PrNumber 37 -Repository example/repo
+Assert-True ($addressed.copilot.state -eq 'completed' -and -not $addressed.copilot.clean) 'The one-time review remains complete after the head changes without approving the fixes.'
+Assert-True ($addressed.settlementCandidates.Count -eq 1 -and $addressed.settlementCandidates[0] -eq 'addressed-copilot') 'A submitted explanation is a candidate immediately without any clean re-review.'
+Assert-True (-not $addressed.threads[0].isResolved) 'Candidate detection must remain read-only; the parent owns evidence checks and resolution.'
+$script:copilotThread = $false
 
 # Issue comments and check output remain raw evidence until the owner verifies
 # identity and association. A check name or quota wording cannot create trust.

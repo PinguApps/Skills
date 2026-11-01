@@ -218,7 +218,8 @@ The skill:
 - Actions unresolved review comments without duplicating an agent response that is
   awaiting reviewer follow-up.
 - Preserves human-owned threads, verifies submitted replies, and can settle
-  Copilot threads after a clean current-head re-review with recorded evidence.
+  Copilot threads immediately after a submitted fix or evidence-backed explanation.
+  Copilot review is one-time; no reply or re-review is expected.
 - Treats an explicit Copilot quota response as review completion; it does not
   pretend the code was reviewed or erase earlier findings.
 - Shares a [watch handoff](skills/finish-pr/references/watch-handoff.md) with

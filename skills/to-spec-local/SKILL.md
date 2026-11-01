@@ -5,6 +5,12 @@ description: Wrap the installed to-spec skill to synthesize an in-repository Mar
 
 # To Spec Local
 
+For any authorized PR feedback response, follow the shared
+[Copilot policy](../finish-pr/references/copilot.md): submit the fix or an
+evidence-backed explanation of why it cannot or should not be fixed, then resolve
+the Copilot thread ourselves immediately. Treat its review as one-time; expect
+no reply or re-review of our changes. This adds no GitHub write authority.
+
 Apply the separately installed `to-spec` skill to the settled conversation, with repository Markdown as the deliverable. This is a wrapper: the upstream skill remains the source of its synthesis process and spec template.
 
 ## Load the external skill

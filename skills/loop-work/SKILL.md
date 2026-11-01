@@ -5,6 +5,12 @@ description: Coordinate a Linear backlog through isolated T3 workers using compl
 
 # Loop Work
 
+For any authorized PR feedback response, follow the shared
+[Copilot policy](../finish-pr/references/copilot.md): submit the fix or an
+evidence-backed explanation of why it cannot or should not be fixed, then resolve
+the Copilot thread ourselves immediately. Treat its review as one-time; expect
+no reply or re-review of our changes. This adds no GitHub write authority.
+
 Coordinate ticket delivery through T3 app-owned subagents: level 1 is this coordinator, level 2 is an isolated implementation worker, and level 3 is that worker's review-work reviewers. Use `delegate_task` for workers and reviewers so the hierarchy is visible inside the coordinator's thread. Select independently actionable work, verify worker-owned merges, then reassess the backlog against the updated repository. Workers own merging through `finish-pr`; the coordinator never submits merges.
 
 Run this workflow only when the user has requested autonomous ticket delivery through verified PR merges using coordinator-controlled T3 subagents. An explicit invocation authorizes worker delegation, follow-up and cancellation, a run-scoped deadline wake-up when requested, scoped Linear In Progress/estimate writes, and worker commits, reviews, PRs and protected merges through `complete-work`. Loading this skill does not supply authorization; a request to inspect or plan a backlog is insufficient. Honour narrower instructions and repository restrictions. Propagate any human-review or no-merge hold to every worker; held PRs remain open. Deployment, releases, bypassing protections and unrelated tracker mutations require separate authorization.

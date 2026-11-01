@@ -5,6 +5,12 @@ description: Review completed work before PR publication with two scoped OpenRou
 
 # Review Work
 
+For any authorized PR feedback response, follow the shared
+[Copilot policy](../finish-pr/references/copilot.md): submit the fix or an
+evidence-backed explanation of why it cannot or should not be fixed, then resolve
+the Copilot thread ourselves immediately. Treat its review as one-time; expect
+no reply or re-review of our changes. This adds no GitHub write authority.
+
 Review the work already completed in this conversation. This skill owns the
 pre-PR review process; it does not create a branch, push, open a PR, monitor GitHub
 or merge. Delivery skills call it once and resume their own workflow afterwards.

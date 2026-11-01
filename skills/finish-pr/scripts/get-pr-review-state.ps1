@@ -61,37 +61,34 @@ function Get-CopilotRequestTime {
 }
 
 function Get-CopilotReviewState {
-    param([array]$Reviews, [string]$HeadSha, [array]$RequestedReviewers = @(), [switch]$AwaitingRereview,
+    param([array]$Reviews, [string]$HeadSha, [array]$RequestedReviewers = @(),
         [DateTimeOffset]$ReviewRequestedAt = [DateTimeOffset]::MinValue, [array]$QuotaEvidence = @(),
         [string]$ReviewRequestedHead)
     $quotaCurrent = @($QuotaEvidence | Where-Object {
         $type = if ($_.user.type) { $_.user.type } else { $_.author.__typename }
         (Get-ReviewSha $_) -eq $HeadSha -and (Test-CopilotQuota (Get-ReviewLogin $_) $_.body $type)
     })
-    $current = @((@($Reviews) + $quotaCurrent) | Where-Object {
+    $trusted = @((@($Reviews) + $quotaCurrent) | Where-Object {
         $type = if ($_.user.type) { $_.user.type } else { $_.author.__typename }
-        (Test-CopilotLogin (Get-ReviewLogin $_) $type) -and (Get-ReviewSha $_) -eq $HeadSha
+        Test-CopilotLogin (Get-ReviewLogin $_) $type
     } | Sort-Object { Get-ReviewTime $_ } -Descending)
     $requested = @($RequestedReviewers | Where-Object { Test-CopilotLogin $_.login $_.type }).Count -gt 0
-    if (-not $current.Count) {
-        $fulfilled = @($Reviews | Where-Object {
-            $type = if ($_.user.type) { $_.user.type } else { $_.author.__typename }
-            (Test-CopilotLogin (Get-ReviewLogin $_) $type) -and $_.state -ne 'PENDING' -and
-                (-not $ReviewRequestedHead -or (Get-ReviewSha $_) -eq $ReviewRequestedHead) -and
-                (Get-ReviewTime $_) -ge $ReviewRequestedAt
-        }).Count -gt 0
-        $unfinished = $ReviewRequestedAt -gt [DateTimeOffset]::MinValue -and -not $fulfilled
-        $state = if ($requested -or $AwaitingRereview -or $unfinished) { 'running' } else { 'absent' }
+    if (-not $trusted.Count) {
+        $state = if ($requested -or $ReviewRequestedAt -gt [DateTimeOffset]::MinValue) { 'running' } else { 'absent' }
         return [pscustomobject]@{ state = $state; clean = $false; review = $null }
     }
-    if (@($current | Where-Object state -eq 'PENDING').Count) {
+    if (@($trusted | Where-Object state -eq 'PENDING').Count) {
         return [pscustomobject]@{ state = 'running'; clean = $false; review = $null }
     }
-    $latest = $current[0]
-    if ($ReviewRequestedAt -gt (Get-ReviewTime $latest)) {
+    $latest = $trusted[0]
+    $fulfilled = @($trusted | Where-Object {
+        (-not $ReviewRequestedHead -or (Get-ReviewSha $_) -eq $ReviewRequestedHead) -and
+            (Get-ReviewTime $_) -ge $ReviewRequestedAt
+    }).Count -gt 0
+    if ($ReviewRequestedAt -gt [DateTimeOffset]::MinValue -and -not $fulfilled) {
         return [pscustomobject]@{ state = 'running'; clean = $false; review = $latest }
     }
-    if (($requested -or $AwaitingRereview) -and $ReviewRequestedAt -eq [DateTimeOffset]::MinValue) {
+    if ($requested -and $ReviewRequestedAt -eq [DateTimeOffset]::MinValue) {
         return [pscustomobject]@{ state = 'incomplete'; clean = $false; review = $latest; reason = 'Request/result ordering unavailable' }
     }
     $latestType = if ($latest.user.type) { $latest.user.type } else { $latest.author.__typename }
@@ -101,24 +98,21 @@ function Get-CopilotReviewState {
     if ($latest.body -match '(?is)(unable to review|could not review|review failed)') { $state = 'incomplete' }
     elseif ($latest.state -eq 'CHANGES_REQUESTED') { $state = 'changes-requested' }
     else { $state = 'completed' }
-    $clean = $state -eq 'completed' -and ($latest.state -eq 'APPROVED' -or
+    $clean = (Get-ReviewSha $latest) -eq $HeadSha -and $state -eq 'completed' -and ($latest.state -eq 'APPROVED' -or
         ($latest.state -eq 'COMMENTED' -and $latest.body -match '(?is)(generated no (?:new )?comments|did not generate any comments|(?:found no|no (?:new |additional )?)(?:issues|findings)|no new comments)'))
     return [pscustomobject]@{ state = $state; clean = $clean; review = $latest }
 }
 
 function Test-CopilotSettlement {
-    param($Thread, $CopilotState, [string]$AgentLogin)
+    param($Thread, [string]$AgentLogin)
     $comments = @($Thread.comments.nodes | Sort-Object createdAt)
     if ($Thread.isResolved -or -not $comments.Count -or
         -not (Test-CopilotLogin $comments[0].author.login $comments[0].author.__typename)) { return $false }
     $latest = $comments[-1]
     if ((Normalize-Login $latest.author.login) -ne (Normalize-Login $AgentLogin)) { return $false }
     if ($latest.pullRequestReview.state -eq 'PENDING' -or -not $latest.pullRequestReview.submittedAt) { return $false }
-    if (-not $CopilotState.clean -or -not $CopilotState.review) { return $false }
-    # The clean current-head re-review must follow the agent's submitted response.
-    $submitted = Get-ReviewTime $latest.pullRequestReview
-    $replyTime = @($submitted, (Get-ReviewTime $latest)) | Sort-Object -Descending | Select-Object -First 1
-    return (Get-ReviewTime $CopilotState.review) -gt $replyTime
+    # Candidates still require the parent's fix/explanation and reply-ownership checks.
+    return $true
 }
 
 function Invoke-ReviewGhJson {
@@ -198,7 +192,7 @@ function Get-PrReviewSnapshot {
         timeline = $timeline
         threads = $threads.threads
         settlementCandidates = @($threads.threads | Where-Object {
-            Test-CopilotSettlement $_ $state $viewer.login
+            Test-CopilotSettlement $_ $viewer.login
         } | ForEach-Object { $_.id })
     }
 }
