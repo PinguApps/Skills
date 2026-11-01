@@ -49,8 +49,12 @@ Ownership and integration:
   result. Preserve unrelated work and stop on a binding mismatch.
 - Use the supplied branch and required GitHub–Linear linkage. Keep local/remote
   identity and tracking consistent with complete-work. Reuse the PR on repair.
-- The coordinator manages Linear. Make no tracker transitions, comments,
-  follow-up tickets, assignment changes or dependency edits.
+- The coordinator owns Linear claims and estimates. Your only tracker write is
+  review-work's mandatory In Progress → Pre-PR Review transition for this ticket
+  when pre-PR review starts. Use linear-ticket with the supplied team/project,
+  preserve estimates and other fields, and verify the saved state before review.
+  Keep it in Pre-PR Review through fixes/rechecks. In Review on PR creation and
+  Done on merge remain GitHub–Linear automation. Make no other tracker writes.
 - Commit coherent chunks. complete-work invokes review-work once for proof,
   filtering, reviewers, accounting and cleanup. Provide its concise verification
   and runtime-check handoff so reviewers can run safe checks themselves.
@@ -87,6 +91,7 @@ Reporting:
 
 Return:
 - Issue ID; PR URL; exact branch/head; worktree path and initial/final base SHAs.
+- Verified Pre-PR Review transition or specific failure and saved Linear state.
 - Acceptance-criteria coverage and verification commands/results.
 - Merge policy; pre-PR receipt/accounting; reviewer cleanup; finish-pr's fresh
   conflict/checks/reviews/reply audit; any pending condition or blocker.

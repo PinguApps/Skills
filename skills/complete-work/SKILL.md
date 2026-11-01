@@ -39,7 +39,7 @@ Advance to step 3 only when the work fully satisfies that scope, relevant verifi
 
 ## 3. Complete pre-PR review
 
-Invoke [$review-work](../review-work/SKILL.md) once with the completed task, actual worktree, committed range, requirements and verification. It is the source of truth for observed proof, pre-PR reviewers, routing, incremental fixes, accounting and child cleanup. Return to this workflow only with its complete coverage receipt, proof record and rendered report; do not duplicate its review loop here.
+Invoke [$review-work](../review-work/SKILL.md) once with the completed task, actual worktree, committed range, requirements, verification and every associated implementation ticket's identifier and verified Linear destination. Its mandatory opening step manually moves In Progress tickets to Pre-PR Review before review work starts. It is the source of truth for that transition, observed proof, pre-PR reviewers, routing, incremental fixes, accounting and child cleanup. Return to this workflow only with its complete coverage receipt, proof record and rendered report; do not duplicate its review loop here.
 
 Do not publish a PR until that handoff satisfies the task. Preserve proof, round-by-round accounting, final reviewed scope, evidence-backed dispositions and merge policy for the next steps.
 
@@ -47,7 +47,7 @@ Do not publish a PR until that handoff satisfies the task. Preserve proof, round
 
 Push the completed commits without force using the explicit destination `git push <head-remote> HEAD:refs/heads/<branch-name>`. Before writing the PR body, read and follow `test-changes` to produce the manual verification handoff for the completed work. Then load and follow `$create-pr` ([SKILL.md](../create-pr/SKILL.md)) to create or reuse the PR against the intended base, using its Linear ticket title-prefix, template selection, categorisation, brief plain-language user story, and submission verification rules. Ensure the story is understandable to readers without a technical background, including when adapting an original story. Supply the task intent, original user story when available, identifiers of Linear tickets that informed the task and which the PR fully completes, final diff, verification results, base/head repositories and branches, and full handoff. Always include that handoff in a literal `## Test changes` section: use that section when the template already contains it, otherwise append it after the template even if another testing section exists.
 
-An invocation requesting this workflow authorizes its scoped commits, pre-PR review calls, push, PR creation, feedback replies and normal protected merge, unless the user requested a manual/human-review handoff or a narrower restriction applies. Carry authorized steps through without redundant confirmation.
+An invocation requesting this workflow authorizes its scoped commits, pre-PR review calls and associated In Progress → Pre-PR Review status transitions, push, PR creation, feedback replies and normal protected merge, unless the user requested a manual/human-review handoff or a narrower restriction applies. Carry authorized steps through without redundant confirmation.
 
 ## 5. Complete the PR with finish-pr
 
