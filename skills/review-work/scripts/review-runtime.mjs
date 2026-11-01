@@ -280,7 +280,7 @@ export default function runtime(configPath) {
         if (body.model !== run.model.slice(run.model.indexOf('/') + 1)) throw new Error('Review wire model differs from its assignment');
         if (go) {
           event.request.headers.set('x-opencode-session', event.sessionID);
-          event.request.headers.set('User-Agent', 'pingu-pre-pr-review/' + ctx.app.version);
+          event.request.headers.set('User-Agent', 'pingu-pre-pr-review/' + (ctx.app.version ?? 'unknown'));
         }
         const outputLimit = body.max_tokens ?? body.max_completion_tokens;
         if (ceilings[run.model] && !(outputLimit > 0 && outputLimit <= budget.maxOutputTokens))
