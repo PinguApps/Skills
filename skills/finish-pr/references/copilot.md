@@ -43,6 +43,9 @@ satisfy a known request for a different SHA. Preserve an already accepted reques
 timestamp and target via `-ReviewRequestedAt` and `-ReviewRequestedHead` while
 it has not appeared in the timeline. Unknown request/result ordering remains
 incomplete. These receipts track existing reviews, not permission to request more.
+When Copilot remains in requested reviewers and the request has no recorded target
+SHA, an old-head result alone cannot establish fulfilment. Keep that request
+running until a current-head result or recorded-target evidence satisfies it.
 
 Quota can also arrive in a trusted issue comment or check output. Record its
 link, identity, body and verified current-head association: an issue comment has

@@ -81,8 +81,9 @@ function Get-CopilotReviewState {
         return [pscustomobject]@{ state = 'running'; clean = $false; review = $null }
     }
     $latest = $trusted[0]
+    $requiredHead = if ($ReviewRequestedHead) { $ReviewRequestedHead } elseif ($requested) { $HeadSha } else { '' }
     $fulfilled = @($trusted | Where-Object {
-        (-not $ReviewRequestedHead -or (Get-ReviewSha $_) -eq $ReviewRequestedHead) -and
+        (-not $requiredHead -or (Get-ReviewSha $_) -eq $requiredHead) -and
             (Get-ReviewTime $_) -ge $ReviewRequestedAt
     }).Count -gt 0
     if ($ReviewRequestedAt -gt [DateTimeOffset]::MinValue -and -not $fulfilled) {
