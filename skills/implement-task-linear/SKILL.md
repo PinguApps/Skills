@@ -33,7 +33,7 @@ Explicitly supplied targets may have different teams or projects; keep their bou
 - treat a cross-scope relation as unavailable context and report only its existence;
 - pass both recorded IDs to `linear-ticket` for authorized writes.
 
-Resolve each target team's relevant workflow states, especially In Progress, In Review, Backlog, and any blocked state, by ID. Report ambiguity instead of guessing.
+Resolve each target team's relevant workflow states, especially In Progress, Pre-PR Review, In Review, Backlog, and any blocked state, by ID. Report ambiguity instead of guessing.
 
 Use `linear-ticket`'s estimate discovery during this read-only phase. Carry the assessed estimates and rationale into every authorized target or related-issue update, including status changes.
 
@@ -95,7 +95,7 @@ When implementation of the combined work starts, move every target to its team's
 
 Within `complete-work`, implement in verified vertical slices, working red then green at the agreed public seams for testable behaviour. Include required documentation, schemas, migrations, generated artifacts, and configuration. Before its PR-publication gate, audit the complete diff against repository standards, applicable ADRs, every criterion of every supplied target, and originating-spec constraints; fix findings and rerun affected checks. Required target work stays in this single change.
 
-Commit meaningful completed chunks rather than deferring a multi-step task into one final commit. Carry every target's acceptance coverage and durable decisions into [$review-work](../review-work/SKILL.md), invoked once by complete-work. It owns pre-PR proof, reviewers, naming, accounting and cleanup. Keep targets In Progress during local review; the following In Review reconciliation begins only after PR creation. Do not run a second review workflow inside this wrapper.
+Commit meaningful completed chunks rather than deferring a multi-step task into one final commit. Carry every target's identifier, verified Linear destination, acceptance coverage and durable decisions into [$review-work](../review-work/SKILL.md), invoked once by complete-work. It owns the mandatory In Progress → Pre-PR Review transition at review start, pre-PR proof, reviewers, naming, accounting and cleanup. Keep targets in Pre-PR Review through local review fixes and rechecks; the following In Review reconciliation begins only after PR creation. Do not run a second review workflow inside this wrapper.
 
 ### Link every target and update review states at PR creation
 
@@ -107,7 +107,7 @@ Fixes ENG-123, ENG-124, ENG-125, ENG-126, and ENG-127
 
 Use the actual identifiers from the ledger, including a single identifier for a single target. The existing GitHub–Linear integration uses these closing references to link the PR and close the tickets automatically when it merges; leave that integration configuration unchanged and leave tickets open until merge.
 
-Immediately after the complete PR is created or reused, read back its saved title and description. Verify the title follows `create-pr`'s ticket-prefix rule and the closing references include every supplied target. Correct any omission, then run step 5's PR comment and In Review transitions for every target before continuing to `finish-pr`. Review or CI may still be pending at this point; their completion is not a prerequisite for these transitions.
+Immediately after the complete PR is created or reused, read back its saved title and description. Verify the title follows `create-pr`'s ticket-prefix rule and the closing references include every supplied target. Correct any omission, then run step 5's PR comment and automated In Review verification for every target before continuing to `finish-pr`. Review or CI may still be pending at this point; their completion is not a prerequisite for the automated transition.
 
 ### Collaborate when user input is needed
 
@@ -130,15 +130,15 @@ Run this reconciliation at PR creation as directed above, and again after `compl
 When every required outcome across all supplied targets is implemented and verified and the shared PR exists, for each target:
 
 1. Add or update a concise target comment linking the shared PR and mapping that target's acceptance criteria to implementation and verification evidence, including current CI/review status and any blocker reported by `finish-pr`.
-2. Through `linear-ticket`, move the target to its team's resolved In Review state only when its current state is earlier, then record the verified result in the ledger.
+2. Verify the configured GitHub–Linear integration moved the target to its team's resolved In Review state, preserving terminal or further-along states. Allow bounded integration latency, then record the saved state or automation discrepancy in the ledger. Report a stale state as an integration blocker rather than replacing automation with a manual In Review write.
 
-Preserve completed, cancelled, archived, In Review, and other terminal or further-along states. When implementation or required verification is blocked for any target, keep the combined PR unpublished, leave started targets In Progress or use the resolved blocked state where applicable, and record the unmet criterion, evidence, and dependency. Distinguish implementation readiness from incomplete PR review or CI; report full workflow completion only when `finish-pr`'s definition of done is met. Leave completion transitions after merge to the configured GitHub–Linear automation.
+Preserve completed, cancelled, archived, In Review, and other terminal or further-along states. When implementation or required verification is blocked for any target, keep the combined PR unpublished, preserve In Progress or Pre-PR Review according to the phase reached, or use the resolved blocked state where applicable, and record the unmet criterion, evidence, and dependency. Distinguish implementation readiness from incomplete PR review or CI; report full workflow completion only when `finish-pr`'s definition of done is met. Leave completion transitions after merge to the configured GitHub–Linear automation.
 
 ## Related Linear work
 
 The user authorizes minimal related-issue mutations inside the relevant target's recorded team/project boundary when implementation evidence justifies them.
 
-Use `linear-ticket` for justified follow-up creation and evidence-backed related-issue updates, passing the originating target and its boundary. Its overlap, criteria-coverage, provenance, milestone/numbering, estimate and verification rules apply. This workflow authorizes minimal related edits and follow-ups outside all supplied targets; milestone creation and existing-name/title changes still require explicit approval. Required target work remains in the combined implementation, and unmet prerequisites remain blockers. Related issues verified as fully covered may move to In Review from an earlier state through the same ticket procedure.
+Use `linear-ticket` for justified follow-up creation and evidence-backed related-issue updates, passing the originating target and its boundary. Its overlap, criteria-coverage, provenance, milestone/numbering, estimate and verification rules apply. This workflow authorizes minimal related edits and follow-ups outside all supplied targets; milestone creation and existing-name/title changes still require explicit approval. Required target work remains in the combined implementation, and unmet prerequisites remain blockers. For related implementation issues included in this PR, pass their identifiers to review-work for its opening transition and link them through create-pr so the integration moves them to In Review when the PR opens.
 
 ## Handoff
 

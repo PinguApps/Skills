@@ -271,6 +271,7 @@ The skill:
 - Selects independently actionable tickets that need no user input.
 - Uses fixed `agent/` branches derived from Linear and limits outstanding reservations.
 - Leaves In Review and Done transitions to verified GitHub–Linear automation.
+- Requires workers to move their ticket to Pre-PR Review when local review starts.
 - Verifies worker-owned merges and handles their PR-event waits; human-review
   holds propagate to workers. The coordinator does not merge PRs itself.
 - Reassesses after merges and stops with a concise completion and blocker ledger.
@@ -324,13 +325,14 @@ The skill:
 - Implements and verifies every requirement and acceptance criterion.
 - Uses `complete-work` for branch setup, commits, PR creation, and review completion.
 - Requests user help only when needed, with precise setup and resumption steps.
-- Moves every supplied issue to In Progress when implementation starts and In Review
-  when the complete PR is created, preserving terminal and further-along states.
+- Moves every supplied issue to In Progress when implementation starts and Pre-PR
+  Review when local review starts; verifies automated In Review on PR creation,
+  preserving terminal and further-along states.
 - Includes every supplied issue in PR closing references for automatic linking and
   closure on merge through the existing GitHub–Linear integration.
 - Restricts related Linear access and mutations to each issue's exact team and project.
-- Creates or updates related issues when justified, including moving fully covered
-  issues to In Review.
+- Creates or updates related issues when justified and links fully covered issues
+  for automated review-state and completion transitions.
 - Reports repository drift, verification results, and every Linear mutation.
 
 ### [linear-ticket](skills/linear-ticket/)
@@ -363,6 +365,8 @@ work. The delivery workflows reference this skill as their review source of trut
 
 The skill:
 
+- Manually moves associated In Progress tickets to Pre-PR Review before review
+  starts, including standalone and delegated delivery workflows.
 - Captures observed proof and distinguishes it from future manual-test instructions.
 - Applies ignore policies and deterministic/mixed-category routing to two independent reviewers.
 - Gives reviewers a concise verification/safety handoff and tools to run

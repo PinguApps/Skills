@@ -5,6 +5,11 @@ a PR. This is the shared review procedure for standalone and delivery workflows.
 It runs only before initial PR publication: `finish-pr` never launches these AI
 reviewers for subsequent CI or GitHub feedback fixes.
 
+Before this procedure, complete review-work's mandatory
+[Linear status transition](../SKILL.md#move-implementation-tickets-to-pre-pr-review).
+It applies to standalone reviews and all delivery callers; reviewer children
+receive the verified ticket context without tracker-write authority.
+
 ## Scope, policy and state
 
 Use the implementation thread's **current worktree root**, not the project's main

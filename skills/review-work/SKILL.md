@@ -17,6 +17,26 @@ or merge. Delivery skills call it once and resume their own workflow afterwards.
 An explicitly read-only review returns findings without modifying source; it may
 run non-destructive checks and inspect a running app within the supplied test environment.
 
+## Move implementation tickets to Pre-PR Review
+
+At the start of this workflow, before gathering review proof or dispatching
+reviewers, manually move every associated implementation ticket from In Progress
+to its team's Pre-PR Review state through the Linear MCP. Read and apply
+[$linear-ticket](../linear-ticket/SKILL.md), verify each ticket's account/workspace,
+team and project, and resolve the actual workflow state IDs. Refresh each ticket
+before writing and read back the saved state before continuing. This authorizes
+only that status transition; preserve estimates and other fields.
+
+Apply this whether invoked alone, by a delivery skill or by a delegated worker.
+The implementation/review parent owns the transition; reviewer children do not
+write to Linear. Already Pre-PR Review is satisfied; preserve all other states,
+including In Review, completed, cancelled and archived tickets. Honour explicit
+read-only or status-preservation instructions. With no associated ticket, continue
+without creating one. Missing or ambiguous states, access or an unverified write
+block the affected pre-PR review; report the specific gap. Keep transitioned
+tickets in Pre-PR Review through review fixes and rechecks. In Review starts when
+the PR opens; leave that transition to the configured GitHub–Linear integration.
+
 ## Establish the change and proof
 
 Recover the task's requirements, decisions and verification from the conversation,
