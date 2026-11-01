@@ -162,6 +162,39 @@ class UsageTests(unittest.TestCase):
         self.assertNotIn('Total billed review cost: $0.05', text)
         self.assertNotIn('Accounting incomplete', text)
 
+    def test_missing_go_metadata_retains_known_receipts_and_labelled_estimate(self):
+        run = {'model': 'opencode-go/glm-5.3-flash', 'effort': 'high'}
+        common = {'requestID': 'known', 'sessionID': 'session', **run}
+        value = {'cost': 0, 'opencode': {'billing_source': 'go', 'list_cost': .02, 'allowance': .08,
+            'tokens': {'input': 100, 'cache_read': 0, 'cache_write_5m': 0, 'cache_write_1h': 0,
+                       'output': 40, 'reasoning': 25}}}
+        records = [{'event': 'guard', 'tools': ['pingu_review_source']},
+                   {**common, 'event': 'request', 'kind': 'primary'},
+                   {**common, 'event': 'response', 'status': 200},
+                   {**common, 'event': 'usage', 'generationID': 'known-id', 'usage': value}]
+        estimate_message = self.message('estimate')
+        estimate_message['model'] = {'providerID': 'opencode-go', 'id': 'glm-5.3-flash', 'variant': 'high'}
+        estimate = usage.reported_usage([estimate_message], run['model'], run['effort'])
+        missing_values = [{'cost': 0}, {'cost': 0, 'opencode': {k: v for k, v in value['opencode'].items()
+                                                            if k != 'billing_source'}}]
+        for missing in missing_values:
+            attempt = [*records, {**common, 'requestID': 'missing', 'event': 'request', 'kind': 'primary'},
+                       {**common, 'requestID': 'missing', 'event': 'response', 'status': 200},
+                       {**common, 'requestID': 'missing', 'event': 'usage', 'generationID': 'missing-id', 'usage': missing}]
+            for allow_estimate in (False, True):
+                captured = dict(run)
+                if allow_estimate:
+                    usage.collect_usage(captured, attempt, 'session', estimate, True)
+                    self.assertIs(estimate, captured['usage'])
+                    self.assertFalse(captured['usage']['billed'])
+                else:
+                    with self.assertRaises(usage.IncompleteUsage):
+                        usage.collect_usage(captured, attempt, 'session', estimate, False)
+                    self.assertIsNone(captured['usage'])
+                self.assertTrue(captured['accountingIncomplete'])
+                self.assertEqual(['missing'], captured['partialBilledUsage']['missingUsageMessageIDs'])
+                self.assertEqual('0.08', captured['partialBilledUsage']['goUsage']['allowanceUSD'])
+
     def test_default_effort_and_ui_concern_assignments_are_validated(self):
         ledger = {'runs': [], 'route': {'reviewers': [['haiku', 'high']],
             'escalationByConcern': {'ui': {'visual': [['kimi-code', 'default']], 'logic': [['kimi', 'high']]}}}}

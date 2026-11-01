@@ -145,8 +145,8 @@ def amount(value, *, integer=False):
 
 
 def go_usage(value):
-    metadata = value.get('opencode', {})
-    source = metadata.get('billing_source')
+    metadata = value['opencode']
+    source = metadata['billing_source']
     if source not in ('go', 'go-plus', 'balance') or metadata.get('estimated'):
         raise ValueError('Unexpected OpenCode Go billing source or estimate')
     tokens = metadata['tokens']
