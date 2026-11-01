@@ -61,10 +61,10 @@ Read and apply [review context](references/review-context.md) to preserve requir
 
 Include literal `## Proof` using [review-work's proof record](../review-work/references/proof.md), followed by the caller's `## Test changes` handoff and `## AI review` rendered from its ledger. Keep the AI review heading, merge policy, round headings and totals visible; each round's contents go inside a closed `<details>` panel. Put model name (without routing/company path), effort, verdict, elapsed time, tokens and cost in the round table. A separate scope table states **Full review** or **Incremental review** and a linked short-SHA range. The totals table groups every model across rounds and includes a summed total row. Keep estimates separate from billed spend, and missing evidence explicit. Include exclusion provenance and material limitations without transcripts. Use short linked commit hashes throughout the PR body, outside code spans; machine records retain full identities. Preserve historical ranges when updating a published PR; later fixes are not retrospectively AI-reviewed.
 
-Preserve review-work's separate Go subscription-usage tables when present. The
-existing billed-cost columns remain actual cash charges; covered Go calls can be
-zero while their list-price and shared-allowance usage remain visible. Do not
-relabel those figures billed spend or allocate the monthly fee to each PR.
+Preserve review-work's unified cost column, allocation-basis explanation and
+collapsed provider audit. Go costs include the used share of its subscription fee;
+they are not extra cash charges. Follow the [shared accounting procedure](../review-work/references/pre-pr-review.md#usage-and-pr-handoff),
+including its precision, missing-evidence and unused-allowance rules.
 
 ## 3. Create and verify the PR
 

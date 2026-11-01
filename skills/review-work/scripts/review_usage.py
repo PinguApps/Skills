@@ -299,8 +299,8 @@ def validate_assignment(ledger, run):
         raise ValueError('Model/effort is outside the recorded route or explicit benchmark authorization')
 
 
-def money(value):
-    return '$' + str(Decimal(str(value)).quantize(Decimal('.01'), rounding=ROUND_HALF_UP))
+def money(value, places=2):
+    return '$' + format(Decimal(str(value)).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP), f'.{places}f')
 
 
 def session_timing(session):
@@ -357,19 +357,40 @@ def review_type(run):
 
 def incomplete(run):
     usage = run.get('usage')
-    return usage is None or bool(usage.get('missingUsageMessageIDs')) or bool(run.get('accountingIncomplete'))
+    return usage is None or usage.get('costUSD') is None or bool(usage.get('missingUsageMessageIDs')) or bool(run.get('accountingIncomplete'))
 
 
-def totals_row(label, runs, include_estimates):
+def allocated_run(run, basis):
+    """Build the report view without rewriting authoritative cash receipts."""
+    captured = run.get('usage')
+    if not run['model'].startswith('opencode-go/') or not captured or not captured.get('billed'):
+        return run
+    go = captured.get('goUsage') or {}
+    sources = set(go.get('billingSources', []))
+    cost = amount(captured['costUSD'])
+    if not sources or sources - {'balance', (basis or {}).get('billingSource')} or go.get('allowanceUSD') is None:
+        return {**run, 'usage': {**captured, 'costUSD': None}}
+    if sources != {'balance'}:
+        if not basis:
+            return {**run, 'usage': {**captured, 'costUSD': None}}
+        fee, pool = amount(basis['monthlyFeeUSD']), amount(basis['monthlyAllowanceUSD'])
+        if pool == 0:
+            raise ValueError('Monthly Go allowance must be positive')
+        cost += amount(go['allowanceUSD']) / pool * fee
+    return {**run, 'usage': {**captured, 'costUSD': str(cost),
+                           'source': captured['source'] + '; Go fee allocated by monthly allowance share'}}
+
+
+def totals_row(label, runs, include_estimates, format_cost=money):
     values = []
     for key in ('input', 'cacheRead', 'cacheWrite', 'output'):
         known = [r['usage'][key] for r in runs if r.get('usage') and r['usage'].get(key) is not None]
         partial = len(known) != len(runs) or any(incomplete(r) for r in runs)
         values.append((f'{sum(known):,}' + (' (partial)' if partial else '')) if known else 'unavailable')
     for billed in ([True, False] if include_estimates else [True]):
-        evidence = [r['usage'] for r in runs if r.get('usage') and bool(r['usage'].get('billed')) == billed]
+        evidence = [r['usage'] for r in runs if r.get('usage') and r['usage'].get('costUSD') is not None and bool(r['usage'].get('billed')) == billed]
         if evidence:
-            values.append(money(sum((Decimal(u['costUSD']) for u in evidence), Decimal('0'))))
+            values.append(format_cost(sum((Decimal(u['costUSD']) for u in evidence), Decimal('0'))))
         else:
             values.append('—' if not billed and all(not incomplete(r) for r in runs) else 'unavailable')
     return '| ' + label + ' | ' + ' | '.join(values) + ' |'
@@ -404,13 +425,24 @@ def go_table(runs):
 
 def render(ledger):
     lines = ['## AI review', '', 'Merge policy: ' + ledger['mergePolicy'], '']
+    go = any(r['model'].startswith('opencode-go/') for r in ledger['runs'])
+    basis = ledger.get('goCostAllocation')
+    raw_runs = ledger['runs']
+    runs_view = [allocated_run(r, basis) for r in raw_runs]
+    format_cost = (lambda value: money(value, 6)) if go else money
+    if go:
+        if basis:
+            lines += [f"Cost basis: API cash charges + Go allowance used / ${cell(basis['monthlyAllowanceUSD'])} × ${cell(basis['monthlyFeeUSD'])} monthly fee.",
+                      'Go cost is subscription allocation, not an extra cash charge. Unused allowance stays unallocated.', '']
+        else:
+            lines += ['Go allocation basis unavailable; covered Go costs cannot be reported as zero.', '']
     url = repository_url(ledger.get('repositoryUrl'))
     billed_total, estimate_total = Decimal('0'), Decimal('0')
     billed_rows = 0
     unavailable = False
     estimated = False
-    for round_number, label in sorted(set((r['round'], r.get('roundLabel', str(r['round']))) for r in ledger['runs'])):
-        runs = [run for run in ledger['runs'] if (run['round'], run.get('roundLabel', str(run['round']))) == (round_number, label)]
+    for round_number, label in sorted(set((r['round'], r.get('roundLabel', str(r['round']))) for r in runs_view)):
+        runs = [run for run in runs_view if (run['round'], run.get('roundLabel', str(run['round']))) == (round_number, label)]
         lines += [f'### Round {label}', '',
                   '<details>', '<summary>Review details</summary>', '',
                   '| Model | Effort | Outcome | Time | Input total | Cache read | Cache write | Output total | Cost USD |',
@@ -425,7 +457,9 @@ def render(ledger):
             if usage is None:
                 lines.append(prefix + 'unavailable | unavailable | unavailable | unavailable | unavailable |')
                 continue
-            if usage.get('billed'):
+            if usage.get('costUSD') is None:
+                pass
+            elif usage.get('billed'):
                 round_billed_rows += 1
                 billed_subtotal += Decimal(usage['costUSD'])
             else:
@@ -433,7 +467,8 @@ def render(ledger):
                 estimate_subtotal += Decimal(usage['costUSD'])
             counts = ['unavailable' if usage.get(key) is None else f'{usage[key]:,}' for key in ('input', 'cacheRead', 'cacheWrite', 'output')]
             qualifier = '' if usage.get('billed') else ' estimate'
-            lines.append(prefix + ' | '.join(counts) + f" | {money(usage['costUSD'])}{qualifier} |")
+            displayed_cost = format_cost(usage['costUSD']) + qualifier if usage.get('costUSD') is not None else 'unavailable'
+            lines.append(prefix + ' | '.join(counts) + f" | {displayed_cost} |")
         billed_total += billed_subtotal
         billed_rows += round_billed_rows
         estimate_total += estimate_subtotal
@@ -441,31 +476,31 @@ def render(ledger):
         lines += [f'| {model_name(run)} | {review_type(run)} | {review_range(run, url)} |' for run in runs]
         sources = sorted({r['usage']['source'] for r in runs if r.get('usage')})
         lines += ['', 'Cost sources: ' + '; '.join(cell(source) for source in sources) + '.' if sources else 'Cost source: unavailable.', '',
-                  '**Round billed subtotal: ' + (money(billed_subtotal) if round_billed_rows else 'unavailable') + '**', '']
+                  ('**Round review cost subtotal: ' if go else '**Round billed subtotal: ') + (format_cost(billed_subtotal) if round_billed_rows else 'unavailable') + '**', '']
         if any(r.get('usage') and not r['usage'].get('billed') for r in runs):
-            lines += ['**Round estimate subtotal (not billed): ' + money(estimate_subtotal) + '**', '']
-        lines += go_table(runs)
+            lines += ['**Round estimate subtotal (not billed): ' + format_cost(estimate_subtotal) + '**', '']
+        lines += go_table([r for r in raw_runs if (r['round'], r.get('roundLabel', str(r['round']))) == (round_number, label)])
         lines += ['</details>', '']
     lines += ['### Totals', '',
-              '| Model | Input total | Cache read | Cache write | Output total | Cost USD (billed) |' + (' Estimate USD (not billed) |' if estimated else ''),
+              '| Model | Input total | Cache read | Cache write | Output total | ' + ('Cost USD' if go else 'Cost USD (billed)') + ' |' + (' Estimate USD (not billed) |' if estimated else ''),
               '|---|---:|---:|---:|---:|---:|' + ('---:|' if estimated else '')]
-    models = dict.fromkeys(r['model'] for r in ledger['runs'])
+    models = dict.fromkeys(r['model'] for r in runs_view)
     for model in models:
-        runs = [r for r in ledger['runs'] if r['model'] == model]
-        lines.append(totals_row(model_name(runs[0]), runs, estimated))
-    lines += [totals_row('**Total**', ledger['runs'], estimated), '']
-    label = 'Recorded billed subtotal' if estimated or unavailable else 'Total billed review cost'
-    lines += ['**' + label + ': ' + (money(billed_total) if billed_rows else 'unavailable') + '**', '']
+        runs = [r for r in runs_view if r['model'] == model]
+        lines.append(totals_row(model_name(runs[0]), runs, estimated, format_cost))
+    lines += [totals_row('**Total**', runs_view, estimated, format_cost), '']
+    label = ('Recorded review cost subtotal' if estimated or unavailable else 'Total review cost') if go else ('Recorded billed subtotal' if estimated or unavailable else 'Total billed review cost')
+    lines += ['**' + label + ': ' + (format_cost(billed_total) if billed_rows else 'unavailable') + '**', '']
     if estimated:
-        lines += ['**Recorded estimate subtotal (not billed): ' + money(estimate_total) + '**', '']
-    lines += go_table(ledger['runs'])
-    if any(r['model'].startswith('opencode-go/') for r in ledger['runs']):
-        lines += ['Go-covered requests have $0 incremental cash charges; their list-price and shared-allowance usage are shown separately.',
-                  'The fixed subscription fee, credit-purchase fees and tax are not allocated to individual PRs. Allowance dollars are provider meter units, not extra spend.', '']
+        lines += ['**Recorded estimate subtotal (not billed): ' + format_cost(estimate_total) + '**', '']
+    if go:
+        lines += ['<details>', '<summary>Provider accounting audit</summary>', '']
+        lines += go_table(raw_runs)
+        lines += ['Raw cash, list-price and allowance receipts remain unchanged in the ledger. Credit-purchase fees and tax are excluded.', '</details>', '']
     lines += [
               'Pre-PR sessions only. Input total includes cache reads/writes; output total includes reasoning exactly once.',
               'Time is session wall time, including tool steps and native compaction, excluding time queued before session creation.',
-              'Totals use unrounded costs; displayed dollars are rounded to cents. Partial token totals show known usage only.']
+              'Totals use unrounded costs; displayed dollars use ' + ('six decimals' if go else 'cents') + '. Partial token totals show known usage only.']
     if not url:
         lines += ['', 'Repository URL unavailable; short ranges are shown without explicit comparison links.']
     if unavailable:
@@ -492,6 +527,8 @@ def main():
     output = sub.add_parser('render')
     output.add_argument('--output', required=True)
     output.add_argument('--repository-url', help='Repository web URL when rendering a legacy ledger')
+    output.add_argument('--go-monthly-fee-usd', help='Explicitly record the Go allocation fee on an existing ledger')
+    output.add_argument('--go-monthly-allowance-usd', help='Weighted monthly Go pool in receipt allowance dollars')
     args = parser.parse_args()
     if args.command == 'init':
         if Path(args.ledger).exists():
@@ -505,7 +542,8 @@ def main():
             raise ValueError('Invalid route cap')
         save(args.ledger, {'repo': str(Path(args.repo).resolve()), 'mergePolicy': args.merge_policy,
                            'repositoryUrl': repository_url(args.repository_url),
-                           'roundCap': cap, 'route': scope['route'], 'runs': []})
+                           'roundCap': cap, 'route': scope['route'], 'runs': [],
+                           'goCostAllocation': POLICY['goCostAllocation']})
         return
     ledger = load(args.ledger)
     if args.command == 'record':
@@ -554,6 +592,14 @@ def main():
         save(args.ledger, ledger)
         print(json.dumps({'runID': run['id'], 'sessionID': session['id'], 'usage': run['usage']}, indent=2))
     else:
+        if bool(args.go_monthly_fee_usd) != bool(args.go_monthly_allowance_usd):
+            raise ValueError('Provide both Go allocation amounts together')
+        if args.go_monthly_fee_usd:
+            fee, pool = amount(args.go_monthly_fee_usd), amount(args.go_monthly_allowance_usd)
+            if pool == 0:
+                raise ValueError('Monthly Go allowance must be positive')
+            ledger['goCostAllocation'] = {'monthlyFeeUSD': str(fee), 'monthlyAllowanceUSD': str(pool), 'billingSource': 'go'}
+            save(args.ledger, ledger)
         if args.repository_url:
             ledger['repositoryUrl'] = repository_url(args.repository_url)
         Path(args.output).write_text(render(ledger), encoding='utf-8')

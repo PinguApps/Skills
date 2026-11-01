@@ -55,12 +55,17 @@ for compatibility, GLM for agent policy and MiniMax for UI.
 ### Usage and reporting
 
 Keep the PR report's round headings, closed details, timing, scope tables and
-visible per-model token/cash totals. Both providers' response receipts supply
-actual charges. Covered Go calls report $0 incremental cash; separate Go tables
-show list-price usage and actual shared-allowance meter dollars. Do not label
-subscription usage as billed spend or add the monthly fee to every PR. Preserve
-estimates and unavailable evidence honestly. The fixed fee, top-up fees and tax
-remain outside per-review charges; PRInspector can still parse the existing tables.
+visible per-model token/cost totals. The main cost column combines API cash charges
+with Go's proportional subscription cost: **allowance used / $60 × $10** for the
+current Go plan. Thus 1% of the monthly allowance reports $0.10. Unused allowance
+stays unallocated; using 90% reports $9, without spreading the remaining $1 over
+reviews. Record the fee/pool basis in each ledger; verify it again after a plan or
+quota change. Use the provider's weighted `opencode.allowance`, not list prices or
+rounded console percentages. This is cost attribution, not an extra cash charge.
+Go reports use six decimal places so small model contributions remain visible.
+Raw cash/list-price/allowance receipts remain unchanged, with audit tables collapsed
+below totals. Preserve separate estimates and unavailable evidence. Top-up fees and
+tax stay outside review costs; PRInspector parses the same main cost column.
 
 The 30–31 October sample had 48 reviewed PRs and 117 reviewer runs. Replaying its
 tokens/caching across 30 active days projects $10 Go + $18.90 Haiku + $1.04
@@ -68,7 +73,8 @@ OpenRouter credit-purchase fee, **about $29.94/month before tax**, versus $59.82
 for all-OpenRouter usage. Routine Go use projects to 75–88% of its monthly pool,
 depending on DeepSeek peak pricing. At 20 active days the hybrid estimate is $23.29.
 These are forecasts from partial published accounting, not a spending guarantee
-or evidence of equivalent behaviour across providers.
+or evidence of equivalent behaviour across providers. They include the full monthly
+fee; per-review attribution leaves the unused share of that fee unreported.
 
 Reserve at most eight additional percentage points of shared monthly Go allowance
 for new-specialist trials/escalations, not eight points per model. Consult actual

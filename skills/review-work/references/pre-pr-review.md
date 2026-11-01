@@ -310,21 +310,36 @@ OpenCode session, so collection cannot silently cut off ongoing work. Serialize
 all ledger writes in the parent. OpenCode's catalogue estimate is separate and
 is never labelled billed spend. `--allow-estimate` can retain failed-run evidence
 when transport usage is unavailable; disclose that limitation in the PR. Missing
-usage is unavailable, never zero. Keep cost precision internally and round displayed
-model/round/grand totals to cents. Exclude implementation-agent and CI costs.
+usage is unavailable, never zero. Keep cost precision internally. Exclude
+implementation-agent and CI costs.
 For Go, collect `opencode.tokens` (input excludes cache; output includes reasoning),
 `billing_source`, `list_cost` and `allowance` alongside `usage.cost`. A complete
-covered receipt has $0 incremental cash, not missing usage. Keep the existing
-cash/token tables unchanged and add the separate Go subscription-usage tables
-inside each round and after the visible totals. These show authoritative list-price
-usage and actual allowance dollars, not estimates or additional charges. Do not
-infer allowance from list prices: model weighting and peak rates can change.
-Do not allocate the fixed monthly fee, top-up fees or tax to individual PRs.
-Balance-backed Extra Usage, if already enabled by the user, remains an actual
-cash charge and must not be presented as covered subscription usage.
-When any run has only estimated or incomplete accounting, keep billed and estimate
-subtotals separate and omit a mixed grand total. Partial provider records remain
-evidence, never a complete billed total. Guard breaches still block coverage.
+covered receipt has $0 incremental cash, not missing usage. Preserve all raw
+receipts. In the report view, use one main `Cost USD` column for API cash plus
+Go allowance used / monthly weighted pool × monthly subscription fee. The current
+Go basis is $10/$60; 1% of the pool reports $0.10 and 90% reports $9. Leave unused
+allowance unallocated. Use `opencode.allowance`, never infer the weighted share
+from list prices or rounded console gauges. Balance-backed Extra Usage contributes
+its actual cash charge, without a second allocation for the same usage.
+
+`init` snapshots the policy's `goCostAllocation` into the ledger. Verify that basis
+against the subscribed plan and current weighted pool before first Go dispatch;
+retain it for historical rerenders. For an existing ledger, explicitly record a
+verified Go basis with `render --go-monthly-fee-usd 10 --go-monthly-allowance-usd 60`.
+A missing basis or different billing source leaves covered cost unavailable rather
+than zero. A changed plan needs its own verified basis; never silently apply Go's
+fee/pool to Go Plus. [Allowance semantics](https://opencode.ai/v2/docs/console/api/inference#cost)
+and [the shared weighting explanation](https://github.com/anomalyco/opencode/issues/54875)
+support the recorded basis.
+
+Keep model/token/timing/scope table structure for PRInspector. Reports containing
+Go use six decimal places for costs, so small model contributions remain visible;
+OpenRouter-only historical reports retain cents. Round and visible model/grand
+totals use unrounded values, labelled review cost rather than billed cash. Retain
+raw Go tables inside round details and a closed provider-audit panel after totals.
+Top-up fees and tax remain excluded. Keep estimates separate and missing/partial
+evidence explicit; a partial record is never a complete total. Guard breaches
+still block coverage. Rerendering costs changes no review verdict or covered range.
 
 Hand [observed proof](proof.md) to `create-pr` for `## Proof`, followed by manual
 `## Test changes` and the rendered `## AI review`. Keep the AI review heading,

@@ -146,10 +146,11 @@ Go receipts additionally require `opencode.billing_source`, `list_cost`, `tokens
 and, for covered requests, `allowance`. Normalize Go input by adding uncached input,
 cache reads and both cache-write lifetimes; its output already includes reasoning.
 Use these fields for either Go protocol, not an inferred catalogue calculation.
-Actual balance charges remain in the original billed-cost columns, including
-zero for covered calls. Separate subscription tables retain list-price usage and
-raw shared-allowance dollars without labelling them cash or allocating the fixed
-monthly fee. Missing metadata remains incomplete; a catalogue estimate cannot
+Keep actual balance charges, including covered zero cash, unchanged in the ledger.
+The [reporting procedure](pre-pr-review.md#usage-and-pr-handoff) adds proportional
+Go fee allocation only in the report view, alongside API charges in one cost column.
+Collapsed audit tables retain raw list-price/shared-allowance dollars.
+Missing metadata remains incomplete; a catalogue estimate cannot
 certify Go's billing source or allowance. Numeric usage capture discards response
 prose and arbitrary metadata. Preserve historical ledgers and their old model IDs
 when rendering; only new dispatches use the current policy.

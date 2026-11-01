@@ -56,8 +56,10 @@ round is sufficient; the procedure's caps and explicit blockers still apply.
 Return the final coverage receipt, observed proof, finding dispositions and
 rendered AI review report. Preserve full SHAs and model IDs in machine records;
 human-facing reports use short linked commits and model names without routing
-prefixes. Preserve the cost/token table layout; report cash charges there and Go
-list-price/shared-allowance usage separately, without allocating the fixed subscription fee.
+prefixes. Preserve the cost/token table layout; combine API charges and proportional
+Go subscription allocation using the recorded fee/monthly-allowance basis from
+[the accounting procedure](references/pre-pr-review.md#usage-and-pr-handoff).
+Retain raw receipts and distinguish allocation from extra cash charges.
 Include per-round outcome/time and full/incremental scope, collapsed
 round details, and visible per-model totals with honest accounting limitations.
 
