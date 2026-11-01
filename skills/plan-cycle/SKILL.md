@@ -5,6 +5,12 @@ description: Select existing Linear backlog issues to fill the next cycle, top u
 
 # Plan Cycle
 
+For any authorized PR feedback response, follow the shared
+[Copilot policy](../finish-pr/references/copilot.md): submit the fix or an
+evidence-backed explanation of why it cannot or should not be fixed, then resolve
+the Copilot thread ourselves immediately. Treat its review as one-time; expect
+no reply or re-review of our changes. This adds no GitHub write authority.
+
 Select existing Linear issues for a manageable cycle outcome, accounting for AI-assisted implementation, human review and verification. Support two modes:
 
 - **Fill next:** plan the next cycle within the requested work budget, retaining existing commitments.

@@ -6,6 +6,12 @@ disable-model-invocation: true
 
 # Implement Task from Linear
 
+For any authorized PR feedback response, follow the shared
+[Copilot policy](../finish-pr/references/copilot.md): submit the fix or an
+evidence-backed explanation of why it cannot or should not be fixed, then resolve
+the Copilot thread ourselves immediately. Treat its review as one-time; expect
+no reply or re-review of our changes. This adds no GitHub write authority.
+
 Implement every supplied Linear issue together on one branch and in one PR. The supplied issues are the required input and combined scope boundary; each issue's provenance chain and repository context refine how to implement it without silently adding work. Complete all supplied issues before publishing the PR; a blocker on any target blocks publication of the combined change.
 
 Use this skill as a Linear-specific wrapper around [$complete-work](../complete-work/SKILL.md). Read it before planning delivery; it owns the assigned worktree/branch, coherent incremental commits, verification, mandatory pre-PR review, PR creation and CI/feedback completion. Invoking this skill authorizes its full workflow including normal protected merge by default. Capture a human-review/no-merge request as a persistent manual hold and pass it throughout. Deployment and release remain outside this grant. Resolve missing prerequisites rather than silently dropping a phase.

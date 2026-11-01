@@ -5,6 +5,12 @@ description: Create or update a Linear ticket, including its description, metada
 
 # Linear Ticket
 
+For any authorized PR feedback response, follow the shared
+[Copilot policy](../finish-pr/references/copilot.md): submit the fix or an
+evidence-backed explanation of why it cannot or should not be fixed, then resolve
+the Copilot thread ourselves immediately. Treat its review as one-time; expect
+no reply or re-review of our changes. This adds no GitHub write authority.
+
 Own the rules for creating and updating individual Linear tickets. Use the Linear MCP server. A calling workflow owns its scope, authorization, scheduling and execution order; this skill supplies ticket drafting, metadata, mutation and verification. Read it before drafting or writing tickets. If unavailable, resolve that prerequisite before writing.
 
 ## Destination, scope and authorization

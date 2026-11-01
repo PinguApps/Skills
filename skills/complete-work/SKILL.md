@@ -5,6 +5,12 @@ description: Implement supplied work in an isolated branch/worktree, commit cohe
 
 # Complete Work
 
+For any authorized PR feedback response, follow the shared
+[Copilot policy](../finish-pr/references/copilot.md): submit the fix or an
+evidence-backed explanation of why it cannot or should not be fixed, then resolve
+the Copilot thread ourselves immediately. Treat its review as one-time; expect
+no reply or re-review of our changes. This adds no GitHub write authority.
+
 Take the supplied task through implementation, pre-PR review, PR completion and permitted merge. Capture `merge policy: automatic` by default, or `manual` for any user-requested human review/no-merge handoff. Preserve that choice across child tasks, resumes and the PR body; a manual hold never expires merely because checks pass.
 
 ## 1. Establish scope and create a branch

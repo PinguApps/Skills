@@ -5,6 +5,12 @@ description: Create or edit a GitHub PR description with safe newline handling a
 
 # Create PR
 
+For any authorized PR feedback response, follow the shared
+[Copilot policy](../finish-pr/references/copilot.md): submit the fix or an
+evidence-backed explanation of why it cannot or should not be fixed, then resolve
+the Copilot thread ourselves immediately. Treat its review as one-time; expect
+no reply or re-review of our changes. This adds no GitHub write authority.
+
 Create a pull request for the completed work, with a description that preserves repository conventions and gives reviewers the evidence they need.
 
 ## 1. Establish the target and template

@@ -29,7 +29,9 @@ coordinator waiting for a delegated worker. This is the shared handoff contract.
    Issue-comment/check quota needs verified current-head association; words alone
    do not associate it. If association needs investigation, do that work and then
    refresh again. Other started reviews, failing/pending checks, actionable feedback
-   and protected threads retain their own requirements.
+   and protected threads retain their own requirements. A completed one-time
+   Copilot review stays complete after fixes; resolve addressed threads under
+   its contract without waiting for a reply or re-review.
 4. If the condition cleared or needs action, continue the implementation owner's
    normal audit/repair/handoff now. A coordinator resumes the same worker with the
    new evidence and remaining requirements, even without a new watcher event; it

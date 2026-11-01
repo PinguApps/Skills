@@ -56,7 +56,9 @@ Ownership and integration:
   and runtime-check handoff so reviewers can run safe checks themselves.
   No delegated post-PR reviews.
 - Merge only through finish-pr's current-head gate and when policy permits.
-  Handle Copilot quota and evidence-backed thread settlement under that skill;
+  Follow its [Copilot policy](../../finish-pr/references/copilot.md): after a
+  submitted fix/explanation response, resolve the Copilot thread ourselves
+  immediately; expect no reply or re-review. Handle quota under that skill and
   never resolve human-owned threads to force a merge.
 - Link each created/taken-over/pushed PR as the next tool call. As a delegated
   child, never call watch_pull_request. When checks/reviews/queue prevent immediate
