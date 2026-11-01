@@ -3,7 +3,9 @@
 Treat Copilot review as a one-time review. Once we have fixed a finding or
 explained why we cannot or should not fix it, submit our response and resolve
 the Copilot thread ourselves immediately. Assume Copilot will not reply,
-re-review or check our changes. Do not request or wait for that follow-up.
+re-review or check our changes. Do not request a follow-up or wait for one that
+has not started. An actually requested or pending review remains a separate
+completion gate until its result arrives.
 This policy applies whenever an authorized PR workflow responds to Copilot;
 it does not grant a planning or read-only workflow permission to write to GitHub.
 
@@ -24,8 +26,14 @@ Fetch all review pages and all thread comments. Keep these ledger states:
 - **completed:** a submitted review supplies findings or a clean result. The
   one-time review remains complete after subsequent commits; retain its original
   SHA and do not describe it as approval of fixes it has not seen.
-- **incomplete:** non-quota failure or insufficient evidence. Report the gap
-  without inventing approval.
+- **changes-requested:** a submitted review has findings requiring disposition.
+  After verifying fixes or explanations and settling its threads below, record
+  it as addressed in the ledger without waiting for another Copilot verdict.
+  If GitHub protection still requires dismissal or human approval, report that
+  precise human-owned blocker; thread resolution does not bypass protection.
+- **incomplete:** non-quota failure or insufficient evidence. Investigate available
+  evidence, then report any remaining gap as a blocker requiring user input.
+  Do not wait for or request a retry, or invent approval.
 - **absent:** no review or pending request is known. Optional unstarted reviews
   are not required. Inspect requested reviewers/checks before declaring absence.
 

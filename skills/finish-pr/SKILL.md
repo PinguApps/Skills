@@ -128,7 +128,8 @@ settling a thread. These cases are deliberately distinct:
   or explaining with evidence why it cannot or should not be fixed, submit the
   response and resolve that **Copilot-originated** thread ourselves immediately.
   Verify the saved resolution. Assume Copilot will neither reply nor re-review
-  the changes; do not request or wait for it to check the response or fix.
+  the changes; do not request a follow-up or wait for an unstarted one. An actually
+  requested or pending review still has to finish as a separate completion gate.
 - Human-originated threads and threads with later unaddressed human/reviewer
   feedback remain outside this settlement permission. Never blanket-resolve
   threads, unresolve someone else's threads, or treat quota as proof of a fix.
@@ -177,8 +178,10 @@ Immediately before merge/handoff, re-fetch PR/base/head and verify:
   resolved. Respect legitimate skipped checks and repository protection semantics.
 - All started reviews have completed, with explicit Copilot quota-pass accepted
   for its completion requirement. A completed one-time Copilot review remains
-  complete after fixes; it is not current-head approval. No outstanding
-  changes-requested review remains.
+  complete after fixes; it is not current-head approval. An addressed Copilot
+  changes-requested verdict is settled under its contract without a new verdict;
+  any remaining GitHub protection requirement is a precise human-owned blocker.
+  No other outstanding changes-requested review remains.
 - Every actionable inline/PR-level comment is addressed, justified declines have
   submitted replies, and no created reply remains pending.
 - Every review thread required by repository protection is resolved. Use only the
