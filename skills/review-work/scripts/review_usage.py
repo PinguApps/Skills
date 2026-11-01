@@ -384,7 +384,15 @@ def go_table(runs):
     groups = [(model_name(next(r for r in go_runs if r['model'] == model)),
                [r for r in go_runs if r['model'] == model]) for model in dict.fromkeys(r['model'] for r in go_runs)]
     for label, group in [*groups, ('**Total**', go_runs)]:
-        evidence = [(r.get('usage') or {}).get('goUsage') for r in group]
+        evidence = []
+        for run in group:
+            captured = run.get('usage') or {}
+            if captured.get('billed'):
+                evidence.append(captured.get('goUsage'))
+            else:
+                partial = (run.get('partialBilledUsage') or {}).get('goUsage')
+                # Empty accumulators are not an authoritative zero receipt.
+                evidence.append(partial if partial and partial.get('billingSources') else None)
         values = []
         for key in ('listCostUSD', 'allowanceUSD'):
             known = [amount(u[key]) for u in evidence if u and u.get(key) is not None]

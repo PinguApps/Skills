@@ -195,6 +195,46 @@ class UsageTests(unittest.TestCase):
                 self.assertEqual(['missing'], captured['partialBilledUsage']['missingUsageMessageIDs'])
                 self.assertEqual('0.08', captured['partialBilledUsage']['goUsage']['allowanceUSD'])
 
+    def test_go_report_shows_partial_receipts_without_inventing_usage(self):
+        run = {'round': 1, 'model': 'opencode-go/glm-5.3-flash', 'effort': 'high',
+               'base': 'a' * 40, 'from': 'a' * 40, 'head': 'b' * 40}
+        common = {'requestID': 'known', 'sessionID': 'session', 'model': run['model'], 'effort': run['effort']}
+        value = {'cost': 0, 'opencode': {'billing_source': 'go', 'list_cost': .02, 'allowance': .08,
+            'tokens': {'input': 100, 'cache_read': 0, 'cache_write_5m': 0, 'cache_write_1h': 0,
+                       'output': 40, 'reasoning': 25}}}
+        records = [{'event': 'guard', 'tools': ['pingu_review_source']},
+                   {**common, 'event': 'request', 'kind': 'primary'},
+                   {**common, 'event': 'response', 'status': 200},
+                   {**common, 'event': 'usage', 'generationID': 'known-id', 'usage': value},
+                   {**common, 'requestID': 'missing', 'event': 'request', 'kind': 'primary'},
+                   {**common, 'requestID': 'missing', 'event': 'response', 'status': 200}]
+        complete = {**run, 'round': 2, 'usage': {**usage.go_usage(value), 'billed': True,
+            'source': 'provider', 'costUSD': '0',
+            'goUsage': {'listCostUSD': '.01', 'allowanceUSD': '.04', 'billingSources': ['go']}}}
+        estimate_message = self.message('estimate')
+        estimate_message['model'] = {'providerID': 'opencode-go', 'id': 'glm-5.3-flash', 'variant': 'high'}
+        estimate = usage.reported_usage([estimate_message], run['model'], run['effort'])
+        for allow_estimate in (False, True):
+            captured = dict(run)
+            try:
+                usage.collect_usage(captured, records, 'session', estimate, allow_estimate)
+            except usage.IncompleteUsage:
+                self.assertFalse(allow_estimate)
+            text = usage.render({'mergePolicy': 'manual', 'runs': [captured, complete]})
+            self.assertIn('| glm-5.3-flash | $0.020000 (partial) | $0.080000 (partial) |', text)
+            self.assertIn('| **Total** | $0.030000 (partial) | $0.120000 (partial) |', text)
+            self.assertIn('Accounting incomplete', text)
+            self.assertNotIn('Total billed review cost', text)
+            # Without even one normalized receipt, zero accumulators are not evidence.
+            empty = dict(run)
+            try:
+                usage.collect_usage(empty, [records[0], *records[-2:]], 'session', estimate, allow_estimate)
+            except usage.IncompleteUsage:
+                self.assertFalse(allow_estimate)
+            empty_text = usage.render({'mergePolicy': 'manual', 'runs': [empty]})
+            self.assertIn('| glm-5.3-flash | unavailable | unavailable |', empty_text)
+            self.assertNotIn('$0.000000', empty_text)
+
     def test_default_effort_and_ui_concern_assignments_are_validated(self):
         ledger = {'runs': [], 'route': {'reviewers': [['haiku', 'high']],
             'escalationByConcern': {'ui': {'visual': [['kimi-code', 'default']], 'logic': [['kimi', 'high']]}}}}
