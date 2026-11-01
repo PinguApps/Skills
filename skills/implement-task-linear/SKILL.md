@@ -99,7 +99,7 @@ Commit meaningful completed chunks rather than deferring a multi-step task into 
 
 ### Link every target and update review states at PR creation
 
-Pass all target identifiers, plus any related tickets that informed the task and are fully completed by the PR, to `create-pr` for its title-prefix rule. Also require a closing line in the PR description that mentions every supplied target, for example:
+Pass all target identifiers, plus any related tickets that informed the task and are fully completed by the PR, to `create-pr` for its title-prefix rule. Also require a closing line in the PR description that mentions every supplied target and every included related implementation issue, for example:
 
 ```text
 Fixes ENG-123, ENG-124, ENG-125, ENG-126, and ENG-127
@@ -107,7 +107,7 @@ Fixes ENG-123, ENG-124, ENG-125, ENG-126, and ENG-127
 
 Use the actual identifiers from the ledger, including a single identifier for a single target. The existing GitHub–Linear integration uses these closing references to link the PR and close the tickets automatically when it merges; leave that integration configuration unchanged and leave tickets open until merge.
 
-Immediately after the complete PR is created or reused, read back its saved title and description. Verify the title follows `create-pr`'s ticket-prefix rule and the closing references include every supplied target. Correct any omission, then run step 5's PR comment and automated In Review verification for every target before continuing to `finish-pr`. Review or CI may still be pending at this point; their completion is not a prerequisite for the automated transition.
+Immediately after the complete PR is created or reused, read back its saved title and description. Verify the title follows `create-pr`'s ticket-prefix rule and the closing references include every supplied target and included related implementation issue. Correct any omission, then run step 5's PR comment and automated In Review verification for those issues before continuing to `finish-pr`. Review or CI may still be pending at this point; their completion is not a prerequisite for the automated transition.
 
 ### Collaborate when user input is needed
 
@@ -127,10 +127,10 @@ For example, a working UI may be ready to inspect while live data remains blocke
 
 Run this reconciliation at PR creation as directed above, and again after `complete-work` reaches its final audit or stopping condition. Re-fetch every target and every mutated related issue, then reconfirm each issue's team/project boundary. Reuse existing handoff comments and update them when evidence changes rather than duplicating them on the final pass.
 
-When every required outcome across all supplied targets is implemented and verified and the shared PR exists, for each target:
+When every required outcome across all supplied targets is implemented and verified and the shared PR exists, for each target and included related implementation issue:
 
 1. Add or update a concise target comment linking the shared PR and mapping that target's acceptance criteria to implementation and verification evidence, including current CI/review status and any blocker reported by `finish-pr`.
-2. Verify the configured GitHub–Linear integration moved the target to its team's resolved In Review state, preserving terminal or further-along states. Allow bounded integration latency, then record the saved state or automation discrepancy in the ledger. Report a stale state as an integration blocker rather than replacing automation with a manual In Review write.
+2. Verify the configured GitHub–Linear integration moved the issue to its team's resolved In Review state, preserving terminal or further-along states. If it is still earlier, re-read twice at 15-second intervals (three reads, at most 30 seconds per issue per reconciliation pass), then record the saved state or automation discrepancy in the ledger. A stale state does not prevent continuing to `finish-pr`; recheck it on the final reconciliation pass and report any remaining discrepancy as an integration blocker, without claiming full workflow completion or replacing automation with a manual In Review write.
 
 Preserve completed, cancelled, archived, In Review, and other terminal or further-along states. When implementation or required verification is blocked for any target, keep the combined PR unpublished, preserve In Progress or Pre-PR Review according to the phase reached, or use the resolved blocked state where applicable, and record the unmet criterion, evidence, and dependency. Distinguish implementation readiness from incomplete PR review or CI; report full workflow completion only when `finish-pr`'s definition of done is met. Leave completion transitions after merge to the configured GitHub–Linear automation.
 

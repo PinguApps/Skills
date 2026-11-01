@@ -16,11 +16,21 @@ pre-PR review process; it does not create a branch, push, open a PR, monitor Git
 or merge. Delivery skills call it once and resume their own workflow afterwards.
 An explicitly read-only review returns findings without modifying source; it may
 run non-destructive checks and inspect a running app within the supplied test environment.
+Here read-only applies to source; the required Linear status transition still runs
+unless the user explicitly forbids Linear changes or asks to preserve ticket status.
 
 ## Move implementation tickets to Pre-PR Review
 
-At the start of this workflow, before gathering review proof or dispatching
-reviewers, manually move every associated implementation ticket from In Progress
+Before ticket writes or review dispatch, check for an already published PR for
+this task's exact head/base. If one exists, skip this pre-PR workflow and return
+its URL and any Linear integration discrepancy to the delivery caller for
+`finish-pr`, or report them when invoked alone. An open PR must never send a
+ticket back to Pre-PR Review.
+
+Associate only implementation tickets identified by the caller, conversation or
+worker handoff; a search result alone does not authorize adding a ticket. At the
+start of review, before gathering proof or dispatching reviewers, manually move
+every associated implementation ticket from In Progress
 to its team's Pre-PR Review state through the Linear MCP. Read and apply
 [$linear-ticket](../linear-ticket/SKILL.md), verify each ticket's account/workspace,
 team and project, and resolve the actual workflow state IDs. Refresh each ticket
@@ -30,12 +40,13 @@ only that status transition; preserve estimates and other fields.
 Apply this whether invoked alone, by a delivery skill or by a delegated worker.
 The implementation/review parent owns the transition; reviewer children do not
 write to Linear. Already Pre-PR Review is satisfied; preserve all other states,
-including In Review, completed, cancelled and archived tickets. Honour explicit
-read-only or status-preservation instructions. With no associated ticket, continue
-without creating one. Missing or ambiguous states, access or an unverified write
-block the affected pre-PR review; report the specific gap. Keep transitioned
-tickets in Pre-PR Review through review fixes and rechecks. In Review starts when
-the PR opens; leave that transition to the configured GitHub–Linear integration.
+including In Review, completed, cancelled and archived tickets. Report each ticket
+skipped under explicit Linear read-only or status-preservation instructions and
+the reason. With no associated ticket, continue without creating one. Missing or
+ambiguous states, access or any unverified required write block this task's entire
+pre-PR review; report the gap and retain saved states for a safe retry. Keep
+transitioned tickets in Pre-PR Review through review fixes and rechecks. In Review
+starts when the PR opens; leave that transition to the configured GitHub–Linear integration.
 
 ## Establish the change and proof
 
