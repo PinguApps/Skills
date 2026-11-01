@@ -56,8 +56,12 @@ def main():
         shutil.copyfile(authored / filename, scripts / filename)
     shutil.copyfile(authored.parent / 'references/review-policy.json', refs / 'review-policy.json')
     policy = json.loads((refs / 'review-policy.json').read_text(encoding='utf-8'))
+    # Completed history stays in the ledger for accounting, not in a new
+    # dispatch's registrations. Obsolete assignments cannot make new inference.
+    pending_runs = [run for run in ledger['runs']
+                    if run.get('status') not in ('completed', 'failed', 'cancelled', 'interrupted')]
     config = {'repo': str(repo), 'state': str(state), 'python': sys.executable,
-              'helper': str(scripts / 'review_scope.py'), 'runs': ledger['runs'],
+              'helper': str(scripts / 'review_scope.py'), 'runs': pending_runs,
               'pricingGuard': policy['pricingGuard'],
               'modelPolicy': policy['models'],
               'models': [m['id'] for m in policy['models'].values()]}

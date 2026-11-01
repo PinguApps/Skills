@@ -96,6 +96,18 @@ class RuntimePreparationTests(unittest.TestCase):
             self.save([{**self.run, 'model': model}])
             self.assertIn('accepted review policy', self.invoke('prepare', False).stderr)
 
+    def test_completed_historical_run_does_not_block_a_go_recheck(self):
+        historical = {**self.run, 'model': 'openrouter/z-ai/glm-5.3-flash',
+                      'status': 'completed', 'taskId': 'old-task'}
+        recheck = {**self.run, 'id': 'go-recheck', 'marker': 'Review-Run-ID: go-recheck',
+                   'model': 'opencode-go/glm-5.3-flash'}
+        self.save([historical, recheck])
+        self.invoke('prepare')
+        config = json.loads((self.state / 'runtime.json').read_text())
+        self.assertEqual(['go-recheck'], [r['id'] for r in config['runs']])
+        self.assertNotIn(historical['model'], config['models'])
+        self.assertEqual([historical, recheck], json.loads(self.ledger.read_text())['runs'])
+
 
 if __name__ == '__main__':
     unittest.main()
