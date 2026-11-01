@@ -57,7 +57,8 @@ class RuntimePreparationTests(unittest.TestCase):
         self.assertNotEqual(first['runtimeDigest'], second['runtimeDigest'])
         self.assertNotEqual(first_loader, loader.read_bytes())
         self.assertEqual({'one', 'two'}, {r['id'] for r in second['runs']})
-        self.assertIn('openrouter/anthropic/claude-sonnet-5.5', second['models'])
+        self.assertIn('opencode-go/qwen3.8-max', second['models'])
+        self.assertNotIn('openrouter/anthropic/claude-sonnet-5.5', second['models'])
         self.assertIn('G01', second['runs'][0]['reviewContract'])
         self.assertTrue(loader.is_relative_to(self.repo))
         loader.unlink()  # Lost loader must not lose ownership of its exclusion rule.
@@ -88,6 +89,24 @@ class RuntimePreparationTests(unittest.TestCase):
         for invalid in ('shell', ['shell', 'shell'], [''], ['pingu_review_source']):
             self.save([{**self.run, 'executionTools': invalid}])
             self.assertIn('executionTools', self.invoke('prepare', False).stderr)
+
+    def test_wrong_provider_and_excluded_models_cannot_be_registered(self):
+        for model in ('openrouter/z-ai/glm-5.3-flash', 'opencode-go/claude-haiku-5-5',
+                      'opencode-go/glm-5.2', 'opencode-go/gemini-4-argon'):
+            self.save([{**self.run, 'model': model}])
+            self.assertIn('accepted review policy', self.invoke('prepare', False).stderr)
+
+    def test_completed_historical_run_does_not_block_a_go_recheck(self):
+        historical = {**self.run, 'model': 'openrouter/z-ai/glm-5.3-flash',
+                      'status': 'completed', 'taskId': 'old-task'}
+        recheck = {**self.run, 'id': 'go-recheck', 'marker': 'Review-Run-ID: go-recheck',
+                   'model': 'opencode-go/glm-5.3-flash'}
+        self.save([historical, recheck])
+        self.invoke('prepare')
+        config = json.loads((self.state / 'runtime.json').read_text())
+        self.assertEqual(['go-recheck'], [r['id'] for r in config['runs']])
+        self.assertNotIn(historical['model'], config['models'])
+        self.assertEqual([historical, recheck], json.loads(self.ledger.read_text())['runs'])
 
 
 if __name__ == '__main__':

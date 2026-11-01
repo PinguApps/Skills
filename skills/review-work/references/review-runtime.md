@@ -1,7 +1,7 @@
 # OpenCode review runtime
 
 Read before the first reviewer launch. Requires OpenCode 2's plugin hooks and local
-API (validated with 2.1.4), Python 3 and T3 OpenCode delegation. Do not switch to a
+API (validated with 2.2.0), Python 3 and T3 OpenCode delegation. Do not switch to a
 CLI inference request or another model when those prerequisites are unavailable.
 
 Create the scope and usage ledger first. Record each unique run before dispatch:
@@ -81,7 +81,13 @@ numeric usage, model/effort, request kind, session ID and completion metadata in
 `<run-id>.transport.jsonl`. It never saves request headers, keys or response prose.
 Title generation uses the assigned title without an inference call. Other charged
 flows must use the assigned model/variant; an unexpected auxiliary model blocks.
-OpenRouter selects its hosting endpoint; the hook rejects hosting-provider pins.
+The frozen policy allowlist binds Haiku to OpenRouter's chat endpoint and all
+other assignments to Go's chat endpoint (Qwen uses Go's Anthropic Messages API).
+The HTTP guard checks HTTPS origin, path and wire model, rejects provider fallback
+and hosting pins, and supplies Go's stable `x-opencode-session` plus an identifying
+user agent. It does not log request headers or enable Extra Usage. Go default
+variants are recorded explicitly as `default`, while the native variant is absent.
+Chat and Anthropic SSE receipts are captured without changing response bytes.
 Each physical request is correlated by its exact native Request object, including
 overlapping summaries and retries. Unknown request kinds and auxiliary models
 block the review; their failure evidence remains in the ledger for investigation.
@@ -92,10 +98,11 @@ Keep OpenCode `compaction.auto` enabled (the default), with no alternate summary
 model and no experimental background summaries. Verify the actual worktree's
 applicable configuration before dispatch; incompatible overrides are a prerequisite
 to resolve, never silently accept costly requests. The runtime examines selected
-models' current catalogue context-price tiers. For the first increase, it lowers
+models' current catalogue context-price tiers across both providers. For the first increase, it lowers
 the effective input limit to the policy's 70% of that tier boundary using a temporary location
 model transform for all accepted models, including later escalation assignments.
-Flat-price models retain their full input window. Nothing is
+The policy also supplies Qwen's documented 200,000-token price threshold when the
+Go catalogue omits that tier. Flat-price models retain their full input window. Nothing is
 written to global configuration, and unloading the runtime removes the transform.
 
 For Haiku's 100,000-token tier, this sets a 70,000-token effective input limit.
@@ -134,6 +141,19 @@ estimate as billed spend. `--allow-estimate` retains incomplete provider evidenc
 separately and uses only a labelled OpenCode estimate when available; guard breaches
 and foreign-model/session evidence still fail. Billed and estimated subtotals are
 reported separately. Neither estimate recovery nor quota supplies review approval.
+
+Go receipts additionally require `opencode.billing_source`, `list_cost`, `tokens`
+and, for covered requests, `allowance`. Normalize Go input by adding uncached input,
+cache reads and both cache-write lifetimes; its output already includes reasoning.
+Use these fields for either Go protocol, not an inferred catalogue calculation.
+Keep actual balance charges, including covered zero cash, unchanged in the ledger.
+The [reporting procedure](pre-pr-review.md#usage-and-pr-handoff) adds proportional
+Go fee allocation only in the report view, alongside API charges in one cost column.
+Collapsed audit tables retain raw list-price/shared-allowance dollars.
+Missing metadata remains incomplete; a catalogue estimate cannot
+certify Go's billing source or allowance. Numeric usage capture discards response
+prose and arbitrary metadata. Preserve historical ledgers and their old model IDs
+when rendering; only new dispatches use the current policy.
 
 After all reviewer tasks are terminal, results/accounting are saved and children
 are settled, remove only this run's loader:

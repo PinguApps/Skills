@@ -1,4 +1,4 @@
-// Run-scoped OpenCode 2 plugin: filtered source tool and actual OpenRouter usage.
+// Run-scoped OpenCode 2 plugin: filtered source tool and provider usage.
 // No dependencies, inference calls, credentials, global config or PATH changes.
 import { readFileSync, appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,6 +8,21 @@ import { randomUUID } from 'node:crypto';
 
 const execute = promisify(execFile);
 const markerLines = text => String(text ?? '').split(/\r?\n/).filter(line => /^\s*Review-Run-ID:/.test(line));
+const pickNumbers = (value, keys) => Object.fromEntries(keys.filter(key =>
+  typeof value?.[key] === 'number' && Number.isFinite(value[key])).map(key => [key, value[key]]));
+
+function capturedUsage(value) {
+  const usage = pickNumbers(value, ['prompt_tokens', 'completion_tokens', 'cost', 'input_tokens', 'output_tokens']);
+  if (value.prompt_tokens_details) usage.prompt_tokens_details = pickNumbers(value.prompt_tokens_details, ['cached_tokens', 'cache_write_tokens']);
+  if (value.completion_tokens_details) usage.completion_tokens_details = pickNumbers(value.completion_tokens_details, ['reasoning_tokens']);
+  if (value.opencode) usage.opencode = {
+    ...pickNumbers(value.opencode, ['list_cost', 'allowance']),
+    billing_source: ['go', 'go-plus', 'balance', 'free', 'byok'].includes(value.opencode.billing_source) ? value.opencode.billing_source : undefined,
+    estimated: value.opencode.estimated === true,
+    tokens: pickNumbers(value.opencode.tokens, ['input', 'output', 'reasoning', 'cache_read', 'cache_write_5m', 'cache_write_1h']),
+  };
+  return usage;
+}
 
 export function pricingCeiling(model, inputFraction) {
   const costs = model.cost ?? [];
@@ -27,7 +42,7 @@ export function pricingCeiling(model, inputFraction) {
 
 export function streamUsage(response, record) {
   const decoder = new TextDecoder();
-  let buffer = '', generationID, failed = false;
+  let buffer = '', generationID, failed = false, anthropicUsage = {};
   const sse = response.headers.get('content-type')?.includes('text/event-stream');
   const inspect = text => {
     if (!text || text === '[DONE]') return;
@@ -35,7 +50,13 @@ export function streamUsage(response, record) {
     try { value = JSON.parse(text); }
     catch { failed = true; record({ event: 'capture-error', reason: 'Malformed response data' }); return; }
     if (value.id) generationID = value.id;
-    if (value.usage) record({ event: 'usage', generationID, usage: value.usage });
+    if (value.type === 'message_start') {
+      generationID = value.message?.id;
+      anthropicUsage = value.message?.usage ?? {};
+    } else if (value.type === 'message_delta') {
+      anthropicUsage = { ...anthropicUsage, ...value.usage };
+      record({ event: 'usage', generationID, usage: capturedUsage(anthropicUsage) });
+    } else if (value.usage) record({ event: 'usage', generationID, usage: capturedUsage(value.usage) });
   };
   const parse = final => {
     if (!sse) { if (final) inspect(buffer); return; }
@@ -80,6 +101,7 @@ export default function runtime(configPath) {
       const requests = new WeakMap();
       const ceilings = {};
       const budget = config().pricingGuard;
+      const modelPolicy = new Map(Object.values(config().modelPolicy ?? {}).map(model => [model.id, model]));
       if (!budget || !(budget.inputFraction > 0 && budget.inputFraction < 1) ||
           !Number.isInteger(budget.maxOutputTokens) || budget.maxOutputTokens < 1 ||
           !Number.isInteger(budget.sourceCharactersPerStep) || budget.sourceCharactersPerStep < 1)
@@ -87,9 +109,12 @@ export default function runtime(configPath) {
       // Protect future rechecks/escalations too, not just the runs registered now.
       const selectedModels = new Set([...(config().models ?? []), ...config().runs.map(run => run.model)]);
       await ctx.model.transform(editor => {
-        for (const model of editor.list('openrouter')) {
+        for (const model of editor.list()) {
           if (!selectedModels.has(model.providerID + '/' + model.id)) continue;
-          const ceiling = pricingCeiling(model, budget.inputFraction);
+          const threshold = modelPolicy.get(model.providerID + '/' + model.id)?.contextPriceThreshold;
+          const ceiling = pricingCeiling(model, budget.inputFraction) ?? (threshold ? {
+            threshold, input: Math.min(model.limit.input || model.limit.context, Math.floor(threshold * budget.inputFraction)),
+          } : undefined);
           if (!ceiling) continue;
           ceilings[model.providerID + '/' + model.id] = ceiling;
           editor.update(model.providerID, model.id, draft => {
@@ -126,7 +151,9 @@ export default function runtime(configPath) {
         return config().runs.find(run => run.id === sessions.get(sessionID));
       };
       const validate = (run, model) => {
-        if (model.providerID + '/' + model.id !== run.model || model.variant !== run.effort)
+        const policy = modelPolicy.get(run.model);
+        if (!policy || !policy.efforts.includes(run.effort)) throw new Error('Review assignment is outside the accepted model/provider policy');
+        if (model.providerID + '/' + model.id !== run.model || (model.variant ?? 'default') !== run.effort)
           throw new Error('Review model/variant differs from its recorded assignment');
       };
       const allowedTools = run => new Set(['pingu_review_source', ...(run.executionTools ?? [])]);
@@ -243,8 +270,18 @@ export default function runtime(configPath) {
         validate(run, event.model);
         if (!['primary', 'compaction', 'title', 'generate'].includes(event.kind)) throw new Error('Unknown review request kind');
         if (event.kind === 'primary') sourceUsed.set(event.sessionID, 0);
-        if (new URL(event.request.url).hostname !== 'openrouter.ai') throw new Error('Review requests must route through OpenRouter');
+        const url = new URL(event.request.url);
+        const go = run.model.startsWith('opencode-go/');
+        const expectedPath = go ? (run.model.endsWith('/qwen3.8-max') ?
+          '/inference/go/anthropic/v1/messages' : '/inference/go/openai/v1/chat/completions') : '/api/v1/chat/completions';
+        if (url.origin !== (go ? 'https://opencode.ai' : 'https://openrouter.ai') || url.pathname !== expectedPath || url.search)
+          throw new Error('Review request differs from its assigned provider endpoint');
         const body = await event.request.clone().json();
+        if (body.model !== run.model.slice(run.model.indexOf('/') + 1)) throw new Error('Review wire model differs from its assignment');
+        if (go) {
+          event.request.headers.set('x-opencode-session', event.sessionID);
+          event.request.headers.set('User-Agent', 'pingu-pre-pr-review/' + (ctx.app.version ?? 'unknown'));
+        }
         const outputLimit = body.max_tokens ?? body.max_completion_tokens;
         if (ceilings[run.model] && !(outputLimit > 0 && outputLimit <= budget.maxOutputTokens))
           throw new Error('Native output reserve was not applied to the tier-priced request');
@@ -253,7 +290,7 @@ export default function runtime(configPath) {
         const requestID = randomUUID();
         requests.set(event.request, { requestID, sessionID: event.sessionID, kind: event.kind });
         log(run, { event: 'request', requestID, sessionID: event.sessionID, model: run.model, effort: run.effort, kind: event.kind,
-          maxOutputTokens: outputLimit });
+          maxOutputTokens: outputLimit, provider: go ? 'opencode-go' : 'openrouter' });
       });
       await ctx.session.hook('http.response', async event => {
         const run = await owned(event.sessionID);

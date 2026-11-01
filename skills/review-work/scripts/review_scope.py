@@ -359,13 +359,18 @@ def route_for(manifest, categories, cross_boundary, areas=None):
     assigned = {model for model, _ in reviewers}
     escalations = {category: [pair for pair in profile['escalation'] if pair[0] not in assigned]
                    for category, profile in profiles.items()}
+    concerns = {category: {concern: [pair for pair in chain if pair[0] not in assigned]
+                           for concern, chain in profile['escalationByConcern'].items()}
+                for category, profile in profiles.items() if profile.get('escalationByConcern')}
     band = totals['code']['band']
     return {'decisionDate': POLICY['decisionDate'], 'category': primary, 'checklists': categories,
             'mixed': mixed, 'selectedCategories': selected, 'areas': list(groups.values()),
             'reviewers': reviewers, 'reviewerAssignments': assignments,
             'escalation': escalations[primary][0] if escalations[primary] else None,
             'escalationByCategory': escalations,
-            'integration': POLICY['integration']['model'] if cross_boundary and band in POLICY['integration']['codeBands'] else None,
+            'escalationByConcern': concerns,
+            'integration': None,
+            'integrationChecks': cross_boundary and band in POLICY['integration']['codeBands'],
             'integrationMode': POLICY['integration']['mode'],
             'roundCap': POLICY['roundCaps']['securityOrState' if set(POLICY['mixing']['protectedCategories']) & set(categories) else 'normal']}
 

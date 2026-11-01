@@ -86,9 +86,9 @@ those are its meaningful risks. No meaningful source is excluded merely for size
 
 Add `--cross-boundary-contract` only when the change alters a runtime/public
 contract across services or packages. With a large/very-large code band, this adds
-integration checks to the same two initial reviewers' briefs. Step medium is a
-focused escalation for an unresolved cross-boundary concern, not an automatic third
-initial reviewer. Pure documentation growth does not trigger it.
+integration checks to the same two initial reviewers' briefs. An unresolved concern
+uses its affected category's escalation chain; integration does not add another
+automatic reviewer. Pure documentation growth does not trigger it.
 
 ### Mixed categories
 
@@ -122,17 +122,25 @@ worktree-local loader and verify it is loaded in that exact OpenCode location.
 It supplies `pingu_review_source`, restricts source access to that reader and
 permits only the assigned execution/browser tools for runtime checks,
 removes ambient repository instruction text/attachments from model context, and
-captures OpenRouter response usage without saving headers or response prose.
+captures provider response usage without saving headers or response prose.
 This is an application guard, not an operating-system sandbox; configuration and
 other installed plugins remain trusted. Review metadata and transcripts before
 accepting coverage. A failed guard or unavailable plugin is an operational blocker.
 
 Discover T3 capabilities once before first delegation. Use `delegate_task`, role
 `review`, shared isolation (the parent worktree), with OpenCode as the runner and
-the exact policy `openrouter/...` model. Set `target.options.variant` explicitly.
-MiMo uses `thinking`; all other assignments use only `medium` or `high`.
-Never substitute GPT, free aliases, higher effort, or a different model silently.
-OpenRouter chooses its hosting provider; do not pin/order upstream hosts. Verify
+the exact policy model. Haiku uses `openrouter/anthropic/claude-haiku-5.5`;
+every other accepted model uses `opencode-go/...`. For a named effort, set
+`target.options.variant` explicitly. MiMo and Kimi K2.7 have no Go variant:
+record `default` and pass `target.options: {}` to clear inherited options rather
+than sending an unsupported `thinking` setting. Qwen uses `medium`; other named
+efforts remain as recorded by the policy. Verify the live catalogue's IDs,
+variants, tools and image capabilities before dispatch; new specialists need a
+small guarded trial before promotion. A trial is calibration, not source approval.
+Use only the policy allowlist: GLM-5.2, Google/Gemini models, Sonnet, Step, GPT and
+free aliases have no assignment, including fallbacks or auxiliary calls.
+Neither provider may silently replace the assigned model or endpoint.
+Do not pin/order upstream hosts. Verify
 the effective variant/settings and no unexpected auxiliary model calls. Unsupported
 settings or an unavailable assigned model are operational blockers, not approval.
 
@@ -213,11 +221,23 @@ dispute remaining after one focused evidence check, or unresolved uncertainty.
 Escalation gets the specific issue/range and evidence, not an automatic full rerun.
 Classify the finding by affected behaviour, then use that category's ordered
 `escalationByCategory` chain, skipping models already called on this revision.
-For example, a documentation issue in a UI/documentation mixture goes to GLM;
-a Blazor lifecycle issue goes to the UI chain (Kimi when Haiku already reviewed).
+For example, a documentation issue in a UI/documentation mixture goes to GLM.
+UI uses `escalationByConcern`: `visual` selects Kimi K2.7 Code for screenshots,
+rendered layout and browser presentation; `logic` selects Kimi K3.1 Pro for
+component lifecycle, events, navigation and application behaviour. These are
+alternative branches, not a sequence of two additional reviewers. A security or
+state concern in UI code uses that higher-risk category's chain.
 If one issue crosses categories, use the highest-risk applicable category's chain
 and include the interaction evidence. Record the category and skipped models.
 An exhausted chain/cap is a blocker, not approval; do not substitute another model.
+
+Reserve at most eight percentage points of the shared monthly Go allowance for
+new-specialist trials/escalations (Kimi K2.7 and Qwen Max); it is a ceiling, not a
+spend target or a separate model budget. Consult the actual Go usage meter before
+such a dispatch and retain the observed headroom in the run ledger. Respect the
+five-hour, weekly and monthly limits, preserving room for routine pairs. Missing
+meter access or exhausted headroom blocks that escalation, never supplies approval.
+Do not enable paid Extra Usage or add a non-Haiku OpenRouter fallback as a workaround.
 
 For each returning reviewer, use its last covered SHA as `--previous` and the
 original task base as `--base`. The next scope is previous SHA to current HEAD,
@@ -276,24 +296,50 @@ inference requests. For an ambiguous match, set `sessionID` only after verifying
 the exact marker, transport binding and owned terminal child. Each retried launch
 gets a fresh run ID/marker. Route/model/effort validation prevents substitutions;
 an intentional benchmark requires a recorded `benchmarkAuthorization` reason and
-explicit model-key/effort assignments. Preserve that exceptional grant in the PR.
+explicit model-key/effort assignments within the accepted provider/model allowlist.
+Preserve that exceptional grant in the PR.
 Capture every charged step/retry/compaction, deduplicate IDs,
 and detect unexpected auxiliary models. Do not double-count session totals and
 message totals. OpenCode 2 stores visible output separately from reasoning; add
 them once for its output total. OpenRouter completion tokens already include
 reasoning. Input totals include cache tokens, which are also shown separately.
 
-Use the runtime journal's OpenRouter `usage.cost` and generation IDs for actual
+Use the runtime journal's provider `usage.cost` and response IDs for actual
 billed totals. The collector requires a saved owned terminal T3 task and a terminal
 OpenCode session, so collection cannot silently cut off ongoing work. Serialize
 all ledger writes in the parent. OpenCode's catalogue estimate is separate and
 is never labelled billed spend. `--allow-estimate` can retain failed-run evidence
 when transport usage is unavailable; disclose that limitation in the PR. Missing
-usage is unavailable, never zero. Keep cost precision internally and round displayed
-model/round/grand totals to cents. Exclude implementation-agent and CI costs.
-When any run has only estimated or incomplete accounting, keep billed and estimate
-subtotals separate and omit a mixed grand total. Partial provider records remain
-evidence, never a complete billed total. Guard breaches still block coverage.
+usage is unavailable, never zero. Keep cost precision internally. Exclude
+implementation-agent and CI costs.
+For Go, collect `opencode.tokens` (input excludes cache; output includes reasoning),
+`billing_source`, `list_cost` and `allowance` alongside `usage.cost`. A complete
+covered receipt has $0 incremental cash, not missing usage. Preserve all raw
+receipts. In the report view, use one main `Cost USD` column for API cash plus
+Go allowance used / monthly weighted pool × monthly subscription fee. The current
+Go basis is $10/$60; 1% of the pool reports $0.10 and 90% reports $9. Leave unused
+allowance unallocated. Use `opencode.allowance`, never infer the weighted share
+from list prices or rounded console gauges. Balance-backed Extra Usage contributes
+its actual cash charge, without a second allocation for the same usage.
+
+`init` snapshots the policy's `goCostAllocation` into the ledger. Verify that basis
+against the subscribed plan and current weighted pool before first Go dispatch;
+retain it for historical rerenders. For an existing ledger, explicitly record a
+verified Go basis with `render --go-monthly-fee-usd 10 --go-monthly-allowance-usd 60`.
+A missing basis or different billing source leaves covered cost unavailable rather
+than zero. A changed plan needs its own verified basis; never silently apply Go's
+fee/pool to Go Plus. [Allowance semantics](https://opencode.ai/v2/docs/console/api/inference#cost)
+and [the shared weighting explanation](https://github.com/anomalyco/opencode/issues/54875)
+support the recorded basis.
+
+Keep model/token/timing/scope table structure for PRInspector. Reports containing
+Go use six decimal places for costs, so small model contributions remain visible;
+OpenRouter-only historical reports retain cents. Round and visible model/grand
+totals use unrounded values, labelled review cost rather than billed cash. Retain
+raw Go tables inside round details and a closed provider-audit panel after totals.
+Top-up fees and tax remain excluded. Keep estimates separate and missing/partial
+evidence explicit; a partial record is never a complete total. Guard breaches
+still block coverage. Rerendering costs changes no review verdict or covered range.
 
 Hand [observed proof](proof.md) to `create-pr` for `## Proof`, followed by manual
 `## Test changes` and the rendered `## AI review`. Keep the AI review heading,

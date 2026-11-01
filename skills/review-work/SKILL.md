@@ -1,6 +1,6 @@
 ---
 name: review-work
-description: Review completed work before PR publication with two scoped OpenRouter reviewers, observed proof, incremental fixes and per-model accounting. Use after ad hoc implementation or from delivery skills; stop at the review handoff.
+description: Review completed work before PR publication with two scoped T3/OpenCode reviewers, observed proof, incremental fixes and per-model accounting. Route Haiku through OpenRouter and other policy models through OpenCode Go; stop at the review handoff.
 ---
 
 # Review Work
@@ -56,7 +56,11 @@ round is sufficient; the procedure's caps and explicit blockers still apply.
 Return the final coverage receipt, observed proof, finding dispositions and
 rendered AI review report. Preserve full SHAs and model IDs in machine records;
 human-facing reports use short linked commits and model names without routing
-prefixes. Include per-round outcome/time and full/incremental scope, collapsed
+prefixes. Preserve the cost/token table layout; combine API charges and proportional
+Go subscription allocation using the recorded fee/monthly-allowance basis from
+[the accounting procedure](references/pre-pr-review.md#usage-and-pr-handoff).
+Retain raw receipts and distinguish allocation from extra cash charges.
+Include per-round outcome/time and full/incremental scope, collapsed
 round details, and visible per-model totals with honest accounting limitations.
 
 Stop at this handoff when invoked alone. A caller may continue through `create-pr`

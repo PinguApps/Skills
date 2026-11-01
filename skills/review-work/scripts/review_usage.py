@@ -108,7 +108,7 @@ def reported_usage(messages, expected_model, expected_effort=None):
                                         'id': message.get('modelID'), 'variant': message.get('variant')}
         if str(model.get('providerID', '')) + '/' + str(model.get('id', model.get('modelID', ''))) != expected_model:
             raise ValueError('Unexpected auxiliary model in review session: ' + str(model))
-        if expected_effort and model.get('variant') != expected_effort:
+        if expected_effort and (model.get('variant') or 'default') != expected_effort:
             raise ValueError('Unexpected review effort: ' + str(model))
         tokens = message.get('tokens')
         if tokens is None or message.get('cost') is None or (
@@ -131,8 +131,38 @@ def reported_usage(messages, expected_model, expected_effort=None):
 
 class IncompleteUsage(ValueError):
     def __init__(self, partial):
-        super().__init__('Incomplete OpenRouter billing evidence; retain journal and reconcile')
+        super().__init__('Incomplete provider billing evidence; retain journal and reconcile')
         self.partial = partial
+
+
+def amount(value, *, integer=False):
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError('Invalid provider usage number')
+    number = Decimal(str(value))
+    if not number.is_finite() or number < 0 or (integer and number != number.to_integral_value()):
+        raise ValueError('Invalid provider usage number')
+    return int(number) if integer else number
+
+
+def go_usage(value):
+    metadata = value['opencode']
+    source = metadata['billing_source']
+    if source not in ('go', 'go-plus', 'balance') or metadata.get('estimated'):
+        raise ValueError('Unexpected OpenCode Go billing source or estimate')
+    tokens = metadata['tokens']
+    counts = {key: amount(tokens[key], integer=True) for key in
+              ('input', 'output', 'reasoning', 'cache_read', 'cache_write_5m', 'cache_write_1h')}
+    charge = amount(value['cost'])
+    if source in ('go', 'go-plus') and charge:
+        raise ValueError('Covered Go usage unexpectedly reports a cash charge')
+    return {
+        'input': counts['input'] + counts['cache_read'] + counts['cache_write_5m'] + counts['cache_write_1h'],
+        'output': counts['output'], 'reasoning': counts['reasoning'],
+        'cacheRead': counts['cache_read'], 'cacheWrite': counts['cache_write_5m'] + counts['cache_write_1h'],
+        'costUSD': charge, 'listCostUSD': amount(metadata['list_cost']),
+        'allowanceUSD': amount(metadata['allowance']) if source in ('go', 'go-plus') else Decimal('0'),
+        'billingSource': source,
+    }
 
 
 def billed_usage(records, run, session_id):
@@ -169,6 +199,9 @@ def billed_usage(records, run, session_id):
         raise ValueError('Transport response has no matching physical request')
     totals = dict(input=0, output=0, reasoning=0, cacheRead=0, cacheWrite=0)
     cost = Decimal('0')
+    go = run['model'].startswith('opencode-go/')
+    list_cost, allowance = Decimal('0'), Decimal('0')
+    billing_sources = set()
     generation_ids, missing = set(), []
     peak_prompt, compaction_calls = 0, 0
     if not guards:
@@ -181,26 +214,47 @@ def billed_usage(records, run, session_id):
         # OpenCode cancels the stream after the final usage event. EOF is not
         # billing evidence; terminal task/session + every physical response is.
         if (request in capture_errors or not 200 <= responses.get(request, {}).get('status', 0) < 300 or
-                value.get('cost') is None or value.get('prompt_tokens') is None or
-                value.get('completion_tokens') is None or not item.get('generationID')):
+                value.get('cost') is None or not item.get('generationID')):
             missing.append(request)
             continue
         generation = item['generationID']
         if generation in generation_ids:
-            raise ValueError('Duplicate OpenRouter generation across physical requests; reconcile before summing')
+            raise ValueError('Duplicate provider generation across physical requests; reconcile before summing')
         generation_ids.add(generation)
-        totals['input'] += value['prompt_tokens']
-        peak_prompt = max(peak_prompt, value['prompt_tokens'])
+        if go:
+            try:
+                normalized = go_usage(value)
+            except KeyError:
+                missing.append(request)
+                continue
+            for key in totals:
+                totals[key] += normalized[key]
+            cost += normalized['costUSD']
+            list_cost += normalized['listCostUSD']
+            allowance += normalized['allowanceUSD']
+            billing_sources.add(normalized['billingSource'])
+            prompt = normalized['input']
+        else:
+            if value.get('prompt_tokens') is None or value.get('completion_tokens') is None:
+                missing.append(request)
+                continue
+            prompt = amount(value['prompt_tokens'], integer=True)
+            totals['input'] += prompt
+            totals['output'] += amount(value['completion_tokens'], integer=True)
+            totals['reasoning'] += amount(value.get('completion_tokens_details', {}).get('reasoning_tokens', 0), integer=True)
+            for field, key in [('cacheRead', 'cached_tokens'), ('cacheWrite', 'cache_write_tokens')]:
+                count = value.get('prompt_tokens_details', {}).get(key)
+                totals[field] = None if count is None or totals[field] is None else totals[field] + amount(count, integer=True)
+            cost += amount(value['cost'])
+        peak_prompt = max(peak_prompt, prompt)
         compaction_calls += requests[request].get('kind') == 'compaction'
-        totals['output'] += value['completion_tokens']
-        totals['reasoning'] += value.get('completion_tokens_details', {}).get('reasoning_tokens', 0)
-        for field, key in [('cacheRead', 'cached_tokens'), ('cacheWrite', 'cache_write_tokens')]:
-            amount = value.get('prompt_tokens_details', {}).get(key)
-            totals[field] = None if amount is None or totals[field] is None else totals[field] + amount
-        cost += Decimal(str(value['cost']))
-    result = {**totals, 'costUSD': str(cost), 'billed': not missing, 'source': 'OpenRouter response usage.cost',
+    result = {**totals, 'costUSD': str(cost), 'billed': not missing,
+            'source': ('OpenCode Go' if go else 'OpenRouter') + ' response usage.cost',
             'peakPromptTokens': peak_prompt, 'modelCalls': len(requests), 'compactionCalls': compaction_calls,
             'generationIDs': sorted(generation_ids), 'missingUsageMessageIDs': missing}
+    if go:
+        result['goUsage'] = {'listCostUSD': str(list_cost), 'allowanceUSD': str(allowance),
+                             'billingSources': sorted(billing_sources)}
     if missing:
         result['source'] = 'Partial provider evidence; full billed total unavailable'
         raise IncompleteUsage(result)
@@ -230,6 +284,9 @@ def validate_assignment(ledger, run):
     allowed = list(route['reviewers'])
     for chain in route.get('escalationByCategory', {}).values():
         allowed.extend(chain)
+    for concerns in route.get('escalationByConcern', {}).values():
+        for chain in concerns.values():
+            allowed.extend(chain)
     if route.get('escalation'):
         allowed.append(route['escalation'])
     if route.get('integration'):
@@ -242,8 +299,8 @@ def validate_assignment(ledger, run):
         raise ValueError('Model/effort is outside the recorded route or explicit benchmark authorization')
 
 
-def money(value):
-    return '$' + str(Decimal(str(value)).quantize(Decimal('.01'), rounding=ROUND_HALF_UP))
+def money(value, places=2):
+    return '$' + format(Decimal(str(value)).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP), f'.{places}f')
 
 
 def session_timing(session):
@@ -300,33 +357,92 @@ def review_type(run):
 
 def incomplete(run):
     usage = run.get('usage')
-    return usage is None or bool(usage.get('missingUsageMessageIDs')) or bool(run.get('accountingIncomplete'))
+    return usage is None or usage.get('costUSD') is None or bool(usage.get('missingUsageMessageIDs')) or bool(run.get('accountingIncomplete'))
 
 
-def totals_row(label, runs, include_estimates):
+def allocated_run(run, basis):
+    """Build the report view without rewriting authoritative cash receipts."""
+    captured = run.get('usage')
+    if not run['model'].startswith('opencode-go/') or not captured or not captured.get('billed'):
+        return run
+    go = captured.get('goUsage') or {}
+    sources = set(go.get('billingSources', []))
+    cost = amount(captured['costUSD'])
+    if not sources or sources - {'balance', (basis or {}).get('billingSource')} or go.get('allowanceUSD') is None:
+        return {**run, 'usage': {**captured, 'costUSD': None}}
+    if sources != {'balance'}:
+        if not basis:
+            return {**run, 'usage': {**captured, 'costUSD': None}}
+        fee, pool = amount(basis['monthlyFeeUSD']), amount(basis['monthlyAllowanceUSD'])
+        if pool == 0:
+            raise ValueError('Monthly Go allowance must be positive')
+        cost += amount(go['allowanceUSD']) / pool * fee
+    return {**run, 'usage': {**captured, 'costUSD': str(cost),
+                           'source': captured['source'] + '; Go fee allocated by monthly allowance share'}}
+
+
+def totals_row(label, runs, include_estimates, format_cost=money):
     values = []
     for key in ('input', 'cacheRead', 'cacheWrite', 'output'):
         known = [r['usage'][key] for r in runs if r.get('usage') and r['usage'].get(key) is not None]
         partial = len(known) != len(runs) or any(incomplete(r) for r in runs)
         values.append((f'{sum(known):,}' + (' (partial)' if partial else '')) if known else 'unavailable')
     for billed in ([True, False] if include_estimates else [True]):
-        evidence = [r['usage'] for r in runs if r.get('usage') and bool(r['usage'].get('billed')) == billed]
+        evidence = [r['usage'] for r in runs if r.get('usage') and r['usage'].get('costUSD') is not None and bool(r['usage'].get('billed')) == billed]
         if evidence:
-            values.append(money(sum((Decimal(u['costUSD']) for u in evidence), Decimal('0'))))
+            values.append(format_cost(sum((Decimal(u['costUSD']) for u in evidence), Decimal('0'))))
         else:
             values.append('—' if not billed and all(not incomplete(r) for r in runs) else 'unavailable')
     return '| ' + label + ' | ' + ' | '.join(values) + ' |'
 
 
+def go_table(runs):
+    go_runs = [r for r in runs if r['model'].startswith('opencode-go/')]
+    if not go_runs:
+        return []
+    lines = ['', 'Go subscription usage (not additional billed spend):', '',
+             '| Go model | List-price usage USD | Allowance usage USD |', '|---|---:|---:|']
+    groups = [(model_name(next(r for r in go_runs if r['model'] == model)),
+               [r for r in go_runs if r['model'] == model]) for model in dict.fromkeys(r['model'] for r in go_runs)]
+    for label, group in [*groups, ('**Total**', go_runs)]:
+        evidence = []
+        for run in group:
+            captured = run.get('usage') or {}
+            if captured.get('billed'):
+                evidence.append(captured.get('goUsage'))
+            else:
+                partial = (run.get('partialBilledUsage') or {}).get('goUsage')
+                # Empty accumulators are not an authoritative zero receipt.
+                evidence.append(partial if partial and partial.get('billingSources') else None)
+        values = []
+        for key in ('listCostUSD', 'allowanceUSD'):
+            known = [amount(u[key]) for u in evidence if u and u.get(key) is not None]
+            partial = len(known) != len(group) or any(incomplete(r) for r in group)
+            values.append(('$' + format(sum(known, Decimal('0')), '.6f') + (' (partial)' if partial else '')) if known else 'unavailable')
+        lines.append('| ' + label + ' | ' + ' | '.join(values) + ' |')
+    return lines + ['']
+
+
 def render(ledger):
     lines = ['## AI review', '', 'Merge policy: ' + ledger['mergePolicy'], '']
+    go = any(r['model'].startswith('opencode-go/') for r in ledger['runs'])
+    basis = ledger.get('goCostAllocation')
+    raw_runs = ledger['runs']
+    runs_view = [allocated_run(r, basis) for r in raw_runs]
+    format_cost = (lambda value: money(value, 6)) if go else money
+    if go:
+        if basis:
+            lines += [f"Cost basis: API cash charges + Go allowance used / ${cell(basis['monthlyAllowanceUSD'])} × ${cell(basis['monthlyFeeUSD'])} monthly fee.",
+                      'Go cost is subscription allocation, not an extra cash charge. Unused allowance stays unallocated.', '']
+        else:
+            lines += ['Go allocation basis unavailable; covered Go costs cannot be reported as zero.', '']
     url = repository_url(ledger.get('repositoryUrl'))
     billed_total, estimate_total = Decimal('0'), Decimal('0')
     billed_rows = 0
     unavailable = False
     estimated = False
-    for round_number, label in sorted(set((r['round'], r.get('roundLabel', str(r['round']))) for r in ledger['runs'])):
-        runs = [run for run in ledger['runs'] if (run['round'], run.get('roundLabel', str(run['round']))) == (round_number, label)]
+    for round_number, label in sorted(set((r['round'], r.get('roundLabel', str(r['round']))) for r in runs_view)):
+        runs = [run for run in runs_view if (run['round'], run.get('roundLabel', str(run['round']))) == (round_number, label)]
         lines += [f'### Round {label}', '',
                   '<details>', '<summary>Review details</summary>', '',
                   '| Model | Effort | Outcome | Time | Input total | Cache read | Cache write | Output total | Cost USD |',
@@ -341,7 +457,9 @@ def render(ledger):
             if usage is None:
                 lines.append(prefix + 'unavailable | unavailable | unavailable | unavailable | unavailable |')
                 continue
-            if usage.get('billed'):
+            if usage.get('costUSD') is None:
+                pass
+            elif usage.get('billed'):
                 round_billed_rows += 1
                 billed_subtotal += Decimal(usage['costUSD'])
             else:
@@ -349,7 +467,8 @@ def render(ledger):
                 estimate_subtotal += Decimal(usage['costUSD'])
             counts = ['unavailable' if usage.get(key) is None else f'{usage[key]:,}' for key in ('input', 'cacheRead', 'cacheWrite', 'output')]
             qualifier = '' if usage.get('billed') else ' estimate'
-            lines.append(prefix + ' | '.join(counts) + f" | {money(usage['costUSD'])}{qualifier} |")
+            displayed_cost = format_cost(usage['costUSD']) + qualifier if usage.get('costUSD') is not None else 'unavailable'
+            lines.append(prefix + ' | '.join(counts) + f" | {displayed_cost} |")
         billed_total += billed_subtotal
         billed_rows += round_billed_rows
         estimate_total += estimate_subtotal
@@ -357,26 +476,31 @@ def render(ledger):
         lines += [f'| {model_name(run)} | {review_type(run)} | {review_range(run, url)} |' for run in runs]
         sources = sorted({r['usage']['source'] for r in runs if r.get('usage')})
         lines += ['', 'Cost sources: ' + '; '.join(cell(source) for source in sources) + '.' if sources else 'Cost source: unavailable.', '',
-                  '**Round billed subtotal: ' + (money(billed_subtotal) if round_billed_rows else 'unavailable') + '**', '']
+                  ('**Round review cost subtotal: ' if go else '**Round billed subtotal: ') + (format_cost(billed_subtotal) if round_billed_rows else 'unavailable') + '**', '']
         if any(r.get('usage') and not r['usage'].get('billed') for r in runs):
-            lines += ['**Round estimate subtotal (not billed): ' + money(estimate_subtotal) + '**', '']
+            lines += ['**Round estimate subtotal (not billed): ' + format_cost(estimate_subtotal) + '**', '']
+        lines += go_table([r for r in raw_runs if (r['round'], r.get('roundLabel', str(r['round']))) == (round_number, label)])
         lines += ['</details>', '']
     lines += ['### Totals', '',
-              '| Model | Input total | Cache read | Cache write | Output total | Cost USD (billed) |' + (' Estimate USD (not billed) |' if estimated else ''),
+              '| Model | Input total | Cache read | Cache write | Output total | ' + ('Cost USD' if go else 'Cost USD (billed)') + ' |' + (' Estimate USD (not billed) |' if estimated else ''),
               '|---|---:|---:|---:|---:|---:|' + ('---:|' if estimated else '')]
-    models = dict.fromkeys(r['model'] for r in ledger['runs'])
+    models = dict.fromkeys(r['model'] for r in runs_view)
     for model in models:
-        runs = [r for r in ledger['runs'] if r['model'] == model]
-        lines.append(totals_row(model_name(runs[0]), runs, estimated))
-    lines += [totals_row('**Total**', ledger['runs'], estimated), '']
-    label = 'Recorded billed subtotal' if estimated or unavailable else 'Total billed review cost'
-    lines += ['**' + label + ': ' + (money(billed_total) if billed_rows else 'unavailable') + '**', '']
+        runs = [r for r in runs_view if r['model'] == model]
+        lines.append(totals_row(model_name(runs[0]), runs, estimated, format_cost))
+    lines += [totals_row('**Total**', runs_view, estimated, format_cost), '']
+    label = ('Recorded review cost subtotal' if estimated or unavailable else 'Total review cost') if go else ('Recorded billed subtotal' if estimated or unavailable else 'Total billed review cost')
+    lines += ['**' + label + ': ' + (format_cost(billed_total) if billed_rows else 'unavailable') + '**', '']
     if estimated:
-        lines += ['**Recorded estimate subtotal (not billed): ' + money(estimate_total) + '**', '']
+        lines += ['**Recorded estimate subtotal (not billed): ' + format_cost(estimate_total) + '**', '']
+    if go:
+        lines += ['<details>', '<summary>Provider accounting audit</summary>', '']
+        lines += go_table(raw_runs)
+        lines += ['Raw cash, list-price and allowance receipts remain unchanged in the ledger. Credit-purchase fees and tax are excluded.', '</details>', '']
     lines += [
               'Pre-PR sessions only. Input total includes cache reads/writes; output total includes reasoning exactly once.',
               'Time is session wall time, including tool steps and native compaction, excluding time queued before session creation.',
-              'Totals use unrounded costs; displayed dollars are rounded to cents. Partial token totals show known usage only.']
+              'Totals use unrounded costs; displayed dollars use ' + ('six decimals' if go else 'cents') + '. Partial token totals show known usage only.']
     if not url:
         lines += ['', 'Repository URL unavailable; short ranges are shown without explicit comparison links.']
     if unavailable:
@@ -403,6 +527,8 @@ def main():
     output = sub.add_parser('render')
     output.add_argument('--output', required=True)
     output.add_argument('--repository-url', help='Repository web URL when rendering a legacy ledger')
+    output.add_argument('--go-monthly-fee-usd', help='Explicitly record the Go allocation fee on an existing ledger')
+    output.add_argument('--go-monthly-allowance-usd', help='Weighted monthly Go pool in receipt allowance dollars')
     args = parser.parse_args()
     if args.command == 'init':
         if Path(args.ledger).exists():
@@ -416,7 +542,8 @@ def main():
             raise ValueError('Invalid route cap')
         save(args.ledger, {'repo': str(Path(args.repo).resolve()), 'mergePolicy': args.merge_policy,
                            'repositoryUrl': repository_url(args.repository_url),
-                           'roundCap': cap, 'route': scope['route'], 'runs': []})
+                           'roundCap': cap, 'route': scope['route'], 'runs': [],
+                           'goCostAllocation': POLICY['goCostAllocation']})
         return
     ledger = load(args.ledger)
     if args.command == 'record':
@@ -465,6 +592,14 @@ def main():
         save(args.ledger, ledger)
         print(json.dumps({'runID': run['id'], 'sessionID': session['id'], 'usage': run['usage']}, indent=2))
     else:
+        if bool(args.go_monthly_fee_usd) != bool(args.go_monthly_allowance_usd):
+            raise ValueError('Provide both Go allocation amounts together')
+        if args.go_monthly_fee_usd:
+            fee, pool = amount(args.go_monthly_fee_usd), amount(args.go_monthly_allowance_usd)
+            if pool == 0:
+                raise ValueError('Monthly Go allowance must be positive')
+            ledger['goCostAllocation'] = {'monthlyFeeUSD': str(fee), 'monthlyAllowanceUSD': str(pool), 'billingSource': 'go'}
+            save(args.ledger, ledger)
         if args.repository_url:
             ledger['repositoryUrl'] = repository_url(args.repository_url)
         Path(args.output).write_text(render(ledger), encoding='utf-8')

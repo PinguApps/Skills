@@ -1,6 +1,6 @@
 ---
 name: complete-work
-description: Implement supplied work in an isolated branch/worktree, commit coherent chunks, verify and review it through OpenRouter before opening a PR, then finish CI/feedback and merge unless human review or a manual handoff was requested.
+description: Implement supplied work in an isolated branch/worktree, commit coherent chunks, verify and review it with the shared model policy before opening a PR, then finish CI/feedback and merge unless human review or a manual handoff was requested.
 ---
 
 # Complete Work
