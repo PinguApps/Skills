@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import runtime, { streamUsage, pricingCeiling } from '../scripts/review-runtime.mjs';
-const pricingGuard = JSON.parse(readFileSync(new URL('../references/review-policy.json', import.meta.url), 'utf8')).pricingGuard;
+const {pricingGuard, models: modelPolicy} = JSON.parse(readFileSync(new URL('../references/review-policy.json', import.meta.url), 'utf8'));
 
 test('pricing bumps lower effective input limit; flat prices keep native window', () => {
   const model = {limit: {context: 1_000_000}, cost: [
@@ -57,13 +57,93 @@ test('provider usage survives consumer cancellation; malformed capture leaves re
   assert.equal(await streamUsage(new Response(oversized), value => errors.push(value)).text(), oversized);
 });
 
+test('Go Anthropic stream merges usage without retaining content or arbitrary metadata', async () => {
+  const receipt = {billing_source: 'go', list_cost: .02, allowance: .08,
+    tokens: {input: 10, output: 7, reasoning: 3, cache_read: 30, cache_write_5m: 0, cache_write_1h: 0},
+    private: 'do not retain'};
+  const chunks = [
+    {type: 'message_start', message: {id: 'msg-go', usage: {input_tokens: 10}}},
+    {type: 'content_block_delta', delta: {text: 'private response'}},
+    {type: 'message_delta', usage: {output_tokens: 7, cost: 0, opencode: receipt}},
+    {type: 'message_stop'},
+  ];
+  const wire = chunks.map(value => 'data: ' + JSON.stringify(value) + '\n\n').join('');
+  const records = [];
+  assert.equal(await streamUsage(new Response(wire, {headers: {'content-type': 'text/event-stream'}}), r => records.push(r)).text(), wire);
+  const captured = records.find(r => r.event === 'usage');
+  assert.equal(captured.generationID, 'msg-go');
+  assert.equal(captured.usage.input_tokens, 10);
+  assert.equal(captured.usage.cost, 0);
+  assert.equal(captured.usage.opencode.tokens.output, 7);
+  assert.ok(!JSON.stringify(records).includes('private'));
+});
+
+test('assigned routes reject provider fallback, alternate models and forbidden models', async () => {
+  const state = mkdtempSync(join(tmpdir(), 'review-runtime-test-'));
+  try {
+    const run = {id: 'go', marker: 'Review-Run-ID: go', model: 'opencode-go/mimo-v2.6-flash', effort: 'default'};
+    const config = join(state, 'runtime.json');
+    writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, runs: [run]}));
+    const hooks = new Map();
+    await runtime(config).setup({app: {version: 'test'},
+      model: {transform: async cb => cb({list: () => []}), list: async () => []},
+      session: {hook: async (name, cb) => hooks.set(name, cb)},
+      tool: {transform: async cb => cb({add() {}}), hook: async () => {}, list: async () => []}});
+    await hooks.get('prompt')({sessionID: 'session', prompt: {text: run.marker}});
+    const event = {sessionID: 'session', kind: 'primary', model: {providerID: 'opencode-go', id: 'mimo-v2.6-flash'}};
+    const request = (url, id = 'mimo-v2.6-flash') => new Request(url, {method: 'POST', body: JSON.stringify({model: id})});
+    for (const url of ['https://openrouter.ai/api/v1/chat/completions', 'http://opencode.ai/inference/go/openai/v1/chat/completions',
+      'https://opencode.ai/inference/openai/v1/chat/completions', 'https://opencode.ai/inference/go/openai/v1/chat/completions?fallback=1']) {
+      await assert.rejects(hooks.get('http.request')({...event, request: request(url)}), /provider endpoint/);
+    }
+    const url = 'https://opencode.ai/inference/go/openai/v1/chat/completions';
+    await assert.rejects(hooks.get('http.request')({...event, request: request(url, 'gemini-4-argon')}), /wire model/);
+    const good = request(url);
+    await hooks.get('http.request')({...event, request: good});
+    assert.equal(good.headers.get('x-opencode-session'), 'session');
+    assert.equal(good.headers.get('user-agent'), 'pingu-pre-pr-review/test');
+    // Explicit but unsupported variants must not masquerade as the provider default.
+    await assert.rejects(hooks.get('http.request')({...event, model: {...event.model, variant: 'thinking'}, request: request(url)}), /recorded assignment/);
+    for (const model of ['opencode-go/gemini-4-argon', 'opencode-go/glm-5.2', 'opencode-go/claude-haiku-5-5', 'openrouter/z-ai/glm-5.3-flash']) {
+      writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, runs: [{...run, model}]}));
+      await assert.rejects(hooks.get('http.request')({...event, request: request(url)}), /accepted model\/provider policy/);
+    }
+  } finally { rmSync(state, {recursive: true, force: true}); }
+});
+
+test('Go Qwen uses Messages and retains its price reserve when the catalogue omits the tier', async () => {
+  const state = mkdtempSync(join(tmpdir(), 'review-runtime-test-'));
+  try {
+    const run = {id: 'qwen', marker: 'Review-Run-ID: qwen', model: 'opencode-go/qwen3.8-max', effort: 'medium'};
+    const config = join(state, 'runtime.json');
+    writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, runs: [run]}));
+    const hooks = new Map(); let transformed;
+    await runtime(config).setup({app: {version: 'test'},
+      model: {transform: async cb => cb({list: () => [{providerID: 'opencode-go', id: 'qwen3.8-max',
+        limit: {context: 1_000_000}, cost: [{input: 2, output: 6}]}],
+        update: (provider, id, cb) => { transformed = {limit: {}}; cb(transformed); }}), list: async () => []},
+      session: {hook: async (name, cb) => hooks.set(name, cb)},
+      tool: {transform: async cb => cb({add() {}}), hook: async () => {}, list: async () => []}});
+    assert.equal(transformed.limit.input, 140_000);
+    await hooks.get('prompt')({sessionID: 'session', prompt: {text: run.marker}});
+    const event = {sessionID: 'session', kind: 'primary', model: {providerID: 'opencode-go', id: 'qwen3.8-max', variant: 'medium'}};
+    const wire = tokens => new Request('https://opencode.ai/inference/go/anthropic/v1/messages',
+      {method: 'POST', body: JSON.stringify({model: 'qwen3.8-max', max_tokens: tokens})});
+    await assert.rejects(hooks.get('http.request')({...event, request: wire(32000)}), /output reserve/);
+    await hooks.get('http.request')({...event, request: wire(8192)});
+  } finally {
+    assert.ok(state.startsWith(join(tmpdir(), 'review-runtime-test-')));
+    rmSync(state, {recursive: true, force: true});
+  }
+});
+
 test('registered review markers fail closed and overlapping requests keep exact correlation', async () => {
   const state = mkdtempSync(join(tmpdir(), 'review-runtime-test-'));
   try {
     const run = {id: 'owned', marker: 'Review-Run-ID: valid', title: 'R2: GLM',
-      model: 'openrouter/z-ai/glm-5.3-flash', effort: 'high'};
+      model: 'opencode-go/glm-5.3-flash', effort: 'high'};
     const config = join(state, 'runtime.json');
-    writeFileSync(config, JSON.stringify({state, pricingGuard, models: ['openrouter/anthropic/claude-haiku-5.5'], runs: [run]}));
+    writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, models: ['openrouter/anthropic/claude-haiku-5.5'], runs: [run]}));
     const hooks = new Map();
     const protectedModels = [];
     await runtime(config).setup({app: {version: 'test'},
@@ -80,12 +160,12 @@ test('registered review markers fail closed and overlapping requests keep exact 
     const prompt = {sessionID: 'session', prompt: {text: run.marker, files: ['ambient'], agents: ['ambient'], skills: ['ambient']}};
     await hooks.get('prompt')(prompt);
     assert.deepEqual(prompt.prompt.files, []);
-    const model = {providerID: 'openrouter', id: 'z-ai/glm-5.3-flash', variant: 'high'};
+    const model = {providerID: 'opencode-go', id: 'glm-5.3-flash', variant: 'high'};
     const guard = {sessionID: 'session', model, tools: {pingu_review_source: {}, read: {}}};
     await hooks.get('context')(guard);
     await hooks.get('compaction')({sessionID: 'session', model});
     const title = {sessionID: 'session'}; await hooks.get('title')(title); assert.equal(title.result, run.title);
-    const request = body => new Request('https://openrouter.ai/api/v1/chat/completions', {method: 'POST', body: JSON.stringify(body)});
+    const request = body => new Request('https://opencode.ai/inference/go/openai/v1/chat/completions', {method: 'POST', body: JSON.stringify({model: 'glm-5.3-flash', ...body})});
     await assert.rejects(hooks.get('http.request')({sessionID: 'session', model, kind: 'primary', request: request({provider: {only: ['pinned']}})}), /unpinned/);
     await assert.rejects(hooks.get('http.request')({sessionID: 'session', model, kind: 'unknown', request: request({})}), /Unknown review request kind/);
     const first = {sessionID: 'session', model, kind: 'primary', request: request({})};
@@ -113,7 +193,7 @@ test('review execution tools are scoped to their assignment; raw source access s
     const run = {id: 'run', marker: 'Review-Run-ID: opaque', title: 'R1: Haiku',
       model: 'openrouter/anthropic/claude-haiku-5.5', effort: 'high', executionTools: ['shell', 'browser']};
     const config = join(state, 'runtime.json');
-    writeFileSync(config, JSON.stringify({state, pricingGuard, runs: [run]}));
+    writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, runs: [run]}));
     const hooks = new Map();
     let sourceTool;
     const executionOptions = [];
@@ -136,7 +216,7 @@ test('review execution tools are scoped to their assignment; raw source access s
     await hooks.get('tool.execute.before')({sessionID: 'owned', tool: 'browser'});
     await assert.rejects(hooks.get('tool.execute.before')({sessionID: 'owned', tool: 'read'}), /only use/);
     await assert.rejects(hooks.get('context')({...event, tools: {pingu_review_source: {}, shell: {}}}), /unavailable/);
-    writeFileSync(config, JSON.stringify({state, pricingGuard, runs: [{...run, executionTools: []}]}));
+    writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, runs: [{...run, executionTools: []}]}));
     await assert.rejects(hooks.get('tool.execute.before')({sessionID: 'owned', tool: 'shell'}), /only use/);
     const unrelated = {...event, sessionID: 'other', tools: {shell: {}}};
     await hooks.get('context')(unrelated);
@@ -151,7 +231,7 @@ test('tier reserve limits output and source bursts while the contract survives n
     const run = {id: 'tiered', marker: 'Review-Run-ID: tiered', model: 'openrouter/anthropic/claude-haiku-5.5',
       effort: 'high', head: 'head', from: 'from', base: 'base', reviewContract: 'G01 and G22 must remain in the review contract.'};
     const config = join(state, 'runtime.json');
-    writeFileSync(config, JSON.stringify({state, repo: state, helper: 'unused-reader.py', python: join(state, 'missing-python.exe'), pricingGuard, runs: [run]}));
+    writeFileSync(config, JSON.stringify({state, repo: state, helper: 'unused-reader.py', python: join(state, 'missing-python.exe'), pricingGuard, modelPolicy, runs: [run]}));
     writeFileSync(join(state, 'tiered.transport.jsonl'), JSON.stringify({event: 'source', operation: 'diff',
       offset: 12000, nextOffset: 24000, complete: false}) + '\n');
     const hooks = new Map(); let source;
@@ -178,7 +258,7 @@ test('tier reserve limits output and source bursts while the contract survives n
         'Only compaction needs changing progress metadata; primary prefixes remain stable for caching');
       if (hook === 'compaction') assert.ok(systemText.includes('"nextOffset":24000'), 'Native summaries receive durable paging cursors');
     }
-    const native = body => new Request('https://openrouter.ai/api/v1/chat/completions', {method: 'POST', body: JSON.stringify(body)});
+    const native = body => new Request('https://openrouter.ai/api/v1/chat/completions', {method: 'POST', body: JSON.stringify({model: 'anthropic/claude-haiku-5.5', ...body})});
     await assert.rejects(hooks.get('http.request')({...request, request: native({max_tokens: 32000})}), /output reserve/);
     await hooks.get('http.request')({...request, request: native({max_tokens: 8192})});
     const first = source.execute({operation: 'search', pattern: 'needle', path: 'scope/file.py'}, {sessionID: 'session'}).catch(error => error);

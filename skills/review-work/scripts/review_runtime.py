@@ -59,6 +59,7 @@ def main():
     config = {'repo': str(repo), 'state': str(state), 'python': sys.executable,
               'helper': str(scripts / 'review_scope.py'), 'runs': ledger['runs'],
               'pricingGuard': policy['pricingGuard'],
+              'modelPolicy': policy['models'],
               'models': [m['id'] for m in policy['models'].values()]}
     digest = hashlib.sha256()
     for file in (scripts / 'review-runtime.mjs', scripts / 'review_scope.py', refs / 'review-policy.json'):
@@ -69,6 +70,9 @@ def main():
                 raise ValueError('Runtime run requires ' + key)
         if not re.fullmatch(r'Review-Run-ID: \S+', run['marker']):
             raise ValueError('marker must be a complete Review-Run-ID: <opaque> line')
+        model = next((m for m in policy['models'].values() if m['id'] == run['model']), None)
+        if not model or run['effort'] not in model['efforts']:
+            raise ValueError('Model/provider/effort is outside the accepted review policy')
         execution_tools = run.get('executionTools', [])
         if (not isinstance(execution_tools, list) or
                 any(not isinstance(tool, str) or not tool.strip() or tool == 'pingu_review_source'

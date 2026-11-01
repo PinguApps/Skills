@@ -162,11 +162,14 @@ class ReviewScopeTests(unittest.TestCase):
                                'documentation': {'files': 0, 'lines': 0, 'band': 'none'}}}
         route = review.route_for(manifest, ['ui', 'security'], True)
         self.assertEqual('security', route['category'])
-        self.assertEqual([['haiku', 'high'], ['mimo', 'thinking']], route['reviewers'])
+        self.assertEqual([['haiku', 'high'], ['mimo', 'default']], route['reviewers'])
         self.assertEqual(5, route['roundCap'])
         self.assertIsNone(route['integration'])
         manifest['totals']['code'].update(files=90, lines=4200, band='large')
-        self.assertEqual(['step', 'medium'], review.route_for(manifest, ['compatibility'], True)['integration'])
+        large = review.route_for(manifest, ['compatibility'], True)
+        self.assertTrue(large['integrationChecks'])
+        self.assertIsNone(large['integration'])
+        self.assertEqual([['kimi-code', 'default'], ['qwen', 'medium']], large['escalationByCategory']['compatibility'])
 
     def test_mixed_route_survives_incremental_and_batch_scopes(self):
         self.write('src/Component.razor', 'component\n' * 400)
@@ -224,16 +227,16 @@ class ReviewRoutingTests(unittest.TestCase):
         self.assertTrue(route['mixed'])
         self.assertEqual([['minimax', 'medium'], ['haiku', 'medium']], route['reviewers'])
         self.assertTrue(all(a['coverage'] == 'full' for a in route['reviewerAssignments']))
-        # Haiku has already reviewed, so a UI escalation must move to Kimi.
-        self.assertEqual([['kimi', 'high']], route['escalationByCategory']['ui'])
-        self.assertEqual([['glm', 'high'], ['mimo', 'thinking']], route['escalationByCategory']['documentation'])
+        self.assertEqual([], route['escalationByCategory']['ui'])
+        self.assertEqual({'visual': [['kimi-code', 'default']], 'logic': [['kimi', 'high']]}, route['escalationByConcern']['ui'])
+        self.assertEqual([['glm', 'high'], ['mimo', 'default']], route['escalationByCategory']['documentation'])
         self.assertEqual(2, sum(len(a['paths']) for a in route['areas']))
 
     def test_token_documentation_does_not_replace_a_ui_reviewer(self):
         manifest = self.manifest(('src/Form.razor', 'code', 400), ('docs/note.md', 'documentation', 10))
         route = review.route_for(manifest, ['ui'], False, ['documentation=docs'])
         self.assertFalse(route['mixed'])
-        self.assertEqual([['mimo', 'thinking'], ['minimax', 'medium']], route['reviewers'])
+        self.assertEqual([['mimo', 'default'], ['minimax', 'medium']], route['reviewers'])
 
     def test_protected_risk_cannot_be_diluted_by_two_larger_areas(self):
         manifest = self.manifest(('auth.cs', 'code', 5), ('src/Form.razor', 'code', 400),
@@ -274,7 +277,7 @@ class ReviewRoutingTests(unittest.TestCase):
         manifest = self.manifest(('src/App.cs', 'code', 5000))
         route = review.route_for(manifest, ['general'], True)
         self.assertEqual([['deepseek', 'high'], ['glm', 'high']], route['reviewers'])
-        self.assertEqual('escalation', route['integrationMode'])
+        self.assertEqual('category', route['integrationMode'])
         # Two categories can name the same lead; the other assigned model is used.
         routes = json.loads(json.dumps(review.POLICY['routes']))
         next(r for r in routes if r['category'] == 'compatibility')['lead'] = 'deepseek'

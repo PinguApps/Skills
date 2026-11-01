@@ -8,6 +8,79 @@ pre-PR model reviews and accounting; delivery skills call the same process.
 PRs keep proof separate from manual tests, with collapsed round details and
 visible per-model totals. Standalone review stops before push/PR/merge.
 
+## Review model decision — 2026-11-01
+
+Use OpenCode through T3 for every review. **Haiku uses OpenRouter; every other
+accepted reviewer uses OpenCode Go.** The executable source of truth is
+[review-policy.json](skills/review-work/references/review-policy.json).
+Keep exactly two distinct initial reviewers covering the complete included diff;
+use additional models only for a concrete unresolved concern. No GLM-5.2,
+Google/Gemini model, Sonnet, Step, GPT or free alias has an assignment or fallback.
+
+Names below are abbreviated: DeepSeek is V4.1 Flash, MiMo is V2.6 Flash, GLM is
+5.3 Flash, MiniMax is M3.1 Flash, Haiku is 5.5, Kimi Code is K2.7 Code, Kimi Pro is
+K3.1 Pro and Qwen is 3.8 Max. Go uses its published DeepSeek ID without OpenRouter's
+`1017` suffix; verify the live catalogue rather than assuming identical revisions.
+
+| Category | Scope | Initial reviewers | Conditional escalation sequence |
+| --- | --- | --- | --- |
+| Agent policy/skills/tool permissions | Every size | Haiku high + GLM high | Kimi Code default, then Qwen medium |
+| Compatibility/APIs/dependencies/builds/CI/deployment | Small/standard code | DeepSeek high + MiMo default | GLM high, then Qwen medium |
+| Compatibility/APIs/dependencies/builds/CI/deployment | Large/very large code | MiMo default + GLM high | Kimi Code default, then Qwen medium |
+| Documentation | Small/standard | DeepSeek high + Haiku medium | GLM high, then MiMo default |
+| Documentation | Large | Haiku medium + GLM high | MiMo default |
+| General implementation | Small/standard code | DeepSeek high + MiMo default | Kimi Code default, then Qwen medium |
+| General implementation | Large/very large code | DeepSeek high + GLM high | Kimi Code default, then Qwen medium |
+| Security/auth/permissions/secrets | Small/standard code | Haiku high + MiMo default | GLM high, then Qwen medium |
+| Security/auth/permissions/secrets | Large/very large code | Haiku high + MiniMax high | GLM high, then Qwen medium |
+| State/persistence/migrations/concurrency/retries | Every size | DeepSeek high + MiniMax high | Kimi Code default, then Kimi Pro high |
+| UI/Blazor/navigation/forms/accessibility | Every size | MiMo default + MiniMax medium | Visual: Kimi Code default; logic: Kimi Pro high |
+
+MiMo and Kimi Code expose no selectable Go variant: `default` means clear inherited
+options, not disable reasoning or invent a `thinking` variant. The other named
+efforts above are explicit. Catalogue support was checked with OpenCode 2.2.0.
+Kimi Code and Qwen are new specialist assignments: run a small guarded trial before
+their first live escalation, including image handling for Kimi's visual branch.
+Vendor descriptions and token-price comparisons do not prove review quality.
+
+Escalations use the finding's affected category and skip models already used on
+that revision. UI visual and logic are alternative branches, not two extra
+reviewers. Cross-boundary contracts receive integration checks from the same
+initial pair and use the relevant category's escalation chain. Existing separate
+code/documentation size bands, area-weighted mixtures, protected security/state
+pairs, incremental coverage and three/five-round caps remain in force. Category
+leads remain Haiku for security/documentation, DeepSeek for state/general, MiMo
+for compatibility, GLM for agent policy and MiniMax for UI.
+
+### Usage and reporting
+
+Keep the PR report's round headings, closed details, timing, scope tables and
+visible per-model token/cash totals. Both providers' response receipts supply
+actual charges. Covered Go calls report $0 incremental cash; separate Go tables
+show list-price usage and actual shared-allowance meter dollars. Do not label
+subscription usage as billed spend or add the monthly fee to every PR. Preserve
+estimates and unavailable evidence honestly. The fixed fee, top-up fees and tax
+remain outside per-review charges; PRInspector can still parse the existing tables.
+
+The 30–31 October sample had 48 reviewed PRs and 117 reviewer runs. Replaying its
+tokens/caching across 30 active days projects $10 Go + $18.90 Haiku + $1.04
+OpenRouter credit-purchase fee, **about $29.94/month before tax**, versus $59.82
+for all-OpenRouter usage. Routine Go use projects to 75–88% of its monthly pool,
+depending on DeepSeek peak pricing. At 20 active days the hybrid estimate is $23.29.
+These are forecasts from partial published accounting, not a spending guarantee
+or evidence of equivalent behaviour across providers.
+
+Reserve at most eight additional percentage points of shared monthly Go allowance
+for new-specialist trials/escalations, not eight points per model. Consult actual
+usage/headroom and all three quota windows before dispatch. Never enable Extra
+Usage or silently fall back to non-Haiku OpenRouter calls. Unavailable quota blocks
+an unsettled review; it never supplies approval. Future runs reassess actual token
+consumption, valid findings, false positives, guard compliance and latency before
+promoting new defaults. The original measured decision is retained below.
+
+<details>
+<summary>Historical review model decision — 2026-10-28 (superseded)</summary>
+
 ## Review model decision — 2026-10-28
 
 This dated decision records the review mix, reasons and cost baseline for future
@@ -157,6 +230,8 @@ Update the policy, routing tests and README together after the new mix is agreed
 Preserve this dated matrix, measurements and rationale as a historical decision
 when documenting its replacement; do not erase the comparison baseline.
 
+</details>
+
 ## Skills
 
 ### [complete-work](skills/complete-work/)
@@ -170,7 +245,7 @@ The skill:
 - Implements the task with incremental commits and relevant verification.
 - Uses root and nested `.pragentignore` rules before reading review content.
 - Counts documentation (including JSON) separately from code and assigns the
-  deterministic OpenRouter reviewer pair in its shared review policy.
+  deterministic reviewer pair and provider in its shared review policy.
 - Owns fresh T3/OpenCode reviewer children, incremental rechecks and cleanup.
 - Records tokens and costs per review round in the PR body.
 - Opens the PR only after review coverage is satisfied, then uses `finish-pr`

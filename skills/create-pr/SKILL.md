@@ -61,6 +61,11 @@ Read and apply [review context](references/review-context.md) to preserve requir
 
 Include literal `## Proof` using [review-work's proof record](../review-work/references/proof.md), followed by the caller's `## Test changes` handoff and `## AI review` rendered from its ledger. Keep the AI review heading, merge policy, round headings and totals visible; each round's contents go inside a closed `<details>` panel. Put model name (without routing/company path), effort, verdict, elapsed time, tokens and cost in the round table. A separate scope table states **Full review** or **Incremental review** and a linked short-SHA range. The totals table groups every model across rounds and includes a summed total row. Keep estimates separate from billed spend, and missing evidence explicit. Include exclusion provenance and material limitations without transcripts. Use short linked commit hashes throughout the PR body, outside code spans; machine records retain full identities. Preserve historical ranges when updating a published PR; later fixes are not retrospectively AI-reviewed.
 
+Preserve review-work's separate Go subscription-usage tables when present. The
+existing billed-cost columns remain actual cash charges; covered Go calls can be
+zero while their list-price and shared-allowance usage remain visible. Do not
+relabel those figures billed spend or allocate the monthly fee to each PR.
+
 ## 3. Create and verify the PR
 
 Review the title and completed body against the final diff, template, checkbox selections, and caller requirements, including the Linear ticket prefix, user story, review receipt, usage summary and merge policy. Recheck the new PR's receipt against the published head immediately before submission. For every create or body edit, read and follow [Write and verify PR bodies](references/pr-body.md), using its shared helper to normalize line endings, write UTF-8 with translation disabled, and compare the saved GitHub body exactly. Keep consecutive checkboxes consecutive unless the template or user requests blank lines.

@@ -118,6 +118,61 @@ class UsageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'different review session'):
             usage.collect_usage(run, [{'event': 'bound', 'sessionID': 'foreign'}], 'session', estimate, True)
 
+    def test_go_cash_list_price_and_allowance_are_separate_for_both_protocols(self):
+        run = {'model': 'opencode-go/glm-5.3-flash', 'effort': 'high'}
+        common = {'requestID': 'call', 'sessionID': 'session', **run}
+        value = {'cost': 0, 'opencode': {'billing_source': 'go', 'list_cost': .02, 'allowance': .02,
+            'tokens': {'input': 100, 'cache_read': 600, 'cache_write_5m': 10, 'cache_write_1h': 20,
+                       'output': 40, 'reasoning': 25}}}
+        records = [{'event': 'guard', 'tools': ['pingu_review_source']},
+                   {**common, 'event': 'request', 'kind': 'primary'},
+                   {**common, 'event': 'response', 'status': 200},
+                   {**common, 'event': 'usage', 'generationID': 'go-id', 'usage': value}]
+        # Go's own token receipt has the same semantics for chat and Anthropic.
+        for native in ({'prompt_tokens': 730, 'completion_tokens': 40}, {'input_tokens': 100, 'output_tokens': 40}):
+            result = usage.billed_usage([*records[:-1], {**records[-1], 'usage': {**native, **value}}], run, 'session')
+            self.assertEqual((730, 40, 25, 600, 30), tuple(result[k] for k in ('input', 'output', 'reasoning', 'cacheRead', 'cacheWrite')))
+            self.assertTrue(result['billed'])
+            self.assertEqual('0', result['costUSD'])
+            self.assertEqual({'listCostUSD': '0.02', 'allowanceUSD': '0.02', 'billingSources': ['go']}, result['goUsage'])
+        for key in ('tokens', 'list_cost', 'allowance'):
+            broken = {**value, 'opencode': {k: v for k, v in value['opencode'].items() if k != key}}
+            with self.assertRaises(usage.IncompleteUsage):
+                usage.billed_usage([*records[:-1], {**records[-1], 'usage': broken}], run, 'session')
+        for patch in ({'billing_source': 'byok'}, {'estimated': True}, {'allowance': -1}):
+            broken = {**value, 'opencode': {**value['opencode'], **patch}}
+            with self.assertRaises(ValueError):
+                usage.billed_usage([*records[:-1], {**records[-1], 'usage': broken}], run, 'session')
+        extra = {**value, 'cost': .02, 'opencode': {**value['opencode'], 'billing_source': 'balance'}}
+        result = usage.billed_usage([*records[:-1], {**records[-1], 'usage': extra}], run, 'session')
+        self.assertEqual('0.02', result['costUSD'])
+        self.assertEqual('0', result['goUsage']['allowanceUSD'])
+
+    def test_go_report_keeps_existing_cash_tables_and_exposes_subscription_usage(self):
+        common = {'round': 1, 'effort': 'high', 'base': 'a' * 40, 'from': 'a' * 40, 'head': 'b' * 40}
+        counts = {'input': 100, 'cacheRead': 60, 'cacheWrite': 0, 'output': 20, 'billed': True, 'source': 'provider'}
+        text = usage.render({'mergePolicy': 'manual', 'runs': [
+            {**common, 'model': 'openrouter/anthropic/claude-haiku-5.5', 'usage': {**counts, 'costUSD': '.03'}},
+            {**common, 'model': 'opencode-go/glm-5.3-flash', 'usage': {**counts, 'costUSD': '0',
+                'goUsage': {'listCostUSD': '.02', 'allowanceUSD': '.08', 'billingSources': ['go']}}}]})
+        self.assertIn('| glm-5.3-flash | 100 | 60 | 0 | 20 | $0.00 |', text)
+        self.assertIn('| **Total** | 200 | 120 | 0 | 40 | $0.03 |', text)
+        self.assertIn('| glm-5.3-flash | $0.020000 | $0.080000 |', text)
+        self.assertIn('Total billed review cost: $0.03', text)
+        self.assertNotIn('Total billed review cost: $0.05', text)
+        self.assertNotIn('Accounting incomplete', text)
+
+    def test_default_effort_and_ui_concern_assignments_are_validated(self):
+        ledger = {'runs': [], 'route': {'reviewers': [['haiku', 'high']],
+            'escalationByConcern': {'ui': {'visual': [['kimi-code', 'default']], 'logic': [['kimi', 'high']]}}}}
+        run = {'id': 'one', 'marker': 'Review-Run-ID: visual', 'model': 'opencode-go/kimi-k2.7-code', 'effort': 'default'}
+        usage.validate_assignment(ledger, run)
+        message = self.message('kimi')
+        message['model'] = {'providerID': 'opencode-go', 'id': 'kimi-k2.7-code'}
+        self.assertEqual([], usage.reported_usage([message], run['model'], 'default')['missingUsageMessageIDs'])
+        with self.assertRaises(ValueError):
+            usage.validate_assignment(ledger, {**run, 'model': 'opencode-go/gemini-4-argon'})
+
     def test_route_assignment_and_fresh_marker_are_enforced(self):
         ledger = {'runs': [], 'route': {'reviewers': [['haiku', 'high']], 'escalationByCategory': {'general': [['sonnet', 'high']]}}}
         run = {'id': 'one', 'marker': 'Review-Run-ID: unique', 'model': 'openrouter/anthropic/claude-haiku-5.5', 'effort': 'high'}

@@ -108,7 +108,7 @@ def reported_usage(messages, expected_model, expected_effort=None):
                                         'id': message.get('modelID'), 'variant': message.get('variant')}
         if str(model.get('providerID', '')) + '/' + str(model.get('id', model.get('modelID', ''))) != expected_model:
             raise ValueError('Unexpected auxiliary model in review session: ' + str(model))
-        if expected_effort and model.get('variant') != expected_effort:
+        if expected_effort and (model.get('variant') or 'default') != expected_effort:
             raise ValueError('Unexpected review effort: ' + str(model))
         tokens = message.get('tokens')
         if tokens is None or message.get('cost') is None or (
@@ -131,8 +131,38 @@ def reported_usage(messages, expected_model, expected_effort=None):
 
 class IncompleteUsage(ValueError):
     def __init__(self, partial):
-        super().__init__('Incomplete OpenRouter billing evidence; retain journal and reconcile')
+        super().__init__('Incomplete provider billing evidence; retain journal and reconcile')
         self.partial = partial
+
+
+def amount(value, *, integer=False):
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError('Invalid provider usage number')
+    number = Decimal(str(value))
+    if not number.is_finite() or number < 0 or (integer and number != number.to_integral_value()):
+        raise ValueError('Invalid provider usage number')
+    return int(number) if integer else number
+
+
+def go_usage(value):
+    metadata = value.get('opencode', {})
+    source = metadata.get('billing_source')
+    if source not in ('go', 'go-plus', 'balance') or metadata.get('estimated'):
+        raise ValueError('Unexpected OpenCode Go billing source or estimate')
+    tokens = metadata['tokens']
+    counts = {key: amount(tokens[key], integer=True) for key in
+              ('input', 'output', 'reasoning', 'cache_read', 'cache_write_5m', 'cache_write_1h')}
+    charge = amount(value['cost'])
+    if source in ('go', 'go-plus') and charge:
+        raise ValueError('Covered Go usage unexpectedly reports a cash charge')
+    return {
+        'input': counts['input'] + counts['cache_read'] + counts['cache_write_5m'] + counts['cache_write_1h'],
+        'output': counts['output'], 'reasoning': counts['reasoning'],
+        'cacheRead': counts['cache_read'], 'cacheWrite': counts['cache_write_5m'] + counts['cache_write_1h'],
+        'costUSD': charge, 'listCostUSD': amount(metadata['list_cost']),
+        'allowanceUSD': amount(metadata['allowance']) if source in ('go', 'go-plus') else Decimal('0'),
+        'billingSource': source,
+    }
 
 
 def billed_usage(records, run, session_id):
@@ -169,6 +199,9 @@ def billed_usage(records, run, session_id):
         raise ValueError('Transport response has no matching physical request')
     totals = dict(input=0, output=0, reasoning=0, cacheRead=0, cacheWrite=0)
     cost = Decimal('0')
+    go = run['model'].startswith('opencode-go/')
+    list_cost, allowance = Decimal('0'), Decimal('0')
+    billing_sources = set()
     generation_ids, missing = set(), []
     peak_prompt, compaction_calls = 0, 0
     if not guards:
@@ -181,26 +214,47 @@ def billed_usage(records, run, session_id):
         # OpenCode cancels the stream after the final usage event. EOF is not
         # billing evidence; terminal task/session + every physical response is.
         if (request in capture_errors or not 200 <= responses.get(request, {}).get('status', 0) < 300 or
-                value.get('cost') is None or value.get('prompt_tokens') is None or
-                value.get('completion_tokens') is None or not item.get('generationID')):
+                value.get('cost') is None or not item.get('generationID')):
             missing.append(request)
             continue
         generation = item['generationID']
         if generation in generation_ids:
-            raise ValueError('Duplicate OpenRouter generation across physical requests; reconcile before summing')
+            raise ValueError('Duplicate provider generation across physical requests; reconcile before summing')
         generation_ids.add(generation)
-        totals['input'] += value['prompt_tokens']
-        peak_prompt = max(peak_prompt, value['prompt_tokens'])
+        if go:
+            try:
+                normalized = go_usage(value)
+            except KeyError:
+                missing.append(request)
+                continue
+            for key in totals:
+                totals[key] += normalized[key]
+            cost += normalized['costUSD']
+            list_cost += normalized['listCostUSD']
+            allowance += normalized['allowanceUSD']
+            billing_sources.add(normalized['billingSource'])
+            prompt = normalized['input']
+        else:
+            if value.get('prompt_tokens') is None or value.get('completion_tokens') is None:
+                missing.append(request)
+                continue
+            prompt = amount(value['prompt_tokens'], integer=True)
+            totals['input'] += prompt
+            totals['output'] += amount(value['completion_tokens'], integer=True)
+            totals['reasoning'] += amount(value.get('completion_tokens_details', {}).get('reasoning_tokens', 0), integer=True)
+            for field, key in [('cacheRead', 'cached_tokens'), ('cacheWrite', 'cache_write_tokens')]:
+                count = value.get('prompt_tokens_details', {}).get(key)
+                totals[field] = None if count is None or totals[field] is None else totals[field] + amount(count, integer=True)
+            cost += amount(value['cost'])
+        peak_prompt = max(peak_prompt, prompt)
         compaction_calls += requests[request].get('kind') == 'compaction'
-        totals['output'] += value['completion_tokens']
-        totals['reasoning'] += value.get('completion_tokens_details', {}).get('reasoning_tokens', 0)
-        for field, key in [('cacheRead', 'cached_tokens'), ('cacheWrite', 'cache_write_tokens')]:
-            amount = value.get('prompt_tokens_details', {}).get(key)
-            totals[field] = None if amount is None or totals[field] is None else totals[field] + amount
-        cost += Decimal(str(value['cost']))
-    result = {**totals, 'costUSD': str(cost), 'billed': not missing, 'source': 'OpenRouter response usage.cost',
+    result = {**totals, 'costUSD': str(cost), 'billed': not missing,
+            'source': ('OpenCode Go' if go else 'OpenRouter') + ' response usage.cost',
             'peakPromptTokens': peak_prompt, 'modelCalls': len(requests), 'compactionCalls': compaction_calls,
             'generationIDs': sorted(generation_ids), 'missingUsageMessageIDs': missing}
+    if go:
+        result['goUsage'] = {'listCostUSD': str(list_cost), 'allowanceUSD': str(allowance),
+                             'billingSources': sorted(billing_sources)}
     if missing:
         result['source'] = 'Partial provider evidence; full billed total unavailable'
         raise IncompleteUsage(result)
@@ -230,6 +284,9 @@ def validate_assignment(ledger, run):
     allowed = list(route['reviewers'])
     for chain in route.get('escalationByCategory', {}).values():
         allowed.extend(chain)
+    for concerns in route.get('escalationByConcern', {}).values():
+        for chain in concerns.values():
+            allowed.extend(chain)
     if route.get('escalation'):
         allowed.append(route['escalation'])
     if route.get('integration'):
@@ -318,6 +375,25 @@ def totals_row(label, runs, include_estimates):
     return '| ' + label + ' | ' + ' | '.join(values) + ' |'
 
 
+def go_table(runs):
+    go_runs = [r for r in runs if r['model'].startswith('opencode-go/')]
+    if not go_runs:
+        return []
+    lines = ['', 'Go subscription usage (not additional billed spend):', '',
+             '| Go model | List-price usage USD | Allowance usage USD |', '|---|---:|---:|']
+    groups = [(model_name(next(r for r in go_runs if r['model'] == model)),
+               [r for r in go_runs if r['model'] == model]) for model in dict.fromkeys(r['model'] for r in go_runs)]
+    for label, group in [*groups, ('**Total**', go_runs)]:
+        evidence = [(r.get('usage') or {}).get('goUsage') for r in group]
+        values = []
+        for key in ('listCostUSD', 'allowanceUSD'):
+            known = [amount(u[key]) for u in evidence if u and u.get(key) is not None]
+            partial = len(known) != len(group) or any(incomplete(r) for r in group)
+            values.append(('$' + format(sum(known, Decimal('0')), '.6f') + (' (partial)' if partial else '')) if known else 'unavailable')
+        lines.append('| ' + label + ' | ' + ' | '.join(values) + ' |')
+    return lines + ['']
+
+
 def render(ledger):
     lines = ['## AI review', '', 'Merge policy: ' + ledger['mergePolicy'], '']
     url = repository_url(ledger.get('repositoryUrl'))
@@ -360,6 +436,7 @@ def render(ledger):
                   '**Round billed subtotal: ' + (money(billed_subtotal) if round_billed_rows else 'unavailable') + '**', '']
         if any(r.get('usage') and not r['usage'].get('billed') for r in runs):
             lines += ['**Round estimate subtotal (not billed): ' + money(estimate_subtotal) + '**', '']
+        lines += go_table(runs)
         lines += ['</details>', '']
     lines += ['### Totals', '',
               '| Model | Input total | Cache read | Cache write | Output total | Cost USD (billed) |' + (' Estimate USD (not billed) |' if estimated else ''),
@@ -373,6 +450,10 @@ def render(ledger):
     lines += ['**' + label + ': ' + (money(billed_total) if billed_rows else 'unavailable') + '**', '']
     if estimated:
         lines += ['**Recorded estimate subtotal (not billed): ' + money(estimate_total) + '**', '']
+    lines += go_table(ledger['runs'])
+    if any(r['model'].startswith('opencode-go/') for r in ledger['runs']):
+        lines += ['Go-covered requests have $0 incremental cash charges; their list-price and shared-allowance usage are shown separately.',
+                  'The fixed subscription fee, credit-purchase fees and tax are not allocated to individual PRs. Allowance dollars are provider meter units, not extra spend.', '']
     lines += [
               'Pre-PR sessions only. Input total includes cache reads/writes; output total includes reasoning exactly once.',
               'Time is session wall time, including tool steps and native compaction, excluding time queued before session creation.',
