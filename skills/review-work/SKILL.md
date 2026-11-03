@@ -74,8 +74,10 @@ Read and follow [the review procedure](references/pre-pr-review.md). It owns
 ignore filtering, code/documentation sizing, deterministic/mixed categories,
 model assignments, independent T3/OpenCode dispatch, incremental fixes, round
 caps, usage and child cleanup. Read its linked runtime instructions and [progress/recovery contract](references/review-liveness.md) before
-dispatch. INCOMPLETE triggers cause-specific recovery, including eligible unused-model
-replacement; it never supplies approval. All scripts, tests and policy resources belong to this skill.
+dispatch. Cycle suspicions and interrupted operations require diagnosis and
+cause-specific recovery, including eligible unused-model replacement. The parent
+may classify INCOMPLETE only with verified evidence that required coverage remains
+unobtainable after feasible recovery; telemetry alone never establishes a stall. All scripts, tests and policy resources belong to this skill.
 
 Use the actual worktree and a committed snapshot. Validate findings, fix confirmed
 issues within the authorized task, commit coherent fixes and rerun affected

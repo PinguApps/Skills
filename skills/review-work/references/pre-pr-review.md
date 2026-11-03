@@ -193,7 +193,7 @@ The runtime fixes the actual worktree, manifest, head and historical refs.
 Review only this range, with unchanged context needed to understand its effects.
 Find concrete scoped failures, broken callers and unmet requirements; avoid scope
 creep and style-only churn. Do not inspect unrelated earlier reviewed changes.
-Return APPROVE, CHANGES or INCOMPLETE, and stable finding IDs with severity
+Return APPROVE, CHANGES or a concrete blocker for parent diagnosis, and stable finding IDs with severity
 (blocker/actionable/advisory), file:line, failure scenario, evidence and suggested
 minimal fix. Report checks actually performed, observations and any verification
 gap. An excluded read is complete; omit claims needing excluded evidence.

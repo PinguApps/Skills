@@ -14,24 +14,39 @@ function fixture(t) {
   return { root, run, path, progress: new ReviewProgress(path, run) };
 }
 
-test('repeated source and renamed questions cannot sustain inference; halt survives reload', t => {
+test('only recurrence of an identical cycle after delivered reconciliation requests diagnosis', t => {
   const { progress: p, run, path } = fixture(t);
+  const read = () => p.source({ operation: 'diff', ref: 'head' }, { content: 'cleanup' }, {});
   p.beforeRequest();
-  const id = p.evidence('same page', { path: 'source' });
+  const id = read();
   p.beforeRequest();
-  assert.equal(p.evidence('same page', { path: 'source' }), id);
-  for (const question of ['one', 'renamed', 'again']) {
-    p.checkpoint({ action: 'question', obligation: 'A', question, reason: 'Could cancellation leak?', settleWhen: 'Inspect cleanup', evidence: [id] });
-    p.checkpoint({ action: 'resolve', obligation: 'A', question, reason: 'Cleanup handles it', evidence: [id] });
-  }
-  p.beforeRequest(); // enter reconciliation before stopping an unchanged cycle
+  read(); p.beforeRequest(); // first unchanged completed trace
+  read(); p.beforeRequest(); // cycle suspicion, not a verdict
   assert.equal(p.state.phase, 'reconcile');
-  assert.throws(() => p.beforeRequest(), /INCOMPLETE/);
-  assert.throws(() => new ReviewProgress(path, run).beforeRequest(), /INCOMPLETE/);
+  assert.equal(p.state.halt, null);
+  // Merely preparing a warning cannot prove the model received it.
+  read(); p.beforeRequest();
+  assert.equal(p.state.halt, null);
+  p.reconciliationDelivered();
+  assert.equal(read(), id);
+  assert.throws(() => p.beforeRequest(), /NEEDS_DIAGNOSIS/);
+  assert.equal(p.state.halt.outcome, 'NEEDS_DIAGNOSIS');
+  assert.throws(() => new ReviewProgress(path, run).beforeRequest(), /NEEDS_DIAGNOSIS/);
   assert.throws(() => new ReviewProgress(path, { ...run, head: 'new' }), /identity changed/);
 });
 
-test('large progressing review has no aggregate request or token cap; reads remain unassessed', t => {
+test('reasoning, consolidation and native compaction alone never classify a review as stalled', t => {
+  const { progress: p } = fixture(t);
+  for (let step = 0; step < 500; step++) {
+    p.beforeRequest();
+    p.beforeRequest('compaction');
+  }
+  assert.equal(p.state.phase, 'review');
+  assert.equal(p.state.halt, null);
+  assert.deepEqual(p.state.assessments, {});
+});
+
+test('large progressing review has no aggregate cap and evidence access never supplies assessment', t => {
   const { progress: p } = fixture(t);
   for (let page = 0; page < 500; page++) {
     p.beforeRequest();
@@ -41,45 +56,47 @@ test('large progressing review has no aggregate request or token cap; reads rema
   const id = p.evidence('last', {});
   assert.throws(() => p.checkpoint({ action: 'assess', obligation: 'unknown', reason: 'ok', evidence: [id] }), /Unknown/);
   assert.throws(() => p.checkpoint({ action: 'assess', obligation: 'A', reason: 'ok', evidence: ['invented'] }), /observed evidence/);
-  p.checkpoint({ action: 'assess', obligation: 'A', reason: 'Cancellation tested', evidence: [id] });
-  p.beforeRequest(); // final verdict generation
-  p.checkpoint({ action: 'assess', obligation: 'A', reason: 'Again', evidence: [id] });
-  p.beforeRequest(); // enter reconciliation before stopping an unchanged cycle
-  assert.equal(p.state.phase, 'reconcile');
-  assert.throws(() => p.beforeRequest(), /INCOMPLETE/);
 });
 
-test('overlapping pages and empty out-of-range reads do not fabricate progress', t => {
+test('overlapping and out-of-range reads do not fabricate new evidence coverage or imply a stall', t => {
   const { progress: p } = fixture(t);
   p.source({ operation: 'read', path: 'a', ref: 'head' }, { content: 'abcdef' }, {});
   p.beforeRequest();
+  const version = p.state.version;
   p.source({ operation: 'read', path: 'a', ref: 'head', offset: 2 }, { content: 'cde' }, {});
   p.source({ operation: 'read', path: 'invented', ref: 'head', offset: 9999 }, { content: '' }, {});
-  p.beforeRequest(); // enter reconciliation before stopping an unchanged cycle
-  assert.equal(p.state.phase, 'reconcile');
-  assert.throws(() => p.beforeRequest(), /INCOMPLETE/);
-});
-
-test('repeated compaction cannot keep an unchanged review alive', t => {
-  const { progress: p } = fixture(t);
-  p.beforeRequest('compaction');
-  assert.throws(() => p.beforeRequest('compaction'), /INCOMPLETE/);
-});
-
-test('initial requirement questions and reconciliation allow correction without approving unread work', t => {
-  const { progress: p, path, run } = fixture(t);
   p.beforeRequest();
+  assert.equal(p.state.version, version);
+  assert.equal(p.state.halt, null);
+});
+
+test('legitimate rechecking with a concrete changed analysis plan clears suspicion', t => {
+  const { progress: p, path, run } = fixture(t);
+  const read = () => p.source({ operation: 'diff', ref: 'head' }, { content: 'cleanup' }, {});
+  p.beforeRequest(); const id = read(); p.beforeRequest();
+  read(); p.beforeRequest(); read(); p.beforeRequest();
+  p.reconciliationDelivered();
+  p.checkpoint({ action: 'reconcile', obligation: 'A', reason: 'Compare the existing cleanup evidence against cancellation during startup',
+    nextAction: 'Recheck the already read cleanup path for startup ordering', settleWhen: 'Establish whether cleanup registration precedes startup', evidence: [id] });
+  read(); p.beforeRequest();
+  const resumed = new ReviewProgress(path, run);
+  assert.equal(resumed.state.phase, 'review');
+  assert.equal(resumed.state.halt, null);
+  assert.deepEqual(resumed.state.assessments, {});
+});
+
+test('initial questions, tool corrections and resolutions are analysis rather than evidence-access requirements', t => {
+  const { progress: p } = fixture(t);
+  p.beforeRequest();
+  p.action('tool-error', { invalid: 'first attempt' }, 'missing parameter'); p.beforeRequest();
   p.checkpoint({ action: 'question', obligation: 'A', question: 'initial', reason: 'Does cancellation clean up?', settleWhen: 'Inspect cleanup', evidence: [] });
   p.beforeRequest();
-  assert.equal(p.state.phase, 'reconcile');
-  const id = p.source({ operation: 'diff', ref: 'head' }, { content: 'cleanup implementation' }, {});
-  const resumed = new ReviewProgress(path, run);
-  resumed.beforeRequest();
-  assert.equal(resumed.state.phase, 'review');
-  assert.deepEqual(resumed.state.assessments, {});
-  resumed.checkpoint({ action: 'resolve', obligation: 'A', question: 'initial', reason: 'Cleanup verified', evidence: [id] });
-  resumed.checkpoint({ action: 'assess', obligation: 'A', reason: 'Cancellation covered', evidence: [id] });
-  resumed.beforeRequest();
+  const id = p.source({ operation: 'diff', ref: 'head' }, { content: 'cleanup' }, {});
+  p.beforeRequest();
+  p.checkpoint({ action: 'resolve', obligation: 'A', question: 'initial', reason: 'Cleanup verified', evidence: [id] });
+  p.beforeRequest();
+  assert.equal(p.state.phase, 'review');
+  assert.equal(p.state.halt, null);
 });
 
 test('named check executes an actual child process once and cannot accept arbitrary commands', async t => {

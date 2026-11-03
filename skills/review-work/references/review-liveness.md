@@ -50,32 +50,65 @@ Use `action: resolve` with evidence and reasoning when settled. Initial diff pag
 requires no question. Further exploration must address an outstanding obligation.
 Once all obligations are assessed, return the final verdict.
 
-The runtime persists evidence identities, assessments, questions and the last
-primary-request progress version. Identical evidence, repeated assessments,
-opening/renaming questions, resolution alone, compaction and reasoning tokens do
-not advance it. An unchanged primary boundary enters a reconciliation phase: correct a failed
-action, obtain specifically missing evidence, assess existing evidence or report
-INCOMPLETE. Repeating that unchanged state after reconciliation records INCOMPLETE
-and blocks inference. New evidence or a newly assessed obligation returns to review.
-Repeated compaction without progress stops directly. This permits large progressing reviews without a size-based cutoff.
-It is a mechanical cycle detector, not a proof that every novel read is useful;
-the parent still validates relevance and assessment quality.
+The runtime persists evidence coverage, assessments, question/analysis changes and
+completed tool-action traces. Missing checkpoints, reasoning-only requests, native
+compaction, individual tool errors, rereading and unchanged source are **not** proof
+of a stall. They never automatically produce INCOMPLETE. Resolving a question or
+changing the analysis plan can be meaningful progress without reading new source.
 
-Use `action: incomplete` with an obligation and exact reason when required evidence,
-execution or setup is missing. Return INCOMPLETE with findings, assessed obligations,
-remaining work, gaps and cleanup status. Runtime halts may prevent a final model
-message: the durable progress/transport records are then the incomplete result.
-They never imply approval. Preserve state across compaction/restarts; a changed
-contract needs a new run and explicit coverage reconciliation, not a reset.
+Only recurrence of an identical completed investigation trace against unchanged
+evidence **and analysis** raises a cycle suspicion. The runtime first supplies a
+reconciliation prompt. Use `action: reconcile`, `obligation`, concrete `reason`,
+`nextAction`, `settleWhen` and available `evidence` IDs to explain legitimate
+rechecking or a different discriminating step. A changed plan, resolved question,
+new evidence or assessment clears the suspicion. Novel prose alone is not proof
+of useful work; the parent evaluates its substance when diagnosing.
+
+If that same trace recurs after the reconciliation prompt was actually sent, the
+runtime hands back NEEDS_DIAGNOSIS with the trace and durable state. This interrupts
+a demonstrated mechanical cycle; it does **not** classify the review INCOMPLETE
+or prove a semantic deadlock. A prepared but unsent prompt cannot satisfy this gate.
+Single repeated actions without recurrence after reconciliation do not stop a run.
+No timer or missing-progress request count decides this outcome.
+
+Use `action: incomplete` to report a concrete missing obligation/evidence/setup;
+this records BLOCKER_REPORTED for parent verification, not a final incomplete
+verdict. Provider/check deadlines record OPERATION_INTERRUPTED; a source-access
+violation records INVALID_REVIEW. A slow operation is not evidence that the whole
+review stalled. Preserve state across compaction/restarts; a changed contract needs
+a new run and explicit coverage reconciliation, not a reset.
 
 ## Parent recovery
 
-On INCOMPLETE, a guard breach or provider deadline, cancel the owned T3 task with
+On a diagnostic handoff, reported blocker, guard breach or interrupted operation,
+cancel the owned T3 task with
 `task_cancel` if still live, verify termination, collect partial usage and evidence,
 then settle it. Follow delegation's completion contract; do not add status polling
 or a second monitor. Blocking inference/aborting a provider request is not proof
 that the T3 task or subprocess descendants have terminated. Retain incomplete
 receipts honestly and preserve unrelated reviewers/resources.
+
+### Confirm before classifying INCOMPLETE
+
+The parent owns the final classification. Inspect the actual actions, results,
+question/plan changes and remaining obligations. Require corroborating evidence:
+a repeated unresolved investigation after reconciliation with no substantive
+change in reasoning, evidence or tests, and no credible safe next step; or a
+verified external blocker that prevents required coverage after feasible recovery.
+A progress counter, output volume, elapsed time, repeated read or isolated error
+alone satisfies none of this. When uncertain, continue or resume the relevant
+review work; favour preserving productive work over declaring a stall.
+
+Try a concrete recovery first: correct tool usage, reuse existing evidence,
+supply missing setup, isolate the specific question, or choose an eligible unused
+model when the cause is model-specific. Continue independent obligations. Diagnose
+and recover autonomously; do not ask the user merely to confirm telemetry. Only
+record INCOMPLETE when required coverage genuinely remains unobtainable after
+these cause-specific options are exhausted or no justified safe recovery exists.
+Record the supporting observations and attempted remedies. A diagnostic pause,
+interrupted operation, unfinished obligation or remaining reasoning is not itself
+an incomplete verdict. Never use a renamed diagnostic state to justify abandoning
+productive work or publishing without complete coverage.
 
 Classify the cause before deciding the next action:
 
