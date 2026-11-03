@@ -8,7 +8,7 @@ pre-PR model reviews and accounting; delivery skills call the same process.
 PRs keep proof separate from manual tests, with collapsed round details and
 visible per-model totals. Standalone review stops before push/PR/merge.
 
-## Review model decision — 2026-11-01
+## Review model decision — 2026-11-03
 
 Use OpenCode through T3 for every review. **Haiku uses OpenRouter; every other
 accepted reviewer uses OpenCode Go.** The executable source of truth is
@@ -17,7 +17,7 @@ Keep exactly two distinct initial reviewers covering the complete included diff;
 use additional models only for a concrete unresolved concern. No GLM-5.2,
 Google/Gemini model, Sonnet, Step, GPT or free alias has an assignment or fallback.
 
-Names below are abbreviated: DeepSeek is V4.1 Flash, MiMo is V2.6 Flash, GLM is
+Names below are abbreviated: DeepSeek is V4.1 Flash, GLM is
 5.3 Flash, MiniMax is M3.1 Flash, Haiku is 5.5, Kimi Code is K2.7 Code, Kimi Pro is
 K3.1 Pro and Qwen is 3.8 Max. Go uses its published DeepSeek ID without OpenRouter's
 `1017` suffix; verify the live catalogue rather than assuming identical revisions.
@@ -25,18 +25,18 @@ K3.1 Pro and Qwen is 3.8 Max. Go uses its published DeepSeek ID without OpenRout
 | Category | Scope | Initial reviewers | Conditional escalation sequence |
 | --- | --- | --- | --- |
 | Agent policy/skills/tool permissions | Every size | Haiku high + GLM high | Kimi Code default, then Qwen medium |
-| Compatibility/APIs/dependencies/builds/CI/deployment | Small/standard code | DeepSeek high + MiMo default | GLM high, then Qwen medium |
-| Compatibility/APIs/dependencies/builds/CI/deployment | Large/very large code | MiMo default + GLM high | Kimi Code default, then Qwen medium |
-| Documentation | Small/standard | DeepSeek high + Haiku medium | GLM high, then MiMo default |
-| Documentation | Large | Haiku medium + GLM high | MiMo default |
-| General implementation | Small/standard code | DeepSeek high + MiMo default | Kimi Code default, then Qwen medium |
+| Compatibility/APIs/dependencies/builds/CI/deployment | Small/standard code | DeepSeek high + GLM high | GLM high, then Qwen medium |
+| Compatibility/APIs/dependencies/builds/CI/deployment | Large/very large code | DeepSeek high + GLM high | Kimi Code default, then Qwen medium |
+| Documentation | Small/standard | DeepSeek high + Haiku medium | GLM high, then MiniMax high |
+| Documentation | Large | Haiku medium + GLM high | MiniMax high |
+| General implementation | Small/standard code | DeepSeek high + GLM high | Kimi Code default, then Qwen medium |
 | General implementation | Large/very large code | DeepSeek high + GLM high | Kimi Code default, then Qwen medium |
-| Security/auth/permissions/secrets | Small/standard code | Haiku high + MiMo default | GLM high, then Qwen medium |
+| Security/auth/permissions/secrets | Small/standard code | Haiku high + MiniMax high | GLM high, then Qwen medium |
 | Security/auth/permissions/secrets | Large/very large code | Haiku high + MiniMax high | GLM high, then Qwen medium |
 | State/persistence/migrations/concurrency/retries | Every size | DeepSeek high + MiniMax high | Kimi Code default, then Kimi Pro high |
-| UI/Blazor/navigation/forms/accessibility | Every size | MiMo default + MiniMax medium | Visual: Kimi Code default; logic: Kimi Pro high |
+| UI/Blazor/navigation/forms/accessibility | Every size | DeepSeek high + MiniMax medium | Visual: Kimi Code default; logic: Kimi Pro high |
 
-MiMo and Kimi Code expose no selectable Go variant: `default` means clear inherited
+Kimi Code exposes no selectable Go variant: `default` means clear inherited
 options, not disable reasoning or invent a `thinking` variant. The other named
 efforts above are explicit. Catalogue support was checked with OpenCode 2.2.0.
 Kimi Code and Qwen are new specialist assignments: run a small guarded trial before
@@ -49,7 +49,7 @@ reviewers. Cross-boundary contracts receive integration checks from the same
 initial pair and use the relevant category's escalation chain. Existing separate
 code/documentation size bands, area-weighted mixtures, protected security/state
 pairs, incremental coverage and three/five-round caps remain in force. Category
-leads remain Haiku for security/documentation, DeepSeek for state/general, MiMo
+leads remain Haiku for security/documentation, DeepSeek for state/general, GLM
 for compatibility, GLM for agent policy and MiniMax for UI.
 
 ### Usage and reporting
@@ -82,161 +82,7 @@ usage/headroom and all three quota windows before dispatch. Never enable Extra
 Usage or silently fall back to non-Haiku OpenRouter calls. Unavailable quota blocks
 an unsettled review; it never supplies approval. Future runs reassess actual token
 consumption, valid findings, false positives, guard compliance and latency before
-promoting new defaults. The original measured decision is retained below.
-
-<details>
-<summary>Historical review model decision — 2026-10-28 (superseded)</summary>
-
-## Review model decision — 2026-10-28
-
-This dated decision records the review mix, reasons and cost baseline for future
-reassessment. The executable source of truth is
-[review-policy.json](skills/review-work/references/review-policy.json); the
-[shared review procedure](skills/review-work/references/pre-pr-review.md)
-defines classification, mixed areas, review rounds and accounting. Update this
-snapshot when changing that policy, and preserve dated decisions below it.
-
-Use exactly **two distinct initial reviewers**, independently reviewing the full
-included diff. Default to inexpensive pairs; use GLM and MiniMax where their
-capabilities add a useful angle. Expensive models handle focused escalations.
-All calls use OpenCode through OpenRouter without a hosting-provider pin. No GPT
-models. Ling was removed because its measured review took about 24 minutes while
-the other models finished within 10 minutes.
-
-Names are shortened in the table. MiMo means MiMo V2.6 Flash, DeepSeek means
-DeepSeek V4.1 Flash 1017, GLM means GLM 5.3 Flash, MiniMax means MiniMax M3.1 Flash,
-Haiku/Sonnet mean version 5.5, Kimi means K3.1 Pro and Step means Step 5 Preview.
-MiMo uses its thinking setting; other efforts are medium or high as shown.
-
-| Category | Scope | Initial reviewers | Review angles | Escalation sequence |
-| --- | --- | --- | --- | --- |
-| Documentation | Small/standard | DeepSeek high and Haiku medium | Technical accuracy; clear, consistent explanations | GLM high, then MiMo thinking |
-| Documentation | Large | Haiku medium and GLM high | Clarity; consistency across a large document set | MiMo thinking |
-| General code | Small/standard | DeepSeek high and MiMo thinking | Correctness; execution paths and regressions | Haiku high, then Sonnet high |
-| General code | Large/very large | DeepSeek high and GLM high | Correctness; long-context dependencies | Haiku high, then Sonnet high |
-| Compatibility/dependencies | Small/standard | DeepSeek high and MiMo thinking | Consumer behaviour; contract and deployment regressions | Haiku high, then Sonnet high |
-| Compatibility/dependencies | Large/very large | MiMo thinking and GLM high | Multi-step behaviour; cross-file contract consistency | Haiku high, then Sonnet high |
-| Security/auth/permissions | Small/standard code | Haiku high and MiMo thinking | Intended permission boundaries; adversarial execution paths | MiniMax high, then Sonnet high |
-| Security/auth/permissions | Large/very large code | Haiku high and MiniMax high | Permission boundaries; cybersecurity and failure paths | MiMo thinking, then Sonnet high |
-| State/persistence/concurrency | Every size | DeepSeek high and MiniMax high | State invariants; failure, recovery and concurrency | Haiku high, then Kimi high |
-| Agent instructions/skills/workflow policy | Functional changes, every size | Haiku high and GLM high | Instruction clarity; multi-step workflow consistency | MiMo thinking, then Sonnet high |
-| UI/Blazor | Every size | MiMo thinking and MiniMax medium | Component/interaction state; frontend and accessibility semantics | Haiku high, then Kimi high |
-
-Integration checks belong to the same initial pair. Large/very-large code changes
-that alter runtime/public contracts across services or packages can escalate an
-unresolved integration concern to Step medium. It is not a third automatic initial
-reviewer. Escalation chains are conditional: use the finding's category, skip
-models already called on that revision, and stop when the concern is settled.
-
-Code bands require both limits: small 500 changed lines/10 files, standard
-4,000/60, large 10,000/120, then very large. Documentation bands are small
-2,000/30, standard 20,000/150, then large. Additions plus deletions count. Markdown
-and JSON are documentation for size only: functional agent instructions and auth
-JSON still receive their behavioural risk categories. Apply root and nested
-`.pragentignore` before reading or counting review content; assess media/binaries
-and add justified exclusions there. One clean round is enough; caps remain three,
-or five for security/state, with incremental rechecks and parent-verified minor fixes.
-
-### Mixed-category selection
-
-Map independent areas explicitly using repeatable `--area category=path-prefix`
-arguments to the scope helper. Choose the two largest substantial categories and
-one lead from each: **Haiku for documentation, DeepSeek for general code, MiMo for
-compatibility, GLM for agent policy, MiniMax for UI**. Both reviewers still cover
-the full diff, all checklists and interactions. Other areas retain their
-checklists/escalation chains. Duplicate leads use the second category's other
-assigned model, keeping exactly two distinct models.
-
-Each selected area must represent at least 20% of review work and contain at least
-100 changed code lines, 250 documentation lines, or five files. Review work is
-code lines + 0.5 × documentation lines + 20 × files. These weights select mixtures
-only; code/documentation size bands remain separate. Without two substantial
-areas, use the primary category's full pair. Security or state anywhere retains
-the highest-priority protected category's full pair, regardless of area shares.
-
-For example, substantial UI and documentation uses **MiniMax medium and Haiku
-medium**. Documentation findings escalate to GLM high; UI findings escalate to
-Kimi high because Haiku already reviewed. Cross-category findings use the
-highest-risk affected category's chain. Classification and area shares come from
-the full task range, even when a later review reads only incremental fixes.
-
-### Evidence and cost baseline
-
-The assignments are informed by OpenRouter's descriptions, not proven category
-winners. [GLM](https://openrouter.ai/z-ai/glm-5.3-flash) highlights efficient
-coding, long-context behaviour and long-horizon agent tasks.
-[MiniMax](https://openrouter.ai/minimax/minimax-m3.1-flash) highlights cybersecurity,
-real codebases and frontend work. [MiMo](https://openrouter.ai/xiaomi/mimo-v2.6-flash)
-emphasizes coding and agentic workflows. The other models' details are linked in
-the measured-cost table.
-
-R1B measured each model against the same committed PR: 2,292 changed code lines
-in 13 files plus 1,134 documentation/JSON lines in 13 files. Costs below are actual
-captured OpenRouter usage totals for that review, including charged tool-loop
-steps and compaction; they are not token list prices or average costs per PR.
-
-Runtime calibration on the same date found that an 80% input ceiling alone was
-insufficient: a long Haiku answer pushed its next native summary to 104,926 input
-tokens. Current tier-priced calls use a 70% input ceiling, an 8,192-token output
-cap and 12,000 source characters per step, retaining the original contract across
-native summaries. Effort is unchanged. The R1B measurements below predate those
-reserves; use the current runtime when benchmarking future replacements. These
-remain estimated safety margins, not an exact tokenizer guarantee.
-
-| Model | Measured effort | Measured review cost (USD) | Intended role |
-| --- | --- | ---: | --- |
-| [DeepSeek V4.1 Flash 1017](https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017) | high | $0.029357 | Inexpensive correctness and regression coverage |
-| MiMo V2.6 Flash | thinking | $0.038312 | Inexpensive independent execution-path review |
-| [Haiku 5.5](https://openrouter.ai/anthropic/claude-haiku-5.5) | high | $0.059794 | Instructions, documentation and focused escalation |
-| GLM 5.3 Flash | high | $0.069755 | Agent workflow and larger cross-file consistency reviews |
-| MiniMax M3.1 Flash | high | $0.071041 | UI, state and focused security reviews |
-| [Step 5 Preview](https://openrouter.ai/stepfun/step-5-preview) | medium | $0.325351 | Unresolved cross-component integration |
-| [Kimi K3.1 Pro](https://openrouter.ai/moonshotai/kimi-k3.1-pro) | high | $0.628453 | Difficult state and UI escalations |
-| [Sonnet 5.5](https://openrouter.ai/anthropic/claude-sonnet-5.5) | high | $0.649372 | Persistent correctness, security and workflow disputes |
-
-The same 372 authored PRs across 27 repositories, created 2026-09-28 through
-2026-10-27, project to **$26.03/month** with this policy, versus $28.66 for the
-previous broader-pair proposal and $38.00 for the original routing. Cheaper pairs
-without mixtures project to $25.58; mixtures add about $0.45 and occur in 33
-metadata-classified candidate PRs. Initial assignments are DeepSeek 238, MiMo 270,
-Haiku 145, GLM 61 and MiniMax 30: 744 assignments, two per PR. Previously GLM had
-162 and MiniMax 64 assignments.
-
-Forecast components are $20.66 initial reviews, $3.29 incremental rechecks,
-$1.63 category escalations and $0.44 integration escalations (independent rounding
-can differ from the unrounded total). The higher-use case is $30.02; broad workload
-sensitivity gives $14.53–$68.07, not a confidence interval or spending cap.
-The forecast excludes implementation/CI costs and historical bootstrap/benchmark
-spend. It is not a promise of equal review quality or exact future billing.
-
-Forecasting retained the previous per-category/size approval assumptions and
-priced workload as code lines + half documentation lines + 20 per file, against
-the measured PR's 3,379 work units with a 10% minimum per-call overhead. Rechecks
-use 15%, 8%, 5%, then 3% of original variable work; escalations use 20%, integration
-35%. Ten percent of first escalations need the next model; ten percent of eligible
-integration cases need Step. Mixed escalation cost is distributed by selected
-area shares. The higher-use case adds 25% more rechecks, 50% more first escalations
-and 25% follow-through. Medium assignments conservatively retain measured high
-cost where no separate medium measurement exists. Historical area classification
-uses paths/metadata, not a retrospective source review; real tasks classify actual
-behaviour. One measured PR per model cannot establish cost distributions or
-category-specific detection rates.
-
-### Reassessing this decision later
-
-Start from this decision date and the current policy. Check
-[OpenRouter's model catalogue](https://openrouter.ai/models) for releases since
-that date, including successors to every retained model and promising models from
-other labs. Recency alone does not justify a swap: compare code-review suitability,
-supported effort/tool settings, context-price tiers, caching, observed latency and
-actual review cost. Benchmark shortlisted replacements on a comparable filtered,
-committed snapshot within the requested budget before adopting them. Retain native
-harness compaction below pricing increases; do not assume old tiers still apply.
-Update the policy, routing tests and README together after the new mix is agreed.
-Preserve this dated matrix, measurements and rationale as a historical decision
-when documenting its replacement; do not erase the comparison baseline.
-
-</details>
+promoting new defaults. The superseded routing matrix and its workload forecast have been removed.
 
 ## Skills
 

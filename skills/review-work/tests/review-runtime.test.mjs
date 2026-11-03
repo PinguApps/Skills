@@ -81,7 +81,7 @@ test('Go Anthropic stream merges usage without retaining content or arbitrary me
 test('assigned routes reject provider fallback, alternate models and forbidden models', async () => {
   const state = mkdtempSync(join(tmpdir(), 'review-runtime-test-'));
   try {
-    const run = {id: 'go', marker: 'Review-Run-ID: go', model: 'opencode-go/mimo-v2.6-flash', effort: 'default'};
+    const run = {id: 'go', marker: 'Review-Run-ID: go', model: 'opencode-go/kimi-k2.7-code', effort: 'default'};
     const config = join(state, 'runtime.json');
     writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, runs: [run]}));
     const hooks = new Map();
@@ -90,8 +90,8 @@ test('assigned routes reject provider fallback, alternate models and forbidden m
       session: {hook: async (name, cb) => hooks.set(name, cb)},
       tool: {transform: async cb => cb({add() {}}), hook: async () => {}, list: async () => []}});
     await hooks.get('prompt')({sessionID: 'session', prompt: {text: run.marker}});
-    const event = {sessionID: 'session', kind: 'primary', model: {providerID: 'opencode-go', id: 'mimo-v2.6-flash'}};
-    const request = (url, id = 'mimo-v2.6-flash') => new Request(url, {method: 'POST', body: JSON.stringify({model: id})});
+    const event = {sessionID: 'session', kind: 'primary', model: {providerID: 'opencode-go', id: 'kimi-k2.7-code'}};
+    const request = (url, id = 'kimi-k2.7-code') => new Request(url, {method: 'POST', body: JSON.stringify({model: id})});
     for (const url of ['https://openrouter.ai/api/v1/chat/completions', 'http://opencode.ai/inference/go/openai/v1/chat/completions',
       'https://opencode.ai/inference/openai/v1/chat/completions', 'https://opencode.ai/inference/go/openai/v1/chat/completions?fallback=1']) {
       await assert.rejects(hooks.get('http.request')({...event, request: request(url)}), /provider endpoint/);

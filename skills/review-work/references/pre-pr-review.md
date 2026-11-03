@@ -137,7 +137,7 @@ Discover T3 capabilities once before first delegation. Use `delegate_task`, role
 `review`, shared isolation (the parent worktree), with OpenCode as the runner and
 the exact policy model. Haiku uses `openrouter/anthropic/claude-haiku-5.5`;
 every other accepted model uses `opencode-go/...`. For a named effort, set
-`target.options.variant` explicitly. MiMo and Kimi K2.7 have no Go variant:
+`target.options.variant` explicitly. Kimi K2.7 has no Go variant:
 record `default` and pass `target.options: {}` to clear inherited options rather
 than sending an unsupported `thinking` setting. Qwen uses `medium`; other named
 efforts remain as recorded by the policy. Verify the live catalogue's IDs,
