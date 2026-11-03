@@ -9,7 +9,7 @@ export class ReviewProgress {
     this.identity = createHash('sha256').update(identity).digest('hex');
     this.state = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {
       identity: this.identity, version: 0, lastRequestVersion: -1,
-      evidence: {}, assessments: {}, questions: {}, ranges: {}, halt: null,
+      evidence: {}, assessments: {}, questions: {}, ranges: {}, phase: 'review', halt: null,
     };
     if (this.state.identity !== this.identity) throw new Error('Progress identity changed; use a new run and reconcile coverage');
     this.obligations = new Set(run.obligations.map(item => item.id));
@@ -28,8 +28,11 @@ export class ReviewProgress {
   beforeRequest(kind = 'primary') {
     this.active();
     const cursor = kind === 'compaction' ? 'lastCompactionVersion' : 'lastRequestVersion';
-    if (this.state.version === this.state[cursor])
-      this.stop('No new evidence or assessment since the previous ' + kind + ' request');
+    if (this.state.version === this.state[cursor]) {
+      if (kind === 'compaction' || this.state.phase === 'reconcile')
+        this.stop('Reconciliation failed: no new evidence or assessment since the previous ' + kind + ' request');
+      this.state.phase = 'reconcile';
+    } else this.state.phase = 'review';
     this.state[cursor] = this.state.version;
     this.save();
   }
@@ -66,7 +69,7 @@ export class ReviewProgress {
     if (!this.obligations.has(input.obligation)) throw new Error('Unknown review obligation');
     if (input.action === 'incomplete') this.stop(input.reason?.trim() || 'Required review evidence unavailable');
     const refs = input.evidence ?? [];
-    if (!input.reason?.trim() || !refs.length || refs.some(id => !Object.hasOwn(this.state.evidence, id)))
+    if (!input.reason?.trim() || (input.action !== 'question' && !refs.length) || refs.some(id => !Object.hasOwn(this.state.evidence, id)))
       throw new Error('Checkpoint requires a concrete reason and observed evidence IDs');
     if (input.action === 'question') {
       if (!input.question?.trim() || !input.settleWhen?.trim()) throw new Error('Question requires an ID and settlement criterion');

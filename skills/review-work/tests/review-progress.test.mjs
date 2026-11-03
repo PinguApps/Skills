@@ -24,6 +24,8 @@ test('repeated source and renamed questions cannot sustain inference; halt survi
     p.checkpoint({ action: 'question', obligation: 'A', question, reason: 'Could cancellation leak?', settleWhen: 'Inspect cleanup', evidence: [id] });
     p.checkpoint({ action: 'resolve', obligation: 'A', question, reason: 'Cleanup handles it', evidence: [id] });
   }
+  p.beforeRequest(); // enter reconciliation before stopping an unchanged cycle
+  assert.equal(p.state.phase, 'reconcile');
   assert.throws(() => p.beforeRequest(), /INCOMPLETE/);
   assert.throws(() => new ReviewProgress(path, run).beforeRequest(), /INCOMPLETE/);
   assert.throws(() => new ReviewProgress(path, { ...run, head: 'new' }), /identity changed/);
@@ -42,6 +44,8 @@ test('large progressing review has no aggregate request or token cap; reads rema
   p.checkpoint({ action: 'assess', obligation: 'A', reason: 'Cancellation tested', evidence: [id] });
   p.beforeRequest(); // final verdict generation
   p.checkpoint({ action: 'assess', obligation: 'A', reason: 'Again', evidence: [id] });
+  p.beforeRequest(); // enter reconciliation before stopping an unchanged cycle
+  assert.equal(p.state.phase, 'reconcile');
   assert.throws(() => p.beforeRequest(), /INCOMPLETE/);
 });
 
@@ -51,6 +55,8 @@ test('overlapping pages and empty out-of-range reads do not fabricate progress',
   p.beforeRequest();
   p.source({ operation: 'read', path: 'a', ref: 'head', offset: 2 }, { content: 'cde' }, {});
   p.source({ operation: 'read', path: 'invented', ref: 'head', offset: 9999 }, { content: '' }, {});
+  p.beforeRequest(); // enter reconciliation before stopping an unchanged cycle
+  assert.equal(p.state.phase, 'reconcile');
   assert.throws(() => p.beforeRequest(), /INCOMPLETE/);
 });
 
@@ -58,6 +64,22 @@ test('repeated compaction cannot keep an unchanged review alive', t => {
   const { progress: p } = fixture(t);
   p.beforeRequest('compaction');
   assert.throws(() => p.beforeRequest('compaction'), /INCOMPLETE/);
+});
+
+test('initial requirement questions and reconciliation allow correction without approving unread work', t => {
+  const { progress: p, path, run } = fixture(t);
+  p.beforeRequest();
+  p.checkpoint({ action: 'question', obligation: 'A', question: 'initial', reason: 'Does cancellation clean up?', settleWhen: 'Inspect cleanup', evidence: [] });
+  p.beforeRequest();
+  assert.equal(p.state.phase, 'reconcile');
+  const id = p.source({ operation: 'diff', ref: 'head' }, { content: 'cleanup implementation' }, {});
+  const resumed = new ReviewProgress(path, run);
+  resumed.beforeRequest();
+  assert.equal(resumed.state.phase, 'review');
+  assert.deepEqual(resumed.state.assessments, {});
+  resumed.checkpoint({ action: 'resolve', obligation: 'A', question: 'initial', reason: 'Cleanup verified', evidence: [id] });
+  resumed.checkpoint({ action: 'assess', obligation: 'A', reason: 'Cancellation covered', evidence: [id] });
+  resumed.beforeRequest();
 });
 
 test('named check executes an actual child process once and cannot accept arbitrary commands', async t => {

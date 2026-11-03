@@ -43,8 +43,9 @@ first. Assess means examined, not necessarily correct: preserve actionable findi
 and return CHANGES when appropriate. Required checks must succeed before assessment.
 
 Before context reads/searches, register `action: question` with its `obligation`,
-unique `question` ID, concrete failure concern in `reason`, existing `evidence`
-and a `settleWhen` criterion. Pass that question ID to source reads/searches.
+unique `question` ID, concrete failure concern in `reason`, `evidence` IDs when available
+and a `settleWhen` criterion. An initial question may arise from supplied requirements
+with an empty evidence list; assessments and resolutions require observed evidence. Pass that question ID to source reads/searches.
 Use `action: resolve` with evidence and reasoning when settled. Initial diff paging
 requires no question. Further exploration must address an outstanding obligation.
 Once all obligations are assessed, return the final verdict.
@@ -52,9 +53,11 @@ Once all obligations are assessed, return the final verdict.
 The runtime persists evidence identities, assessments, questions and the last
 primary-request progress version. Identical evidence, repeated assessments,
 opening/renaming questions, resolution alone, compaction and reasoning tokens do
-not advance it. Another primary inference requires new evidence or a newly assessed
-obligation. A stalled request boundary records INCOMPLETE and blocks further
-inference. This permits large progressing reviews without a size-based cutoff.
+not advance it. An unchanged primary boundary enters a reconciliation phase: correct a failed
+action, obtain specifically missing evidence, assess existing evidence or report
+INCOMPLETE. Repeating that unchanged state after reconciliation records INCOMPLETE
+and blocks inference. New evidence or a newly assessed obligation returns to review.
+Repeated compaction without progress stops directly. This permits large progressing reviews without a size-based cutoff.
 It is a mechanical cycle detector, not a proof that every novel read is useful;
 the parent still validates relevance and assessment quality.
 
