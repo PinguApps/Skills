@@ -1,5 +1,5 @@
 {
-  "decisionDate": "2026-11-01",
+  "decisionDate": "2026-11-03",
   "goCostAllocation": {"monthlyFeeUSD": "10", "monthlyAllowanceUSD": "60", "billingSource": "go", "verifiedOn": "2026-11-01"},
   "documentationExtensions": [".md", ".markdown", ".mdown", ".mkd", ".json", ".jsonc", ".json5"],
   "bands": {
@@ -22,7 +22,6 @@
     "glm": {"id": "opencode-go/glm-5.3-flash", "efforts": ["high"]},
     "minimax": {"id": "opencode-go/minimax-m3.1-flash", "efforts": ["medium", "high"]},
     "deepseek": {"id": "opencode-go/deepseek-v4.1-flash", "efforts": ["high"]},
-    "mimo": {"id": "opencode-go/mimo-v2.6-flash", "efforts": ["default"]},
     "kimi-code": {"id": "opencode-go/kimi-k2.7-code", "efforts": ["default"]},
     "kimi": {"id": "opencode-go/kimi-k3.1-pro", "efforts": ["high"]},
     "qwen": {"id": "opencode-go/qwen3.8-max", "efforts": ["medium"], "contextPriceThreshold": 200000}
@@ -30,7 +29,7 @@
   "routes": [
     {
       "category": "security", "lead": "haiku",
-      "reviewers": [["haiku", "high"], ["mimo", "default"]],
+      "reviewers": [["haiku", "high"], ["minimax", "high"]],
       "escalation": [["glm", "high"], ["qwen", "medium"]],
       "variants": [{"codeBands": ["large", "very large"],
         "reviewers": [["haiku", "high"], ["minimax", "high"]],
@@ -42,11 +41,11 @@
       "escalation": [["kimi-code", "default"], ["kimi", "high"]]
     },
     {
-      "category": "compatibility", "lead": "mimo",
-      "reviewers": [["deepseek", "high"], ["mimo", "default"]],
+      "category": "compatibility", "lead": "glm",
+      "reviewers": [["deepseek", "high"], ["glm", "high"]],
       "escalation": [["glm", "high"], ["qwen", "medium"]],
       "variants": [{"codeBands": ["large", "very large"],
-        "reviewers": [["mimo", "default"], ["glm", "high"]],
+        "reviewers": [["deepseek", "high"], ["glm", "high"]],
         "escalation": [["kimi-code", "default"], ["qwen", "medium"]]}]
     },
     {
@@ -56,13 +55,13 @@
     },
     {
       "category": "ui", "lead": "minimax",
-      "reviewers": [["mimo", "default"], ["minimax", "medium"]],
+      "reviewers": [["deepseek", "high"], ["minimax", "medium"]],
       "escalation": [],
       "escalationByConcern": {"visual": [["kimi-code", "default"]], "logic": [["kimi", "high"]]}
     },
     {
       "category": "general", "lead": "deepseek",
-      "reviewers": [["deepseek", "high"], ["mimo", "default"]],
+      "reviewers": [["deepseek", "high"], ["glm", "high"]],
       "escalation": [["kimi-code", "default"], ["qwen", "medium"]],
       "variants": [{"codeBands": ["large", "very large"],
         "reviewers": [["deepseek", "high"], ["glm", "high"]]}]
@@ -70,7 +69,7 @@
     {
       "category": "documentation", "lead": "haiku",
       "reviewers": [["deepseek", "high"], ["haiku", "medium"]],
-      "escalation": [["glm", "high"], ["mimo", "default"]],
+      "escalation": [["glm", "high"], ["minimax", "high"]],
       "variants": [{"documentationBands": ["large"],
         "reviewers": [["haiku", "medium"], ["glm", "high"]]}]
     }

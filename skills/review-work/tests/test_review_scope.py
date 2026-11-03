@@ -162,7 +162,7 @@ class ReviewScopeTests(unittest.TestCase):
                                'documentation': {'files': 0, 'lines': 0, 'band': 'none'}}}
         route = review.route_for(manifest, ['ui', 'security'], True)
         self.assertEqual('security', route['category'])
-        self.assertEqual([['haiku', 'high'], ['mimo', 'default']], route['reviewers'])
+        self.assertEqual([['haiku', 'high'], ['minimax', 'high']], route['reviewers'])
         self.assertEqual(5, route['roundCap'])
         self.assertIsNone(route['integration'])
         manifest['totals']['code'].update(files=90, lines=4200, band='large')
@@ -229,14 +229,14 @@ class ReviewRoutingTests(unittest.TestCase):
         self.assertTrue(all(a['coverage'] == 'full' for a in route['reviewerAssignments']))
         self.assertEqual([], route['escalationByCategory']['ui'])
         self.assertEqual({'visual': [['kimi-code', 'default']], 'logic': [['kimi', 'high']]}, route['escalationByConcern']['ui'])
-        self.assertEqual([['glm', 'high'], ['mimo', 'default']], route['escalationByCategory']['documentation'])
+        self.assertEqual([['glm', 'high']], route['escalationByCategory']['documentation'])
         self.assertEqual(2, sum(len(a['paths']) for a in route['areas']))
 
     def test_token_documentation_does_not_replace_a_ui_reviewer(self):
         manifest = self.manifest(('src/Form.razor', 'code', 400), ('docs/note.md', 'documentation', 10))
         route = review.route_for(manifest, ['ui'], False, ['documentation=docs'])
         self.assertFalse(route['mixed'])
-        self.assertEqual([['mimo', 'default'], ['minimax', 'medium']], route['reviewers'])
+        self.assertEqual([['deepseek', 'high'], ['minimax', 'medium']], route['reviewers'])
 
     def test_protected_risk_cannot_be_diluted_by_two_larger_areas(self):
         manifest = self.manifest(('auth.cs', 'code', 5), ('src/Form.razor', 'code', 400),
@@ -246,7 +246,7 @@ class ReviewRoutingTests(unittest.TestCase):
             self.assertFalse(route['mixed'])
             self.assertEqual(category, route['category'])
             self.assertEqual(5, route['roundCap'])
-            self.assertEqual({'security': {'haiku', 'mimo'}, 'state': {'deepseek', 'minimax'}}[category],
+            self.assertEqual({'security': {'haiku', 'minimax'}, 'state': {'deepseek', 'minimax'}}[category],
                              {pair[0] for pair in route['reviewers']})
 
     def test_explicit_area_mapping_prevents_functional_json_becoming_docs(self):
@@ -285,7 +285,7 @@ class ReviewRoutingTests(unittest.TestCase):
         with patch.dict(review.POLICY, {'routes': routes}):
             route = review.route_for(manifest, ['general'], False, ['general=src', 'compatibility=eng'])
         self.assertTrue(route['mixed'])
-        self.assertEqual({'deepseek', 'mimo'}, {pair[0] for pair in route['reviewers']})
+        self.assertEqual({'deepseek', 'glm'}, {pair[0] for pair in route['reviewers']})
 
     def test_only_two_largest_substantial_areas_choose_reviewers(self):
         manifest = self.manifest(('src/Form.razor', 'code', 400), ('docs/form.md', 'documentation', 800),
