@@ -19,15 +19,11 @@ parent-authored summary. Primary system instructions stay stable so changing pag
 cursors do not invalidate the cached conversation prefix; tool responses carry
 the current cursors between summaries.
 
-Follow [runtime checks](runtime-checks.md) to prepare the verification/safety
-handoff. Discover the exact execution/browser tool IDs available to this OpenCode
-location and record them in each run's `executionTools` array before prepare.
-The ready receipt's `availableTools` lists registered tool IDs; an initial
-prepare with no runs can discover them without inference. The runtime exposes
-assigned tools directly, including tools normally grouped under Code Mode.
-An omitted/empty array retains source-only access for scopes that need no safe
-runtime checks. Permission changes alter the runtime digest and require reload
-with no reviewers live, just like new registrations.
+Follow [runtime checks](runtime-checks.md) and the
+[progress/recovery contract](review-liveness.md) to prepare obligations, fixed named
+checks and justified operation deadlines. Set `executionTools: []`. The runtime
+exposes its source, checkpoint and named-check tools directly. New runs require
+this contract; historical terminal runs remain available for accounting.
 
 Before **every dispatch batch**, record all new runs, including new rounds and
 escalations, then prepare with no live reviewer. Record terminal T3 task statuses
@@ -60,14 +56,10 @@ owned loader, prepare again and reverify the loaded plugin.
 The marker field is the complete single line `Review-Run-ID: <opaque>`, not a bare
 ID. Malformed or unknown marker-bearing prompts fail before inference. The plugin
 recognises only registered exact markers, binds their OpenCode sessions
-durably, and applies review guards only to those sessions. Assigned execution
-tools become directly visible throughout this location, so their Code Mode
-grouping may also change in unrelated sessions until the loader is removed.
-It exposes only
-`pingu_review_source` plus that run's assigned `executionTools` to owned review
-requests and rejects other tools. Missing assigned tools block the review.
-Execution/browser tools are for non-destructive runtime checks under the brief's
-restrictions; source access still goes exclusively through the filtered reader.
+durably, and applies review guards only to those sessions. General execution/browser access is disabled for new registrations. It exposes
+`pingu_review_source`, `pingu_review_checkpoint` and `pingu_review_check` only.
+Named checks use fixed parent-approved commands; unsupported checks are explicit
+verification gaps. Source access still goes exclusively through the filtered reader.
 The source tool calls the frozen reader without a shell and fixes the worktree,
 head and manifest. The model can choose `diff`, `read`, `search`, allowed historical
 ref and pagination. Reads require a path; searches require a nonempty pattern.

@@ -30,7 +30,8 @@ class RuntimePreparationTests(unittest.TestCase):
         self.run = {'id': 'one', 'marker': 'Review-Run-ID: unique', 'round': 2,
                     'model': 'openrouter/anthropic/claude-haiku-5.5', 'effort': 'high',
                     'title': 'R2: Haiku', 'scope': str(self.scope), 'base': 'base', 'from': 'first', 'head': 'head',
-                    'briefFile': str(self.brief)}
+                    'briefFile': str(self.brief), 'obligations': [{'id': 'G01', 'description': 'Verify source guard'}],
+                    'providerTimeoutMs': 120000, 'providerTimeoutReason': 'Local provider operation calibration'}
 
     def save(self, runs):
         self.ledger.write_text(json.dumps({'repo': str(self.repo), 'runs': runs}))
@@ -82,10 +83,14 @@ class RuntimePreparationTests(unittest.TestCase):
         self.invoke('prepare')
         first = json.loads((self.state / 'runtime.json').read_text())
         self.save([{**self.run, 'executionTools': ['shell', 'browser']}])
+        self.assertIn('fixed named checks', self.invoke('prepare', False).stderr)
+        self.save([{**self.run, 'checks': [{'id': 'verify', 'executable': sys.executable,
+                   'args': ['-c', 'print(42)'], 'cwd': str(self.repo), 'timeoutMs': 5000,
+                   'timeoutReason': 'Local trivial command'}]}])
         self.invoke('prepare')
         second = json.loads((self.state / 'runtime.json').read_text())
         self.assertNotEqual(first['runtimeDigest'], second['runtimeDigest'])
-        self.assertEqual(['shell', 'browser'], second['runs'][0]['executionTools'])
+        self.assertEqual('verify', second['runs'][0]['checks'][0]['id'])
         for invalid in ('shell', ['shell', 'shell'], [''], ['pingu_review_source']):
             self.save([{**self.run, 'executionTools': invalid}])
             self.assertIn('executionTools', self.invoke('prepare', False).stderr)
