@@ -24,15 +24,12 @@ PR's `## Proof`, rather than making it rediscover how to run the work:
   concurrent reviewers distinct ports/output directories/test resources, or
   serialize conflicting execution. Stop only processes the reviewer started.
 
-Use exact available execution and browser tool IDs in the run's `executionTools`
-array and name them in the brief. Expose only the tools needed for those checks;
-omit raw source readers, editors, delegation and PR/tracker tools. The parent
-classifies these IDs: registration validates list shape and uniqueness, not tool
-capabilities. Verify the
-runtime exposes the assigned tools before accepting the review. An empty array
-retains source-only access when execution is irrelevant or unsafe; record why and
-any resulting verification gap. Tool availability is not a safety sandbox: the
-brief must still constrain commands, destinations and side effects.
+Register fixed named checks and operation deadlines using
+[the progress/recovery contract](review-liveness.md). Include the obligations and
+check IDs in each brief. Use `pingu_review_check`; leave `executionTools` empty.
+For UI verification supply a fixed browser-test script with disposable resources.
+If a needed check is unavailable or unsafe, report the exact gap as INCOMPLETE.
+Fixed commands are not an OS sandbox: inspect scripts and constrain side effects.
 
 ## Reviewer execution
 
@@ -52,7 +49,7 @@ cannot be established, stop that action and report the exact missing setup; keep
 reviewing independently where possible. A source-only approval does not close a
 required runtime-verification gap.
 
-Read source only through `pingu_review_source`; shell/browser tools and runtime
+Read source only through `pingu_review_source`; named checks and runtime
 output must not be used to inspect excluded source. Keep secrets out of output.
 Preserve PATH, shell profiles and persistent environment settings, including child
 process side effects. For isolated .NET CLI homes, set

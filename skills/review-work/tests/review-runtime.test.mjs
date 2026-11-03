@@ -200,7 +200,7 @@ test('review execution tools are scoped to their assignment; raw source access s
     await runtime(config).setup({app: {version: 'test'},
       model: {transform: async callback => callback({list: () => []}), list: async () => []},
       session: {hook: async (name, callback) => hooks.set(name, callback)},
-      tool: {transform: async callback => callback({add(tool) { sourceTool = tool; },
+      tool: {transform: async callback => callback({add(tool) { if (tool.name == 'pingu_review_source') sourceTool = tool; },
         update(name, change) { const tool = {options: {codemode: true}}; change(tool); executionOptions.push({name, ...tool.options}); }}),
         hook: async (name, callback) => hooks.set('tool.' + name, callback),
         list: async () => [{id: 'shell'}, {id: 'browser'}, {id: 'pingu_review_source'}]},
@@ -240,7 +240,7 @@ test('tier reserve limits output and source bursts while the contract survives n
         limit: {context: 1_000_000}, cost: [{input: 1}, {input: 2, tier: {type: 'context', size: 100_000}}]}],
         update: (provider, id, callback) => callback({limit: {}})}), list: async () => []},
       session: {hook: async (name, callback) => hooks.set(name, callback)},
-      tool: {transform: async callback => callback({add(tool) {source = tool;}}), hook: async () => {}, list: async () => []},
+      tool: {transform: async callback => callback({add(tool) {if (tool.name == 'pingu_review_source') source = tool;}}), hook: async () => {}, list: async () => []},
     });
     await hooks.get('prompt')({sessionID: 'session', prompt: {text: run.marker}});
     const model = {providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5', variant: 'high'};

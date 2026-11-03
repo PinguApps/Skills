@@ -122,10 +122,11 @@ shares, selected leads and exceptions in the receipt.
 
 ## Dispatch and own the reviewers
 
-Before dispatch, read [the OpenCode runtime setup](review-runtime.md). Prepare its
+Before dispatch, read [the OpenCode runtime setup](review-runtime.md) and
+[progress, incomplete reviews and recovery](review-liveness.md). Prepare its
 worktree-local loader and verify it is loaded in that exact OpenCode location.
 It supplies `pingu_review_source`, restricts source access to that reader and
-permits only the assigned execution/browser tools for runtime checks,
+permits only fixed named checks for runtime verification,
 removes ambient repository instruction text/attachments from model context, and
 captures provider response usage without saving headers or response prose.
 This is an application guard, not an operating-system sandbox; configuration and
@@ -182,7 +183,9 @@ Checks actually run: <evidence and limitations>
 Runtime-check handoff: <concise commands/actions, expected and observed results,
 startup/configuration, test resources, URLs/ports, safety restrictions and cleanup
 from runtime-checks.md; full or focused incremental execution scope>
-Assigned execution/browser tools: <exact tool IDs matching executionTools>
+Progress obligations/checks: <IDs and descriptions matching the frozen run>
+Provider/check deadlines: <operation-specific timings and justifications>
+Assigned execution: pingu_review_check with fixed named-check IDs; executionTools: []
 Allowed source access: use only pingu_review_source (diff/read/search).
 Execution tools are for checks and app interaction, never raw git diff/show,
 shell source searches or other bypasses of source exclusions.
@@ -190,7 +193,7 @@ The runtime fixes the actual worktree, manifest, head and historical refs.
 Review only this range, with unchanged context needed to understand its effects.
 Find concrete scoped failures, broken callers and unmet requirements; avoid scope
 creep and style-only churn. Do not inspect unrelated earlier reviewed changes.
-Return APPROVE or CHANGES, and stable finding IDs with severity
+Return APPROVE, CHANGES or INCOMPLETE, and stable finding IDs with severity
 (blocker/actionable/advisory), file:line, failure scenario, evidence and suggested
 minimal fix. Report checks actually performed, observations and any verification
 gap. An excluded read is complete; omit claims needing excluded evidence.
@@ -234,7 +237,9 @@ alternative branches, not a sequence of two additional reviewers. A security or
 state concern in UI code uses that higher-risk category's chain.
 If one issue crosses categories, use the highest-risk applicable category's chain
 and include the interaction evidence. Record the category and skipped models.
-An exhausted chain/cap is a blocker, not approval; do not substitute another model.
+An exhausted chain/cap is a blocker, not approval. Operational reviewer replacement
+also follows [the recovery policy](review-liveness.md#model-replacement); it does
+not reset this chain, round caps or accounting.
 
 Reserve at most eight percentage points of the shared monthly Go allowance for
 new-specialist trials/escalations (Kimi K2.7 and Qwen Max); it is a ceiling, not a
@@ -287,9 +292,8 @@ Use [review_usage.py](../scripts/review_usage.py) to maintain one run ledger:
 Run JSON requires `id`, integer `round`, unique `marker`, exact policy `model`,
 `effort`, `from` and `head`; runtime setup also needs `base`, absolute `scope`, a
 durable external `briefFile` containing the complete review contract and
-`title`. Record `executionTools` as the exact assigned execution/browser tool IDs
-(an empty list for a source-only scope); follow [runtime checks](runtime-checks.md)
-when selecting permissions. Add returned `taskId`/`threadId`, verdict and finding
+`title`, plus obligations, fixed checks and justified deadlines from
+[the progress contract](review-liveness.md). Keep `executionTools` empty. Add returned `taskId`/`threadId`, verdict and finding
 evidence on completion. The collector records elapsed wall time from the owned
 OpenCode session's creation to terminal idle, including tools and native summaries,
 excluding the preceding dispatch queue. Missing timestamps are unavailable, never

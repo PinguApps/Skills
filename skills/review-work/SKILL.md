@@ -73,8 +73,9 @@ only checks needed for the changed behaviour or an open finding.
 Read and follow [the review procedure](references/pre-pr-review.md). It owns
 ignore filtering, code/documentation sizing, deterministic/mixed categories,
 model assignments, independent T3/OpenCode dispatch, incremental fixes, round
-caps, usage and child cleanup. Read its linked runtime instructions before
-dispatch. All scripts, tests and policy resources belong to this skill.
+caps, usage and child cleanup. Read its linked runtime instructions and [progress/recovery contract](references/review-liveness.md) before
+dispatch. INCOMPLETE triggers cause-specific recovery, including eligible unused-model
+replacement; it never supplies approval. All scripts, tests and policy resources belong to this skill.
 
 Use the actual worktree and a committed snapshot. Validate findings, fix confirmed
 issues within the authorized task, commit coherent fixes and rerun affected

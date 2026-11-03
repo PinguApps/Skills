@@ -11,6 +11,29 @@ spec.loader.exec_module(usage)
 
 
 class UsageTests(unittest.TestCase):
+    def test_model_replacement_requires_terminal_cause_specific_unused_route(self):
+        original = {'id': 'stalled', 'marker': 'Review-Run-ID: stalled', 'head': 'head',
+                    'round': 1, 'status': 'failed', 'model': usage.POLICY['models']['glm']['id']}
+        ledger = {'runs': [original], 'route': {'category': 'agent-policy',
+                  'reviewers': [['haiku', 'high'], ['glm', 'high']],
+                  'escalationByCategory': {'agent-policy': [['kimi-code', 'default'], ['qwen', 'medium']]}}}
+        run = {'id': 'replacement', 'marker': 'Review-Run-ID: replacement', 'head': 'head', 'round': 1,
+               'model': usage.POLICY['models']['kimi-code']['id'], 'effort': 'default', 'replacementOf': 'stalled',
+               'recovery': {'cause': 'model cycle', 'changedCondition': 'different eligible model',
+                            'evidence': 'persisted stalled question', 'reason': 'model-specific repetition', 'category': 'agent-policy'}}
+        usage.validate_assignment(ledger, run)
+        with self.assertRaisesRegex(ValueError, 'cause-specific'):
+            usage.validate_assignment(ledger, {**run, 'recovery': {}})
+        with self.assertRaisesRegex(ValueError, 'next eligible unused'):
+            usage.validate_assignment(ledger, {**run, 'model': usage.POLICY['models']['qwen']['id'], 'effort': 'medium'})
+        original['status'] = 'running'
+        with self.assertRaisesRegex(ValueError, 'terminal predecessor'):
+            usage.validate_assignment(ledger, run)
+        original['status'] = 'failed'
+        ledger['runs'].append({**run, 'id': 'already-used', 'marker': 'Review-Run-ID: used'})
+        with self.assertRaisesRegex(ValueError, 'next eligible unused'):
+            usage.validate_assignment(ledger, run)
+
     def message(self, identifier, cost=.005):
         return {'type': 'assistant', 'id': identifier,
                 'time': {'completed': 2},

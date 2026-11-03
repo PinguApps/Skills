@@ -52,7 +52,7 @@ def main():
     refs.mkdir(parents=True, exist_ok=True)
     authored = Path(__file__).resolve().parent
     # Freeze the trusted helper and policy, independent of edits being reviewed.
-    for filename in ('review_scope.py', 'review-runtime.mjs'):
+    for filename in ('review_scope.py', 'review-runtime.mjs', 'review-progress.mjs'):
         shutil.copyfile(authored / filename, scripts / filename)
     shutil.copyfile(authored.parent / 'references/review-policy.json', refs / 'review-policy.json')
     policy = json.loads((refs / 'review-policy.json').read_text(encoding='utf-8'))
@@ -66,7 +66,7 @@ def main():
               'modelPolicy': policy['models'],
               'models': [m['id'] for m in policy['models'].values()]}
     digest = hashlib.sha256()
-    for file in (scripts / 'review-runtime.mjs', scripts / 'review_scope.py', refs / 'review-policy.json'):
+    for file in (scripts / 'review-runtime.mjs', scripts / 'review-progress.mjs', scripts / 'review_scope.py', refs / 'review-policy.json'):
         digest.update(file.read_bytes())
     for run in config['runs']:
         for key in ('id', 'marker', 'head', 'from', 'base', 'scope', 'title', 'model', 'effort'):
@@ -82,6 +82,37 @@ def main():
                 any(not isinstance(tool, str) or not tool.strip() or tool == 'pingu_review_source'
                     for tool in execution_tools) or len(set(execution_tools)) != len(execution_tools)):
             raise ValueError('executionTools must contain unique execution/browser tool names')
+        if execution_tools:
+            raise ValueError('executionTools must be empty; use fixed named checks instead of general execution/browser tools')
+        obligations = run.get('obligations')
+        if (not isinstance(obligations, list) or not obligations or
+                any(not isinstance(item, dict) or not item.get('id') or not item.get('description') for item in obligations) or
+                len({item['id'] for item in obligations}) != len(obligations)):
+            raise ValueError('obligations require unique IDs and concrete descriptions')
+        if (not isinstance(run.get('providerTimeoutMs'), int) or isinstance(run['providerTimeoutMs'], bool) or
+                not 0 < run['providerTimeoutMs'] <= 2147483647 or not run.get('providerTimeoutReason', '').strip()):
+            raise ValueError('providerTimeoutMs requires a positive operation deadline and providerTimeoutReason')
+        checks = run.get('checks', [])
+        if not isinstance(checks, list) or any(not isinstance(check, dict) for check in checks):
+            raise ValueError('checks must be a list of fixed command definitions')
+        if len({check.get('id') for check in checks}) != len(checks):
+            raise ValueError('checks require unique IDs')
+        for check in checks:
+            if (not check.get('id') or not Path(check.get('executable', '')).is_absolute() or
+                    not Path(check.get('cwd', '')).is_absolute() or
+                    not isinstance(check.get('args'), list) or any(not isinstance(arg, str) for arg in check['args']) or
+                    not isinstance(check.get('timeoutMs'), int) or not 0 < check['timeoutMs'] <= 2147483647 or
+                    not check.get('timeoutReason', '').strip()):
+                raise ValueError('checks require fixed absolute executable/cwd, string args and justified timeoutMs')
+            env = check.get('env', {})
+            if not isinstance(env, dict) or any(not isinstance(v, str) for v in env.values()) or any(
+                    key.lower() in ('path', 'home', 'userprofile', 'codex_home') for key in env):
+                raise ValueError('checks must preserve PATH and home environment settings')
+        check_ids = {check['id'] for check in checks}
+        for item in obligations:
+            required_checks = item.get('checks', [])
+            if (not isinstance(required_checks, list) or any(not isinstance(key, str) or key not in check_ids for key in required_checks)):
+                raise ValueError('obligation checks must reference registered named checks')
         if not run.get('taskId') and not run.get('briefFile'):
             raise ValueError('New reviewer runs require a durable briefFile before dispatch')
         if Path(run['id']).name != run['id'] or '/' in run['id'] or '\\' in run['id']:
@@ -95,7 +126,7 @@ def main():
                 raise ValueError('Review brief must be a bounded file in the owned external run directory')
             run['reviewContract'] = brief.read_text(encoding='utf-8')
     # New registrations must reload the plugin and publish a fresh ready receipt.
-    digest.update(json.dumps([{k: r.get(k) for k in ('id', 'marker', 'model', 'effort', 'head', 'from', 'base', 'scope', 'title', 'reviewContract', 'executionTools')}
+    digest.update(json.dumps([{k: r.get(k) for k in ('id', 'marker', 'model', 'effort', 'head', 'from', 'base', 'scope', 'title', 'reviewContract', 'executionTools', 'obligations', 'checks', 'providerTimeoutMs', 'providerTimeoutReason')}
                               for r in config['runs']], sort_keys=True).encode())
     config['runtimeDigest'] = digest.hexdigest()
     config_path.write_text(json.dumps(config, indent=2), encoding='utf-8')
