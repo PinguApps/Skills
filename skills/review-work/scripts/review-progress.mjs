@@ -10,10 +10,10 @@ export class ReviewProgress {
     this.state = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {
       identity: this.identity, version: 0, lastRequestVersion: -1,
       evidence: {}, assessments: {}, questions: {}, ranges: {}, phase: 'review', halt: null,
-      actions: [], history: [], analysisVersion: 0, checkpointPlans: {}, challenge: null,
+      actions: [], history: [], analysisVersion: 0, checkpointPlans: {}, challenge: null, deliveredTraces: [],
     };
     if (this.state.identity !== this.identity) throw new Error('Progress identity changed; use a new run and reconcile coverage');
-    this.state = { actions: [], history: [], analysisVersion: 0, checkpointPlans: {}, challenge: null, ...this.state };
+    this.state = { actions: [], history: [], analysisVersion: 0, checkpointPlans: {}, challenge: null, deliveredTraces: [], ...this.state };
     this.obligations = new Set(run.obligations.map(item => item.id));
     this.requiredChecks = new Map(run.obligations.map(item => [item.id, item.checks ?? []]));
   }
@@ -34,15 +34,15 @@ export class ReviewProgress {
     const revision = JSON.stringify([this.state.version, this.state.analysisVersion]);
     if (revision !== this.state.lastRevision) {
       this.state.history = [];
+      this.state.deliveredTraces = [];
       this.state.challenge = null;
       this.state.phase = 'review';
     } else if (this.state.actions.length) {
       const trace = JSON.stringify(this.state.actions);
       if (this.state.history.includes(trace)) {
-        const challenge = this.state.challenge;
-        if (challenge?.trace === trace && challenge.delivered)
+        if (this.state.deliveredTraces.includes(trace))
           this.stop('Identical investigation actions/results recurred after reconciliation with unchanged evidence and analysis; parent diagnosis required');
-        this.state.challenge = { trace, delivered: false };
+        this.state.challenge = { trace };
         this.state.phase = 'reconcile';
       } else this.state.history.push(trace);
     }
@@ -50,8 +50,11 @@ export class ReviewProgress {
     this.state.actions = [];
     this.save();
   }
-  reconciliationDelivered() {
-    if (this.state.challenge) { this.state.challenge.delivered = true; this.save(); }
+  reconciliationDelivered(trace = this.state.challenge?.trace) {
+    if (trace && this.state.history.includes(trace) && !this.state.deliveredTraces.includes(trace)) {
+      this.state.deliveredTraces.push(trace);
+      this.save();
+    }
   }
   action(type, input, result) {
     const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
@@ -65,6 +68,9 @@ export class ReviewProgress {
     if (!Object.hasOwn(this.state.evidence, id)) {
       this.state.evidence[id] = description;
       if (advances) this.state.version++;
+      this.save();
+    } else {
+      this.state.evidence[id] = description;
       this.save();
     }
     return id;
@@ -103,7 +109,12 @@ export class ReviewProgress {
     const refs = input.evidence ?? [];
     if (!input.reason?.trim() || (!['question', 'reconcile'].includes(input.action) && !refs.length) || refs.some(id => !Object.hasOwn(this.state.evidence, id)))
       throw new Error('Checkpoint requires a concrete reason and observed evidence IDs');
-    const priorAnalysis = JSON.stringify([this.state.questions, this.state.assessments, this.state.checkpointPlans]);
+    const analysis = () => JSON.stringify([
+      [...new Set(Object.values(this.state.questions).filter(q => q.resolution)
+        .map(q => JSON.stringify([q.obligation, q.reason, q.settleWhen, q.resolution])))].sort(),
+      this.state.assessments, this.state.checkpointPlans,
+    ]);
+    const priorAnalysis = analysis();
     if (input.action === 'question') {
       if (!input.question?.trim() || !input.settleWhen?.trim()) throw new Error('Question requires an ID and settlement criterion');
       // Questions are analysis state, not source coverage or approval.
@@ -111,6 +122,7 @@ export class ReviewProgress {
       const prior = Object.hasOwn(this.state.questions, input.question) ? this.state.questions[input.question] : undefined;
       if (prior && JSON.stringify(prior) !== JSON.stringify(question)) throw new Error('Question already registered');
       Object.defineProperty(this.state.questions, input.question, { value: question, enumerable: true, configurable: true, writable: true });
+      this.action('question', question, 'registered');
     } else if (input.action === 'resolve') {
       const question = this.state.questions[input.question];
       if (!question || question.obligation !== input.obligation) throw new Error('Unknown question for obligation');
@@ -122,8 +134,8 @@ export class ReviewProgress {
       this.state.checkpointPlans[input.obligation] = { reason: input.reason, nextAction: input.nextAction, settleWhen: input.settleWhen, evidence: refs };
     } else if (input.action === 'assess') {
       if (this.requiredChecks.get(input.obligation).some(check => !refs.some(id =>
-        this.state.evidence[id]?.check === check && this.state.evidence[id]?.exitCode === 0)))
-        throw new Error('Required named checks must succeed and be cited before assessment');
+        this.state.evidence[id]?.check === check && Number.isInteger(this.state.evidence[id]?.exitCode))))
+        throw new Error('Required named checks must execute and be cited before assessment');
       if (Object.values(this.state.questions).some(q => q.obligation === input.obligation && !q.resolution))
         throw new Error('Resolve outstanding questions before assessing this obligation');
       if (!Object.hasOwn(this.state.assessments, input.obligation)) {
@@ -131,7 +143,7 @@ export class ReviewProgress {
         this.state.version++;
       }
     } else throw new Error('Unknown checkpoint action');
-    if (priorAnalysis !== JSON.stringify([this.state.questions, this.state.assessments, this.state.checkpointPlans])) this.state.analysisVersion++;
+    if (priorAnalysis !== analysis()) this.state.analysisVersion++;
     this.save();
     return this.state;
   }

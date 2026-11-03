@@ -28,7 +28,7 @@ Register fixed named checks and operation deadlines using
 [the progress/recovery contract](review-liveness.md). Include the obligations and
 check IDs in each brief. Use `pingu_review_check`; leave `executionTools` empty.
 For UI verification supply a fixed browser-test script with disposable resources.
-If a needed check is unavailable or unsafe, report the exact gap as INCOMPLETE.
+If a needed check is unavailable or unsafe, report the exact gap as a blocker for parent diagnosis.
 Fixed commands are not an OS sandbox: inspect scripts and constrain side effects.
 
 ## Reviewer execution

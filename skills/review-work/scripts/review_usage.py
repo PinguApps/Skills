@@ -292,13 +292,16 @@ def validate_assignment(ledger, run):
         if any(not recovery.get(key, '').strip() for key in ('cause', 'changedCondition', 'evidence', 'reason')):
             raise ValueError('Replacement requires cause-specific recovery evidence and justification')
         category = recovery.get('category')
-        if category != route['category']:
+        if not route.get('category') or category != route['category']:
             raise ValueError('Replacement must retain the full slot highest-risk category')
         chain = route.get('escalationByCategory', {}).get(category, [])
         concerns = route.get('escalationByConcern', {}).get(category)
         if concerns:
-            chain = concerns.get(recovery.get('concern'), [])
-        used = {r['model'] for r in ledger['runs'] if r['head'] == run['head'] and r['id'] != run['id']}
+            if recovery.get('concern') not in concerns:
+                raise ValueError('Replacement requires a valid category concern')
+            chain = concerns[recovery['concern']]
+        used = {r['model'] for r in ledger['runs'] if r['head'] == run['head'] and r['id'] != run['id']
+                and (r.get('taskId') or r.get('threadId') or r.get('sessionID'))}
         eligible = [(key, effort) for key, effort in chain if POLICY['models'][key]['id'] not in used]
         if not eligible or (run['model'], run['effort']) != (POLICY['models'][eligible[0][0]]['id'], eligible[0][1]):
             raise ValueError('Replacement must use the next eligible unused category model; exhausted chains block')

@@ -123,6 +123,46 @@ test('named check executes an actual child process once and cannot accept arbitr
   assert.equal(readFileSync(marker, 'utf8'), 'x');
 });
 
+test('renaming the same unresolved question neither advances analysis nor evades delivered reconciliation', t => {
+  const { progress: p } = fixture(t);
+  p.beforeRequest();
+  let ordinal = 0;
+  const question = () => {
+    p.checkpoint({ action: 'question', obligation: 'A', question: 'alias-' + ordinal++,
+      reason: 'Does cleanup run?', settleWhen: 'Inspect cleanup', evidence: [] });
+    p.beforeRequest();
+  };
+  question(); question();
+  assert.equal(p.state.analysisVersion, 0);
+  assert.equal(p.state.phase, 'reconcile');
+  p.reconciliationDelivered();
+  assert.throws(question, /NEEDS_DIAGNOSIS/);
+  assert.equal(p.state.halt.outcome, 'NEEDS_DIAGNOSIS');
+});
+
+test('alternating cycles retain the delivery status of the exact trace prompted', t => {
+  const { progress: p } = fixture(t);
+  p.beforeRequest();
+  const step = path => { p.action('read', { path }, 'same'); p.beforeRequest(); };
+  step('A'); step('B'); step('A');
+  const promptedA = p.state.challenge.trace;
+  step('B');
+  const pendingB = p.state.challenge.trace;
+  p.reconciliationDelivered(promptedA);
+  assert.ok(!p.state.deliveredTraces.includes(pendingB), 'A prompt about A cannot mark B delivered');
+  assert.throws(() => step('A'), /NEEDS_DIAGNOSIS/);
+});
+
+test('an observed failing required test can be assessed as a regression without blocking the review', t => {
+  const { path, run } = fixture(t);
+  const p = new ReviewProgress(path, { ...run, obligations: [{ id: 'A', description: 'Assess test', checks: ['test'] }] });
+  const evidence = p.evidence('failed', { check: 'test', exitCode: 1 });
+  p.checkpoint({ action: 'assess', obligation: 'A', reason: 'Observed regression; return CHANGES', evidence: [evidence] });
+  assert.ok(p.state.assessments.A);
+  assert.equal(p.state.evidence[evidence].exitCode, 1);
+  assert.equal(p.state.halt, null);
+});
+
 test('provider deadline cancels a silent body and preserves operation failure', async () => {
   let timedOut = false, cancelled = false;
   const deadline = requestDeadline(new Request('https://example.test'), 25, () => { timedOut = true; });

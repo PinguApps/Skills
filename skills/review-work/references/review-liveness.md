@@ -36,11 +36,15 @@ limits. Silent hangs cannot be recovered automatically without a time threshold.
 
 ## Reviewer progress
 
-Source results and named checks return durable evidence IDs. Use
+Source results and named checks return durable evidence IDs. Successful named
+checks are cached for the committed snapshot; failed checks may run again.
+Identical results retain their evidence identity, so retrying the same failure
+does not fabricate progress or erase the earlier failure. Use
 `pingu_review_checkpoint` with `action: assess`, `obligation`, a concrete `reason`
 and observed `evidence` IDs to record an assessment. Resolve outstanding questions
 first. Assess means examined, not necessarily correct: preserve actionable findings
-and return CHANGES when appropriate. Required checks must succeed before assessment.
+and return CHANGES when appropriate. Required checks must execute before assessment. A failing check is valid evidence
+for CHANGES; approval still requires the parent to verify successful required checks.
 
 Before context reads/searches, register `action: question` with its `obligation`,
 unique `question` ID, concrete failure concern in `reason`, `evidence` IDs when available
@@ -51,7 +55,8 @@ requires no question. Further exploration must address an outstanding obligation
 Once all obligations are assessed, return the final verdict.
 
 The runtime persists evidence coverage, assessments, question/analysis changes and
-completed tool-action traces. Missing checkpoints, reasoning-only requests, native
+completed tool-action traces. Registering or renaming unresolved questions does
+not advance analysis; evidence-backed resolutions and concrete plans do. Missing checkpoints, reasoning-only requests, native
 compaction, individual tool errors, rereading and unchanged source are **not** proof
 of a stall. They never automatically produce INCOMPLETE. Resolving a question or
 changing the analysis plan can be meaningful progress without reading new source.
@@ -131,13 +136,17 @@ unverified conclusions. Its own final verdict must reconcile inherited assessmen
 ### Model replacement
 
 Operational replacement is explicitly authorized as well as concern escalation.
-Choose the next eligible unused model/effort from the affected category's existing
-`escalationByCategory` chain (UI uses its appropriate concern branch). Unused means
-not dispatched on this revision, including incomplete attempts. Retain provider,
-quota, protected-category and two-distinct-reviewer requirements; record which
-reviewer slot the replacement fulfils. For a full-slot replacement carry every
-original responsibility and use the highest-risk category's chain. If no applicable
-UI concern can be identified, report the policy gap rather than choosing a model.
+A replacement fulfils the original reviewer slot, including all its responsibilities;
+carry forward trusted partial assessments without dropping those responsibilities.
+Choose the next eligible unused model/effort from the slot's highest-risk category's
+`escalationByCategory` chain (UI uses its appropriate concern branch). Focused
+issue-only reviews remain ordinary concern escalations, not slot replacements.
+Unused means not dispatched on this revision, including incomplete attempts.
+An unsent registration does not consume a model; reconcile an ambiguous launch
+before treating it as unsent. Retain provider, quota, protected-category and
+two-distinct-reviewer requirements; record the slot the replacement fulfils.
+If no applicable UI concern can be identified, report the policy gap rather than
+choosing a model.
 
 A replacement is a fresh `delegate_task` and run ID after its predecessor is
 terminal. It stays in the same round for the same revision and retains all costs,

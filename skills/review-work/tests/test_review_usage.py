@@ -22,6 +22,9 @@ class UsageTests(unittest.TestCase):
                'recovery': {'cause': 'model cycle', 'changedCondition': 'different eligible model',
                             'evidence': 'persisted stalled question', 'reason': 'model-specific repetition', 'category': 'agent-policy'}}
         usage.validate_assignment(ledger, run)
+        ledger['runs'].append({'id': 'planned', 'marker': 'Review-Run-ID: planned', 'head': 'head', 'model': run['model']})
+        usage.validate_assignment(ledger, run)  # An unsent registration is not a dispatched model.
+        ledger['runs'].pop()
         with self.assertRaisesRegex(ValueError, 'cause-specific'):
             usage.validate_assignment(ledger, {**run, 'recovery': {}})
         with self.assertRaisesRegex(ValueError, 'next eligible unused'):
@@ -30,7 +33,7 @@ class UsageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'terminal predecessor'):
             usage.validate_assignment(ledger, run)
         original['status'] = 'failed'
-        ledger['runs'].append({**run, 'id': 'already-used', 'marker': 'Review-Run-ID: used'})
+        ledger['runs'].append({**run, 'id': 'already-used', 'marker': 'Review-Run-ID: used', 'taskId': 'dispatched'})
         with self.assertRaisesRegex(ValueError, 'next eligible unused'):
             usage.validate_assignment(ledger, run)
 
