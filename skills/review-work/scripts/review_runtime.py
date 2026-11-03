@@ -54,6 +54,12 @@ def main():
     # Freeze the trusted helper and policy, independent of edits being reviewed.
     for filename in ('review_scope.py', 'review-runtime.mjs', 'review-progress.mjs'):
         shutil.copyfile(authored / filename, scripts / filename)
+    # The main loader has a digest URL; give its static dependency a content URL
+    # too, otherwise an OpenCode reload can retain the prior progress class.
+    progress_digest = hashlib.sha256((scripts / 'review-progress.mjs').read_bytes()).hexdigest()
+    runtime_source = (scripts / 'review-runtime.mjs').read_text(encoding='utf-8')
+    (scripts / 'review-runtime.mjs').write_text(runtime_source.replace(
+        "'./review-progress.mjs'", "'./review-progress.mjs?v=" + progress_digest + "'"), encoding='utf-8')
     shutil.copyfile(authored.parent / 'references/review-policy.json', refs / 'review-policy.json')
     policy = json.loads((refs / 'review-policy.json').read_text(encoding='utf-8'))
     # Completed history stays in the ledger for accounting, not in a new
