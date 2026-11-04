@@ -9,7 +9,6 @@ When called within implementation, read and apply complete-work's
 [continuation and stopping contract](../complete-work/SKILL.md#continuation-and-stopping-contract).
 Phase completion returns control to the caller for its next required action.
 
-
 Own the current PR through verified merge, or a ready unmerged handoff under a
 manual merge policy. This workflow does **not** run pre-PR AI reviewers again.
 Post-publication fixes use source verification and relevant tests, commits and

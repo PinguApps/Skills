@@ -4,7 +4,6 @@ For implementation callers, apply complete-work's [continuation and stopping
 contract](../../complete-work/SKILL.md#continuation-and-stopping-contract) to
 publication gaps and diagnostic returns; the caller owns recovery and progression.
 
-
 Proof is evidence the implementation parent observed during this task: command
 output, a reproduction, a running consumer, a screenshot or a verified external
 result. A reviewer's approval and instructions for future testing are not proof

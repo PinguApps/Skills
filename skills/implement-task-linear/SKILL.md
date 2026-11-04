@@ -10,7 +10,6 @@ When called within implementation, read and apply complete-work's
 [continuation and stopping contract](../complete-work/SKILL.md#continuation-and-stopping-contract).
 Phase completion returns control to the caller for its next required action.
 
-
 For any authorized PR feedback response, follow the shared
 [Copilot policy](../finish-pr/references/copilot.md): submit the fix or an
 evidence-backed explanation of why it cannot or should not be fixed, then resolve
@@ -23,7 +22,7 @@ Use this skill as a Linear-specific wrapper around [$complete-work](../complete-
 
 Read and apply [$linear-ticket](../linear-ticket/SKILL.md) before any ticket draft or mutation. Pass each target's verified team/project boundary and this workflow's scoped authorization; it owns ticket content, numbering, metadata, estimates, native writes and read-back verification.
 
-Begin with a few short, precise bullets explaining the intended discovery and delivery before taking action. Their completion criteria advance to the next step; after step 3, begin step 4 in the same task. Steps 1–3 are read-only discovery and clarification: use them to produce an informed plan before branch creation, repository edits, or Linear mutations.
+Begin with a few short, precise bullets explaining the intended discovery and delivery before taking action. Advance when each step's completion criteria are met; after step 3, begin step 4 in the same task. Steps 1–3 are read-only discovery and clarification: use them to produce an informed plan before branch creation, repository edits, or Linear mutations.
 
 ## 1. Resolve the target and Linear boundary
 
