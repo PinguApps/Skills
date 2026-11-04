@@ -29,7 +29,7 @@ authorization, approvals, merge protections or publication gates are never requi
 
 Permit a final handoff only for verified workflow completion; an explicit user stop,
 cancellation or manual handoff boundary; a demonstrated external blocker requiring
-user action after independent work is exhausted; or a required asynchronous handoff
+user input or an external change after independent work is exhausted; or a required asynchronous handoff
 under the host's actual monitoring/execution rules. A manual merge hold still requires
 all authorized implementation, verification and CI/review work before that hold.
 Repair/review caps remain binding: when exhausted, identify the external decision or
@@ -93,6 +93,6 @@ An invocation requesting this workflow authorizes its scoped commits, pre-PR rev
 
 ## 5. Complete the PR with finish-pr
 
-Load and follow `$finish-pr` for the newly created PR in the same run. Carry forward the task intent, decisions, verification, and known limitations. Continue through its conflict, CI, feedback, and review-convergence workflow until its definition of done is met or one of its stopping conditions applies. Creating the PR alone does not complete this workflow.
+Load and follow `$finish-pr` for the newly created PR in the same run. Carry forward the task intent, decisions, verification, and known limitations. Continue through its conflict, CI, feedback, and review-convergence workflow until its definition of done is met or a permitted stopping condition under the continuation contract applies. Creating the PR alone does not complete this workflow.
 
 Pass the merge policy explicitly. `finish-pr` handles post-publication fixes without additional delegated AI review rounds. Under automatic policy it merges only after its complete current-head gate passes, respecting protections/queues and verifying the merge. Under manual policy it leaves the ready PR unmerged. Report the verified outcome, PR URL, proof, review costs and any blocker; never count queue admission as a completed merge.
