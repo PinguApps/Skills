@@ -1,5 +1,10 @@
 # Review before PR publication
 
+For implementation callers, apply complete-work's [continuation and stopping
+contract](../../complete-work/SKILL.md#continuation-and-stopping-contract) to
+publication gaps and diagnostic returns; the caller owns recovery and progression.
+
+
 Read from `review-work` after implementation and observed proof, before creating
 a PR. This is the shared review procedure for standalone and delivery workflows.
 It runs only before initial PR publication: `finish-pr` never launches these AI

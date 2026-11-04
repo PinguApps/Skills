@@ -6,6 +6,11 @@ disable-model-invocation: true
 
 # Test Changes
 
+When called within implementation, read and apply complete-work's
+[continuation and stopping contract](../complete-work/SKILL.md#continuation-and-stopping-contract).
+Phase completion returns control to the caller for its next required action.
+
+
 Produce a practical handoff for manually verifying the work completed in the current conversation.
 
 ## 1. Establish the test surface
@@ -14,7 +19,7 @@ Reconstruct the delivered outcome from the conversation, including later correct
 
 Inspect read-only evidence where useful: changed files, `git diff`, repository status, available scripts, project documentation, generated artifacts, external records, and already-running services. Account for every user-visible behaviour, artifact, or external state changed by the completed work. Separate unrelated pre-existing changes.
 
-If no completed or inspectable change exists, say so and identify what must be completed before manual testing is meaningful.
+If no completed or inspectable change exists, identify what must be completed before manual testing is meaningful. In implementation, return that gap to the caller to complete the work and regenerate this handoff; it is not a final delivery result.
 
 Completion criterion: every change made in this conversation is mapped to something the user can inspect or exercise, or explicitly marked as having no manual test surface.
 
@@ -50,6 +55,8 @@ For each test, state:
 Cover the happy path first, then changed edge cases and regressions justified by the work. Describe observable behaviour rather than implementation details. Do not invent certainty: label inferred expectations and state any limitation that prevents a complete manual test.
 
 Completion criterion: the user can decide pass or fail for every test without interpreting vague phrases such as “works correctly.”
+
+Return these instructions as an artifact to an implementation caller, which continues PR creation/completion. They describe future manual checks and do not replace required observed verification.
 
 ## Response format
 

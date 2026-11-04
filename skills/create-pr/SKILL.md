@@ -5,6 +5,11 @@ description: Create or edit a GitHub PR description with safe newline handling a
 
 # Create PR
 
+When called within implementation, read and apply complete-work's
+[continuation and stopping contract](../complete-work/SKILL.md#continuation-and-stopping-contract).
+Phase completion returns control to the caller for its next required action.
+
+
 For any authorized PR feedback response, follow the shared
 [Copilot policy](../finish-pr/references/copilot.md): submit the fix or an
 evidence-backed explanation of why it cannot or should not be fixed, then resolve
@@ -17,11 +22,11 @@ Create a pull request for the completed work, with a description that preserves 
 
 Read applicable `AGENTS.md` and contribution requirements. Confirm the intended base repository, base branch, head repository, and published head branch from the caller or GitHub metadata. Check for an existing PR for that exact head and base before creating one; reuse it on resumed runs. This skill does not authorize implementation, commits, pushes, merging, or review requests beyond the caller's scope.
 
-For a **new** PR, require [$review-work](../review-work/SKILL.md)'s final coverage receipt, observed proof and usage ledger for the actual worktree/base/head and current head ignore-policy digest. Check all required reviewers/checklists, finding dispositions and any parent-verified minor deltas. If absent, invoke that skill within the caller's authorization, passing every associated implementation ticket and its verified Linear destination so its mandatory Pre-PR Review transition happens when review starts; return required fixes to the implementation owner. Never create a draft or partial PR to bypass the gate. Commit/push authority still belongs to the caller. Existing-PR updates do not launch post-PR AI review rounds.
+For a **new** PR, require [$review-work](../review-work/SKILL.md)'s final coverage receipt, observed proof and usage ledger for the actual worktree/base/head and current head ignore-policy digest. Check all required reviewers/checklists, finding dispositions and any parent-verified minor deltas. If absent, invoke that skill within the caller's authorization, passing every associated implementation ticket and its verified Linear destination so its mandatory Pre-PR Review transition happens when review starts; return required fixes to the implementation owner, which must apply them and resume the gate within the active workflow. Never create a draft or partial PR to bypass the gate. Commit/push authority still belongs to the caller. Existing-PR updates do not launch post-PR AI review rounds.
 
 Find and read the base repository's PR templates on its default branch, including case variants of `PULL_REQUEST_TEMPLATE.md` in `.github/`, the repository root, or `docs/`, and files in their `PULL_REQUEST_TEMPLATE/` subdirectories. Honour an explicitly selected template; otherwise use the default or the single clearly applicable template. Ask when multiple applicable templates remain ambiguous.
 
-If the repository has no template, check for an inherited template in its owner's public `.github` repository, using the same locations. A template lookup failure caused by authentication or API errors is not proof that no template exists; report the blocker rather than silently using the fallback. Use the fallback below only when no applicable repository or inherited template exists.
+If the repository has no template, check for an inherited template in its owner's public `.github` repository, using the same locations. A template lookup failure caused by authentication or API errors is not proof that no template exists; diagnose and try authorized remedies, then apply the continuation contract rather than silently using the fallback. Use the fallback below only when no applicable repository or inherited template exists.
 
 ## 2. Write the title and description
 

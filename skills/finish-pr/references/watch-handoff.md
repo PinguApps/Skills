@@ -1,7 +1,9 @@
 # PR watch handoff
 
 Read before yielding for any PR check, review or merge-queue event, including a
-coordinator waiting for a delegated worker. This is the shared handoff contract.
+coordinator waiting for a delegated worker. This owns PR subscription mechanics; complete-work's
+[continuation and stopping contract](../../complete-work/SKILL.md#continuation-and-stopping-contract)
+owns lifecycle stopping decisions. A required host yield preserves pending work.
 
 ## Prepare, refresh, decide, subscribe
 
