@@ -1,5 +1,9 @@
 # Progress, incomplete reviews and recovery
 
+For implementation callers, apply complete-work's [continuation and stopping
+contract](../../complete-work/SKILL.md#continuation-and-stopping-contract) to
+publication gaps and diagnostic returns; the caller owns recovery and progression.
+
 Read before preparing reviewers and whenever a run stops without valid approval.
 Use the frozen runtime for enforcement; instructions alone cannot stop a looping
 or unresponsive reviewer. There is no aggregate token, request or duration budget.

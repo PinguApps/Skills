@@ -1,0 +1,22 @@
+# Independent continuation decision evaluation
+
+Observed 2026-11-04 by a separate Codex evaluator reading the authored working-tree skills and references. This is a single instruction-following decision evaluation, not execution of GitHub/Linear lifecycle actions and not a guarantee of future compliance. No source was changed by this evaluator.
+
+| Scenario | Decision | Next action | Instruction basis |
+| --- | --- | --- | --- |
+| Discovery finished; implementation not started | Continue | Consume discovery/plan, enter complete-work branch preflight then implementation; retain read-only discovery boundary until satisfied. | complete-work contract: phases only; implement-task-linear opening and steps 3–4 explicitly advance in the same task. |
+| Preflight partially complete; another safe remedy available | Continue | Diagnose prerequisite failure, use available authorized remedy, retry exact branch/upstream verification. | complete-work step 1 replaces stop/report with diagnosis/remedies/reverification; contract treats local prerequisites as pending work. |
+| Fixable failed check | Continue | Read failure evidence, fix scoped cause, rerun affected check and commit verified fix. | complete-work step 2; finish-pr step 2; contract names failed checks as pending work. |
+| Downstream review returns coverage receipt | Continue | Validate coverage/proof/dispositions, then push and produce test-changes/create-pr artifacts; repair any gap first. | complete-work step 3 explicitly consumes receipt and begins step 4; review-work handoff requires caller continuation. |
+| PR created; CI/review outstanding | Continue | Load finish-pr, refresh current-head checks and all feedback, action findings; if only events remain use host-required watch/yield. | complete-work step 5 says PR creation is not completion; finish-pr steps 2–6 and watch-handoff. |
+| Genuine missing credential or material user decision | Ask while continuing independent work; hand back only after it is exhausted | Check available authenticated tools/configuration and reasonable remedies; identify exact blocked action/evidence, request credential through safe channel or precise decision, complete independent checks/docs. Then preserve blocker and next action for resume. | complete-work contract external-blocker receipt; implement-task-linear collaboration subsection; conditional grilling for material decisions. |
+| Explicit manual merge hold | Continue while CI/review unfinished; hand back once ready | Finish authorized fixes/checks/started reviews/current-head audit, then leave PR ready and unmerged with persistent manual policy. | complete-work contract requires pre-hold work; finish-pr audit/merge policy. |
+| Context handoff | Continue after transfer/resume; hand back only if actual host requires yield | Save objective, phase, evidence locations, constraints/policy, pending ownership and executable next action; resume that action without new instruction when execution resumes. | complete-work contract context/execution continuity; does not promise execution beyond platform limits. |
+| Host-required CI monitoring handoff | Hand back after required subscription/ledger preparation | Complete independent work, refresh/reclassify, register watcher according to actual host rules, yield as required, resume audit on wake. If race-free subscription is unsupported, report evidenced host dependency rather than claim monitoring guarantees. | complete-work permitted asynchronous handoff; finish-pr watch-handoff procedure; higher-priority actual host rules govern. |
+| Full successful completion | Hand back | Verify actual merge and SHA, reconcile required outcomes and proof, clean up owned watcher/children, report result. | complete-work pre-final audit; finish-pr step 6 requires actual merge rather than queue admission. |
+
+## Evaluation finding and correction
+
+The evaluator found an unqualified delegated-child WAITING return in finish-pr section 5. The parent qualified it to require fresh classification, completed independent work and only CI/review/queue events remaining. This correction received static inspection; the evaluator did not rerun it.
+
+No contradiction found in the preserved standalone review boundary, source-safety action stops, manual merge hold, publication completeness gate or reviewer diagnostic return: these are narrower action/phase boundaries, and implementation callers must consume them under the shared contract. A real host watch capability gap remains an external dependency; instruction edits do not repair the host.

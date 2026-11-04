@@ -5,6 +5,10 @@ description: Complete the current PR through conflicts, CI and all incoming revi
 
 # Finish PR
 
+When called within implementation, read and apply complete-work's
+[continuation and stopping contract](../complete-work/SKILL.md#continuation-and-stopping-contract).
+Phase completion returns control to the caller for its next required action.
+
 Own the current PR through verified merge, or a ready unmerged handoff under a
 manual merge policy. This workflow does **not** run pre-PR AI reviewers again.
 Post-publication fixes use source verification and relevant tests, commits and
@@ -136,7 +140,8 @@ settling a thread. These cases are deliberately distinct:
 
 ## 5. Wait and converge
 
-When running as a delegated implementation child, return `WAITING` with the exact
+When only CI/review/queue events remain after fresh classification and independent
+work, a delegated implementation child returns `WAITING` with the exact
 PR/head and pending condition; the coordinator watches and resumes this child.
 Delegated children never watch PRs. The watch/cleanup instructions in this skill
 apply to the top-level PR owner or coordinator; fixes and protected merges remain
@@ -156,8 +161,10 @@ revisions; record later fixes and proof without relabelling them as AI-reviewed.
 
 Retain a maximum of five pushed repair batches or two hours overall across resumed
 runs. After three batches, identify the actual cause of churn and continue only
-with a concrete evidence-backed repair plan. Stop earlier for closure, a genuine
-blocker, exhausted bounds or unexpected head movement. Limits do not supply
+with a concrete evidence-backed repair plan. Reconcile closure or unexpected head movement before deciding the next action.
+For a genuine blocker or exhausted bounds, apply the continuation contract: retain
+the cap and evidence, identify the required external decision/change, and finish
+independent authorized work before handoff. Limits do not supply
 approval. Do not wait for an optional reviewer that never started, including
 Copilot when quota was explicitly exhausted. Human holds produce a ready handoff,
 not an indefinite wait or an automatic merge.

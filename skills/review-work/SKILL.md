@@ -1,9 +1,13 @@
 ---
 name: review-work
-description: Review completed work before PR publication with two scoped T3/OpenCode reviewers, observed proof, incremental fixes and per-model accounting. Route Haiku through OpenRouter and other policy models through OpenCode Go; stop at the review handoff.
+description: Review completed work before PR publication with two scoped T3/OpenCode reviewers, observed proof, incremental fixes and per-model accounting. Route Haiku through OpenRouter and other policy models through OpenCode Go; return review artifacts to the caller, or hand off when invoked alone.
 ---
 
 # Review Work
+
+When called within implementation, read and apply complete-work's
+[continuation and stopping contract](../complete-work/SKILL.md#continuation-and-stopping-contract).
+Phase completion returns control to the caller for its next required action.
 
 For any authorized PR feedback response, follow the shared
 [Copilot policy](../finish-pr/references/copilot.md): submit the fix or an
@@ -59,8 +63,8 @@ or one combined commit merely to run this skill.
 
 Read [Proof](references/proof.md) and gather the most direct observed evidence for
 the change. Keep proof separate from future manual-test instructions and source
-review verdicts. Missing meaningful proof requires the specific user input or
-access needed to obtain it, rather than an approval claim.
+review verdicts. Gather missing proof through available checks/setup first; apply the continuation
+contract when specific external input or access is still required.
 
 Prepare the [runtime-check handoff](references/runtime-checks.md): give reviewers
 a short account of the verification destined for the PR, with commands, expected
@@ -97,7 +101,8 @@ Retain raw receipts and distinguish allocation from extra cash charges.
 Include per-round outcome/time and full/incremental scope, collapsed
 round details, and visible per-model totals with honest accounting limitations.
 
-Stop at this handoff when invoked alone. A caller may continue through `create-pr`
+Stop at this handoff when invoked alone. An implementation caller must consume
+the receipt and continue through its next required action, including `create-pr`
 using these artifacts, with the proof in `## Proof`, manual instructions in
 `## Test changes` and accounting in `## AI review`. Preserve any manual merge hold.
 Post-publication fixes remain `finish-pr` work and do not restart paid reviews.
