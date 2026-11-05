@@ -1,6 +1,6 @@
 {
-  "decisionDate": "2026-11-03",
-  "goCostAllocation": {"monthlyFeeUSD": "10", "monthlyAllowanceUSD": "60", "billingSource": "go", "verifiedOn": "2026-11-01"},
+  "decisionDate": "2026-11-05",
+  "goCostAllocation": {"monthlyFeeUSD": "40", "monthlyAllowanceUSD": "240", "billingSource": "go-plus", "verifiedOn": "2026-11-05"},
   "documentationExtensions": [".md", ".markdown", ".mdown", ".mkd", ".json", ".jsonc", ".json5"],
   "bands": {
     "code": [["small", 500, 10], ["standard", 4000, 60], ["large", 10000, 120]],
@@ -18,7 +18,7 @@
     "fileWeight": 20
   },
   "models": {
-    "haiku": {"id": "openrouter/anthropic/claude-haiku-5.5", "efforts": ["medium", "high"]},
+    "haiku": {"id": "opencode-go/claude-haiku-5-5", "efforts": ["medium", "high"]},
     "glm": {"id": "opencode-go/glm-5.3-flash", "efforts": ["high"]},
     "minimax": {"id": "opencode-go/minimax-m3.1-flash", "efforts": ["medium", "high"]},
     "deepseek": {"id": "opencode-go/deepseek-v4.1-flash", "efforts": ["high"]},

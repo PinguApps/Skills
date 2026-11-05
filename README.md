@@ -8,10 +8,10 @@ pre-PR model reviews and accounting; delivery skills call the same process.
 PRs keep proof separate from manual tests, with collapsed round details and
 visible per-model totals. Standalone review stops before push/PR/merge.
 
-## Review model decision — 2026-11-03
+## Review model decision — 2026-11-05
 
-Use OpenCode through T3 for every review. **Haiku uses OpenRouter; every other
-accepted reviewer uses OpenCode Go.** The executable source of truth is
+Use OpenCode through T3 for every review. **Every accepted reviewer uses OpenCode Go,
+including Haiku.** The executable source of truth is
 [review-policy.json](skills/review-work/references/review-policy.json).
 Keep exactly two distinct initial reviewers covering the complete included diff;
 use additional models only for a concrete unresolved concern. No GLM-5.2,
@@ -56,9 +56,9 @@ for compatibility, GLM for agent policy and MiniMax for UI.
 
 Keep the PR report's round headings, closed details, timing, scope tables and
 visible per-model token/cost totals. The main cost column combines API cash charges
-with Go's proportional subscription cost: **allowance used / $60 × $10** for the
-current Go plan. Thus 1% of the monthly allowance reports $0.10. Unused allowance
-stays unallocated; using 90% reports $9, without spreading the remaining $1 over
+with Go's proportional subscription cost: **allowance used / $240 × $40** for the
+current Go Plus plan. Thus 1% of the monthly allowance reports $0.40. Unused allowance
+stays unallocated; using 90% reports $36, without spreading the remaining $4 over
 reviews. Record the fee/pool basis in each ledger; verify it again after a plan or
 quota change. Use the provider's weighted `opencode.allowance`, not list prices or
 rounded console percentages. This is cost attribution, not an extra cash charge.
@@ -67,19 +67,19 @@ Raw cash/list-price/allowance receipts remain unchanged, with audit tables colla
 below totals. Preserve separate estimates and unavailable evidence. Top-up fees and
 tax stay outside review costs; PRInspector parses the same main cost column.
 
-The 30–31 October sample had 48 reviewed PRs and 117 reviewer runs. Replaying its
-tokens/caching across 30 active days projects $10 Go + $18.90 Haiku + $1.04
-OpenRouter credit-purchase fee, **about $29.94/month before tax**, versus $59.82
-for all-OpenRouter usage. Routine Go use projects to 75–88% of its monthly pool,
-depending on DeepSeek peak pricing. At 20 active days the hybrid estimate is $23.29.
-These are forecasts from partial published accounting, not a spending guarantee
-or evidence of equivalent behaviour across providers. They include the full monthly
-fee; per-review attribution leaves the unused share of that fee unreported.
+The current access period is 5 November–5 December 2026, renewing at 14:26:56 UTC
+(approximately 15:00 UK time as reported). The authenticated meter verified a $240
+monthly weighted pool, $120 weekly and $48 per five hours; paid Extra Usage is off.
+Receipts identify this plan as `go-plus`. Verify these values again on plan changes.
+
+The earlier hybrid-plan forecast was based on the $10 plan and separate Haiku API
+charges. It does not describe the current $40 subscription or all-Go routing.
+Historical reports retain their recorded plan basis and provider model IDs.
 
 Reserve at most eight additional percentage points of shared monthly Go allowance
 for new-specialist trials/escalations, not eight points per model. Consult actual
 usage/headroom and all three quota windows before dispatch. Never enable Extra
-Usage or silently fall back to non-Haiku OpenRouter calls. Unavailable quota blocks
+Usage or silently fall back to OpenRouter calls. Unavailable quota blocks
 an unsettled review; it never supplies approval. Future runs reassess actual token
 consumption, valid findings, false positives, guard compliance and latency before
 promoting new defaults. The superseded routing matrix and its workload forecast have been removed.

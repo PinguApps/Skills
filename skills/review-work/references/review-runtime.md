@@ -73,8 +73,8 @@ numeric usage, model/effort, request kind, session ID and completion metadata in
 `<run-id>.transport.jsonl`. It never saves request headers, keys or response prose.
 Title generation uses the assigned title without an inference call. Other charged
 flows must use the assigned model/variant; an unexpected auxiliary model blocks.
-The frozen policy allowlist binds Haiku to OpenRouter's chat endpoint and all
-other assignments to Go's chat endpoint (Qwen uses Go's Anthropic Messages API).
+The frozen policy allowlist binds every assignment to Go. Haiku and Qwen use
+Go's Anthropic Messages API; other assignments use Go's chat endpoint.
 The HTTP guard checks HTTPS origin, path and wire model, rejects provider fallback
 and hosting pins, and supplies Go's stable `x-opencode-session` plus an identifying
 user agent. It does not log request headers or enable Extra Usage. Go default

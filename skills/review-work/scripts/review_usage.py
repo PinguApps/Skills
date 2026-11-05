@@ -553,6 +553,7 @@ def main():
     output.add_argument('--repository-url', help='Repository web URL when rendering a legacy ledger')
     output.add_argument('--go-monthly-fee-usd', help='Explicitly record the Go allocation fee on an existing ledger')
     output.add_argument('--go-monthly-allowance-usd', help='Weighted monthly Go pool in receipt allowance dollars')
+    output.add_argument('--go-billing-source', choices=['go', 'go-plus'], help='Verified subscription source; otherwise retain the ledger source')
     args = parser.parse_args()
     if args.command == 'init':
         if Path(args.ledger).exists():
@@ -616,13 +617,18 @@ def main():
         save(args.ledger, ledger)
         print(json.dumps({'runID': run['id'], 'sessionID': session['id'], 'usage': run['usage']}, indent=2))
     else:
+        if args.go_billing_source and not args.go_monthly_fee_usd:
+            raise ValueError('Provide both Go allocation amounts with a billing source')
         if bool(args.go_monthly_fee_usd) != bool(args.go_monthly_allowance_usd):
             raise ValueError('Provide both Go allocation amounts together')
         if args.go_monthly_fee_usd:
             fee, pool = amount(args.go_monthly_fee_usd), amount(args.go_monthly_allowance_usd)
             if pool == 0:
                 raise ValueError('Monthly Go allowance must be positive')
-            ledger['goCostAllocation'] = {'monthlyFeeUSD': str(fee), 'monthlyAllowanceUSD': str(pool), 'billingSource': 'go'}
+            source = args.go_billing_source or ledger.get('goCostAllocation', {}).get('billingSource')
+            if source not in ('go', 'go-plus'):
+                raise ValueError('Provide the verified Go billing source')
+            ledger['goCostAllocation'] = {'monthlyFeeUSD': str(fee), 'monthlyAllowanceUSD': str(pool), 'billingSource': source}
             save(args.ledger, ledger)
         if args.repository_url:
             ledger['repositoryUrl'] = repository_url(args.repository_url)

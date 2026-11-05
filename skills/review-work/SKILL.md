@@ -1,6 +1,6 @@
 ---
 name: review-work
-description: Review completed work before PR publication with two scoped T3/OpenCode reviewers, observed proof, incremental fixes and per-model accounting. Route Haiku through OpenRouter and other policy models through OpenCode Go; return review artifacts to the caller, or hand off when invoked alone.
+description: Review completed work before PR publication with two scoped T3/OpenCode reviewers, observed proof, incremental fixes and per-model accounting. Route every policy model through OpenCode Go; return review artifacts to the caller, or hand off when invoked alone.
 ---
 
 # Review Work

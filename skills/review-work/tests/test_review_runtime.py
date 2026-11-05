@@ -28,7 +28,7 @@ class RuntimePreparationTests(unittest.TestCase):
         self.brief = self.state / 'brief.txt'
         self.brief.write_text('G01: retain and verify the source guard.\n')
         self.run = {'id': 'one', 'marker': 'Review-Run-ID: unique', 'round': 2,
-                    'model': 'openrouter/anthropic/claude-haiku-5.5', 'effort': 'high',
+                    'model': 'opencode-go/claude-haiku-5-5', 'effort': 'high',
                     'title': 'R2: Haiku', 'scope': str(self.scope), 'base': 'base', 'from': 'first', 'head': 'head',
                     'briefFile': str(self.brief), 'obligations': [{'id': 'G01', 'description': 'Verify source guard'}],
                     'providerTimeoutMs': 120000, 'providerTimeoutReason': 'Local provider operation calibration'}
@@ -96,7 +96,7 @@ class RuntimePreparationTests(unittest.TestCase):
             self.assertIn('executionTools', self.invoke('prepare', False).stderr)
 
     def test_wrong_provider_and_excluded_models_cannot_be_registered(self):
-        for model in ('openrouter/z-ai/glm-5.3-flash', 'opencode-go/claude-haiku-5-5',
+        for model in ('openrouter/z-ai/glm-5.3-flash', 'openrouter/anthropic/claude-haiku-5.5',
                       'opencode-go/glm-5.2', 'opencode-go/gemini-4-argon'):
             self.save([{**self.run, 'model': model}])
             self.assertIn('accepted review policy', self.invoke('prepare', False).stderr)
