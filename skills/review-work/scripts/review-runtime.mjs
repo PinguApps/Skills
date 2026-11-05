@@ -402,7 +402,7 @@ export default function runtime(configPath) {
         if (event.kind === 'primary') sourceUsed.set(event.sessionID, 0);
         const url = new URL(event.request.url);
         const go = run.model.startsWith('opencode-go/');
-        const expectedPath = go ? (run.model.endsWith('/qwen3.8-max') ?
+        const expectedPath = go ? (['opencode-go/qwen3.8-max', 'opencode-go/claude-haiku-5-5'].includes(run.model) ?
           '/inference/go/anthropic/v1/messages' : '/inference/go/openai/v1/chat/completions') : '/api/v1/chat/completions';
         if (url.origin !== (go ? 'https://opencode.ai' : 'https://openrouter.ai') || url.pathname !== expectedPath || url.search)
           throw new Error('Review request differs from its assigned provider endpoint');

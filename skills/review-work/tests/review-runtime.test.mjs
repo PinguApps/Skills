@@ -104,10 +104,34 @@ test('assigned routes reject provider fallback, alternate models and forbidden m
     assert.equal(good.headers.get('user-agent'), 'pingu-pre-pr-review/test');
     // Explicit but unsupported variants must not masquerade as the provider default.
     await assert.rejects(hooks.get('http.request')({...event, model: {...event.model, variant: 'thinking'}, request: request(url)}), /recorded assignment/);
-    for (const model of ['opencode-go/gemini-4-argon', 'opencode-go/glm-5.2', 'opencode-go/claude-haiku-5-5', 'openrouter/z-ai/glm-5.3-flash']) {
+    for (const model of ['opencode-go/gemini-4-argon', 'opencode-go/glm-5.2', 'openrouter/anthropic/claude-haiku-5.5', 'openrouter/z-ai/glm-5.3-flash']) {
       writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, runs: [{...run, model}]}));
       await assert.rejects(hooks.get('http.request')({...event, request: request(url)}), /accepted model\/provider policy/);
     }
+  } finally { rmSync(state, {recursive: true, force: true}); }
+});
+
+test('Go Haiku uses Messages and rejects both chat routes and OpenRouter', async () => {
+  const state = mkdtempSync(join(tmpdir(), 'review-runtime-test-'));
+  try {
+    assert.ok(Object.values(modelPolicy).every(model => model.id.startsWith('opencode-go/')));
+    const run = {id: 'haiku', marker: 'Review-Run-ID: haiku', model: 'opencode-go/claude-haiku-5-5', effort: 'high'};
+    const config = join(state, 'runtime.json');
+    writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, runs: [run]}));
+    const hooks = new Map();
+    await runtime(config).setup({app: {version: 'test'},
+      model: {transform: async cb => cb({list: () => []}), list: async () => []},
+      session: {hook: async (name, cb) => hooks.set(name, cb)},
+      tool: {transform: async cb => cb({add() {}}), hook: async () => {}, list: async () => []}});
+    await hooks.get('prompt')({sessionID: 'haiku', prompt: {text: run.marker}});
+    const event = {sessionID: 'haiku', kind: 'primary', model: {providerID: 'opencode-go', id: 'claude-haiku-5-5', variant: 'high'}};
+    const wire = url => new Request(url, {method: 'POST', body: JSON.stringify({model: 'claude-haiku-5-5', max_tokens: 8192})});
+    for (const url of ['https://openrouter.ai/api/v1/chat/completions', 'https://opencode.ai/inference/go/openai/v1/chat/completions']) {
+      await assert.rejects(hooks.get('http.request')({...event, request: wire(url)}), /provider endpoint/);
+    }
+    const request = wire('https://opencode.ai/inference/go/anthropic/v1/messages');
+    await hooks.get('http.request')({...event, request});
+    assert.equal(request.headers.get('x-opencode-session'), 'haiku');
   } finally { rmSync(state, {recursive: true, force: true}); }
 });
 
@@ -143,11 +167,11 @@ test('registered review markers fail closed and overlapping requests keep exact 
     const run = {id: 'owned', marker: 'Review-Run-ID: valid', title: 'R2: GLM',
       model: 'opencode-go/glm-5.3-flash', effort: 'high'};
     const config = join(state, 'runtime.json');
-    writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, models: ['openrouter/anthropic/claude-haiku-5.5'], runs: [run]}));
+    writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, models: ['opencode-go/claude-haiku-5-5'], runs: [run]}));
     const hooks = new Map();
     const protectedModels = [];
     await runtime(config).setup({app: {version: 'test'},
-      model: {transform: async callback => callback({list: () => [{providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5',
+      model: {transform: async callback => callback({list: () => [{providerID: 'opencode-go', id: 'claude-haiku-5-5',
         limit: {context: 1_000_000}, cost: [{input: 1}, {input: 2, tier: {type: 'context', size: 100_000}}]}],
         update: (provider, id, callback) => {const draft = {limit: {}}; callback(draft); protectedModels.push(draft);}}), list: async () => []},
       session: {hook: async (name, callback) => hooks.set(name, callback)},
@@ -191,7 +215,7 @@ test('review execution tools are scoped to their assignment; raw source access s
   const state = mkdtempSync(join(tmpdir(), 'review-runtime-test-'));
   try {
     const run = {id: 'run', marker: 'Review-Run-ID: opaque', title: 'R1: Haiku',
-      model: 'openrouter/anthropic/claude-haiku-5.5', effort: 'high', executionTools: ['shell', 'browser']};
+      model: 'opencode-go/claude-haiku-5-5', effort: 'high', executionTools: ['shell', 'browser']};
     const config = join(state, 'runtime.json');
     writeFileSync(config, JSON.stringify({state, pricingGuard, modelPolicy, runs: [run]}));
     const hooks = new Map();
@@ -208,7 +232,7 @@ test('review execution tools are scoped to their assignment; raw source access s
     assert.equal(sourceTool.options.codemode, false, 'source reader must be directly visible, not hidden in Code Mode');
     assert.deepEqual(executionOptions, [{name: 'shell', codemode: false}, {name: 'browser', codemode: false}]);
     await hooks.get('prompt')({sessionID: 'owned', prompt: {text: 'Wrapper\n' + run.marker + '\nReview'}});
-    const event = {sessionID: 'owned', model: {providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5', variant: 'high'},
+    const event = {sessionID: 'owned', model: {providerID: 'opencode-go', id: 'claude-haiku-5-5', variant: 'high'},
       tools: {shell: {}, browser: {}, read: {}, edit: {}, delegate: {}, pingu_review_source: {}}};
     await hooks.get('context')(event);
     assert.deepEqual(Object.keys(event.tools), ['shell', 'browser', 'pingu_review_source']);
@@ -228,7 +252,7 @@ test('review execution tools are scoped to their assignment; raw source access s
 test('tier reserve limits output and source bursts while the contract survives native compaction', async () => {
   const state = mkdtempSync(join(tmpdir(), 'review-runtime-test-'));
   try {
-    const run = {id: 'tiered', marker: 'Review-Run-ID: tiered', model: 'openrouter/anthropic/claude-haiku-5.5',
+    const run = {id: 'tiered', marker: 'Review-Run-ID: tiered', model: 'opencode-go/claude-haiku-5-5',
       effort: 'high', head: 'head', from: 'from', base: 'base', reviewContract: 'G01 and G22 must remain in the review contract.'};
     const config = join(state, 'runtime.json');
     writeFileSync(config, JSON.stringify({state, repo: state, helper: 'unused-reader.py', python: join(state, 'missing-python.exe'), pricingGuard, modelPolicy, runs: [run]}));
@@ -236,17 +260,17 @@ test('tier reserve limits output and source bursts while the contract survives n
       offset: 12000, nextOffset: 24000, complete: false}) + '\n');
     const hooks = new Map(); let source;
     await runtime(config).setup({app: {version: 'test'},
-      model: {transform: async callback => callback({list: () => [{providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5',
+      model: {transform: async callback => callback({list: () => [{providerID: 'opencode-go', id: 'claude-haiku-5-5',
         limit: {context: 1_000_000}, cost: [{input: 1}, {input: 2, tier: {type: 'context', size: 100_000}}]}],
         update: (provider, id, callback) => callback({limit: {}})}), list: async () => []},
       session: {hook: async (name, callback) => hooks.set(name, callback)},
       tool: {transform: async callback => callback({add(tool) {if (tool.name == 'pingu_review_source') source = tool;}}), hook: async () => {}, list: async () => []},
     });
     await hooks.get('prompt')({sessionID: 'session', prompt: {text: run.marker}});
-    const model = {providerID: 'openrouter', id: 'anthropic/claude-haiku-5.5', variant: 'high'};
+    const model = {providerID: 'opencode-go', id: 'claude-haiku-5-5', variant: 'high'};
     // Mirrors SessionModelRequest.prepare in OpenCode 2.1.4: generation options
     // belong to context/compaction, while model.request has only URL/headers.
-    const request = {sessionID: 'session', model, kind: 'primary', baseURL: 'https://openrouter.ai', headers: {}};
+    const request = {sessionID: 'session', model, kind: 'primary', baseURL: 'https://opencode.ai', headers: {}};
     if (hooks.has('model.request')) await hooks.get('model.request')(request);
     for (const hook of ['context', 'compaction']) {
       const event = {sessionID: 'session', model, options: {maxTokens: 131072}, tools: {pingu_review_source: {}}};
@@ -258,7 +282,7 @@ test('tier reserve limits output and source bursts while the contract survives n
         'Only compaction needs changing progress metadata; primary prefixes remain stable for caching');
       if (hook === 'compaction') assert.ok(systemText.includes('"nextOffset":24000'), 'Native summaries receive durable paging cursors');
     }
-    const native = body => new Request('https://openrouter.ai/api/v1/chat/completions', {method: 'POST', body: JSON.stringify({model: 'anthropic/claude-haiku-5.5', ...body})});
+    const native = body => new Request('https://opencode.ai/inference/go/anthropic/v1/messages', {method: 'POST', body: JSON.stringify({model: 'claude-haiku-5-5', ...body})});
     await assert.rejects(hooks.get('http.request')({...request, request: native({max_tokens: 32000})}), /output reserve/);
     await hooks.get('http.request')({...request, request: native({max_tokens: 8192})});
     const first = source.execute({operation: 'search', pattern: 'needle', path: 'scope/file.py'}, {sessionID: 'session'}).catch(error => error);

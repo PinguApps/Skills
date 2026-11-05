@@ -139,8 +139,8 @@ accepting coverage. A failed guard or unavailable plugin is an operational block
 
 Discover T3 capabilities once before first delegation. Use `delegate_task`, role
 `review`, shared isolation (the parent worktree), with OpenCode as the runner and
-the exact policy model. Haiku uses `openrouter/anthropic/claude-haiku-5.5`;
-every other accepted model uses `opencode-go/...`. For a named effort, set
+the exact policy model. Every accepted model uses `opencode-go/...`, including
+Haiku as `opencode-go/claude-haiku-5-5`. For a named effort, set
 `target.options.variant` explicitly. Kimi K2.7 has no Go variant:
 record `default` and pass `target.options: {}` to clear inherited options rather
 than sending an unsupported `thinking` setting. Qwen uses `medium`; other named
@@ -251,7 +251,7 @@ spend target or a separate model budget. Consult the actual Go usage meter befor
 such a dispatch and retain the observed headroom in the run ledger. Respect the
 five-hour, weekly and monthly limits, preserving room for routine pairs. Missing
 meter access or exhausted headroom blocks that escalation, never supplies approval.
-Do not enable paid Extra Usage or add a non-Haiku OpenRouter fallback as a workaround.
+Do not enable paid Extra Usage or add an OpenRouter fallback as a workaround.
 
 For each returning reviewer, use its last covered SHA as `--previous` and the
 original task base as `--base`. The next scope is previous SHA to current HEAD,
