@@ -330,7 +330,8 @@ For Go, collect `opencode.tokens` (input excludes cache; output includes reasoni
 covered receipt has $0 incremental cash, not missing usage. Preserve all raw
 receipts. In the report view, use one main `Cost USD` column for API cash plus
 Go allowance used / monthly weighted pool × monthly subscription fee. The current
-Go basis is $10/$60; 1% of the pool reports $0.10 and 90% reports $9. Leave unused
+Go Plus basis is $40/$240 (`billing_source: go-plus`); 1% of the pool reports $0.40
+and 90% reports $36. Leave unused
 allowance unallocated. Use `opencode.allowance`, never infer the weighted share
 from list prices or rounded console gauges. Balance-backed Extra Usage contributes
 its actual cash charge, without a second allocation for the same usage.
@@ -338,10 +339,12 @@ its actual cash charge, without a second allocation for the same usage.
 `init` snapshots the policy's `goCostAllocation` into the ledger. Verify that basis
 against the subscribed plan and current weighted pool before first Go dispatch;
 retain it for historical rerenders. For an existing ledger, explicitly record a
-verified Go basis with `render --go-monthly-fee-usd 10 --go-monthly-allowance-usd 60`.
+verified Go basis with `render --go-monthly-fee-usd 40 --go-monthly-allowance-usd 240 --go-billing-source go-plus`.
 A missing basis or different billing source leaves covered cost unavailable rather
-than zero. A changed plan needs its own verified basis; never silently apply Go's
-fee/pool to Go Plus. [Allowance semantics](https://opencode.ai/v2/docs/console/api/inference#cost)
+than zero. A changed plan needs its own verified fee, pool and billing source. The current
+period began 2026-11-05 at 14:26:56 UTC and ends 2026-12-05 at that time.
+Keep old ledgers on their recorded basis; explicit overrides are corrections,
+not a bulk migration of historical reports. [Allowance semantics](https://opencode.ai/v2/docs/console/api/inference#cost)
 and [the shared weighting explanation](https://github.com/anomalyco/opencode/issues/54875)
 support the recorded basis.
 

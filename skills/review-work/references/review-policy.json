@@ -1,6 +1,6 @@
 {
   "decisionDate": "2026-11-05",
-  "goCostAllocation": {"monthlyFeeUSD": "10", "monthlyAllowanceUSD": "60", "billingSource": "go", "verifiedOn": "2026-11-01"},
+  "goCostAllocation": {"monthlyFeeUSD": "40", "monthlyAllowanceUSD": "240", "billingSource": "go-plus", "verifiedOn": "2026-11-05"},
   "documentationExtensions": [".md", ".markdown", ".mdown", ".mkd", ".json", ".jsonc", ".json5"],
   "bands": {
     "code": [["small", 500, 10], ["standard", 4000, 60], ["large", 10000, 120]],

@@ -56,9 +56,9 @@ for compatibility, GLM for agent policy and MiniMax for UI.
 
 Keep the PR report's round headings, closed details, timing, scope tables and
 visible per-model token/cost totals. The main cost column combines API cash charges
-with Go's proportional subscription cost: **allowance used / $60 × $10** for the
-current Go plan. Thus 1% of the monthly allowance reports $0.10. Unused allowance
-stays unallocated; using 90% reports $9, without spreading the remaining $1 over
+with Go's proportional subscription cost: **allowance used / $240 × $40** for the
+current Go Plus plan. Thus 1% of the monthly allowance reports $0.40. Unused allowance
+stays unallocated; using 90% reports $36, without spreading the remaining $4 over
 reviews. Record the fee/pool basis in each ledger; verify it again after a plan or
 quota change. Use the provider's weighted `opencode.allowance`, not list prices or
 rounded console percentages. This is cost attribution, not an extra cash charge.
@@ -66,6 +66,11 @@ Go reports use six decimal places so small model contributions remain visible.
 Raw cash/list-price/allowance receipts remain unchanged, with audit tables collapsed
 below totals. Preserve separate estimates and unavailable evidence. Top-up fees and
 tax stay outside review costs; PRInspector parses the same main cost column.
+
+The current access period is 5 November–5 December 2026, renewing at 14:26:56 UTC
+(approximately 15:00 UK time as reported). The authenticated meter verified a $240
+monthly weighted pool, $120 weekly and $48 per five hours; paid Extra Usage is off.
+Receipts identify this plan as `go-plus`. Verify these values again on plan changes.
 
 The earlier hybrid-plan forecast was based on the $10 plan and separate Haiku API
 charges. It does not describe the current $40 subscription or all-Go routing.

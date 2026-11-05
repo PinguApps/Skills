@@ -179,7 +179,7 @@ class UsageTests(unittest.TestCase):
     def test_go_report_combines_allocated_cost_and_exposes_raw_subscription_usage(self):
         common = {'round': 1, 'effort': 'high', 'base': 'a' * 40, 'from': 'a' * 40, 'head': 'b' * 40}
         counts = {'input': 100, 'cacheRead': 60, 'cacheWrite': 0, 'output': 20, 'billed': True, 'source': 'provider'}
-        text = usage.render({'mergePolicy': 'manual', 'goCostAllocation': usage.POLICY['goCostAllocation'], 'runs': [
+        text = usage.render({'mergePolicy': 'manual', 'goCostAllocation': {'monthlyFeeUSD': '10', 'monthlyAllowanceUSD': '60', 'billingSource': 'go'}, 'runs': [
             {**common, 'model': 'openrouter/anthropic/claude-haiku-5.5', 'usage': {**counts, 'costUSD': '.03'}},
             {**common, 'model': 'opencode-go/glm-5.3-flash', 'usage': {**counts, 'costUSD': '0',
                 'goUsage': {'listCostUSD': '.02', 'allowanceUSD': '.08', 'billingSources': ['go']}}}]})
@@ -234,11 +234,32 @@ class UsageTests(unittest.TestCase):
             saved = usage.load(ledger)
             self.assertEqual(usage.POLICY['goCostAllocation'], saved['goCostAllocation'])
             with patch.dict(usage.POLICY, {'goCostAllocation': {**usage.POLICY['goCostAllocation'], 'monthlyFeeUSD': '999'}}):
-                self.assertEqual('10', usage.load(ledger)['goCostAllocation']['monthlyFeeUSD'])
+                self.assertEqual(saved['goCostAllocation']['monthlyFeeUSD'], usage.load(ledger)['goCostAllocation']['monthlyFeeUSD'])
             with patch('sys.argv', ['review_usage.py', '--ledger', str(ledger), 'render', '--output', str(output),
-                                   '--go-monthly-fee-usd', '10', '--go-monthly-allowance-usd', '60']):
+                                   '--go-monthly-fee-usd', '10', '--go-monthly-allowance-usd', '60', '--go-billing-source', 'go']):
                 usage.main()
             self.assertEqual({'monthlyFeeUSD': '10', 'monthlyAllowanceUSD': '60', 'billingSource': 'go'}, usage.load(ledger)['goCostAllocation'])
+
+    def test_plus_allocation_and_explicit_source_override_preserve_historical_basis(self):
+        basis = {'monthlyFeeUSD': '40', 'monthlyAllowanceUSD': '240', 'billingSource': 'go-plus'}
+        common = {'round': 1, 'model': 'opencode-go/claude-haiku-5-5', 'effort': 'high',
+                  'verdict': 'APPROVE', 'from': 'base', 'head': 'head'}
+        counts = {'input': 100, 'cacheRead': 0, 'cacheWrite': 0, 'output': 10, 'costUSD': '0', 'source': 'provider', 'billed': True}
+        run = {**common, 'usage': {**counts, 'goUsage': {'listCostUSD': '.6', 'allowanceUSD': '2.4', 'billingSources': ['go-plus']}}}
+        report = usage.render({'mergePolicy': 'automatic', 'goCostAllocation': basis, 'runs': [run]})
+        self.assertIn('$0.400000', report)
+        self.assertIn('/ $240', report)
+        with tempfile.TemporaryDirectory(prefix='review-cost-source-') as directory:
+            ledger, output = Path(directory)/'ledger.json', Path(directory)/'report.md'
+            usage.save(ledger, {'mergePolicy': 'automatic', 'goCostAllocation': basis, 'runs': [run]})
+            with patch('sys.argv', ['review_usage.py', '--ledger', str(ledger), 'render', '--output', str(output),
+                                   '--go-monthly-fee-usd', '40', '--go-monthly-allowance-usd', '240']):
+                usage.main()
+            self.assertEqual(basis, usage.load(ledger)['goCostAllocation'])
+            with patch('sys.argv', ['review_usage.py', '--ledger', str(ledger), 'render', '--output', str(output),
+                                   '--go-billing-source', 'go']):
+                with self.assertRaisesRegex(ValueError, 'both Go allocation amounts'):
+                    usage.main()
 
     def test_missing_go_metadata_retains_known_receipts_and_labelled_estimate(self):
         run = {'model': 'opencode-go/glm-5.3-flash', 'effort': 'high'}
@@ -326,7 +347,7 @@ class UsageTests(unittest.TestCase):
 
     def test_route_assignment_and_fresh_marker_are_enforced(self):
         ledger = {'runs': [], 'route': {'reviewers': [['haiku', 'high']], 'escalationByCategory': {'general': [['sonnet', 'high']]}}}
-        run = {'id': 'one', 'marker': 'Review-Run-ID: unique', 'model': 'openrouter/anthropic/claude-haiku-5.5', 'effort': 'high'}
+        run = {'id': 'one', 'marker': 'Review-Run-ID: unique', 'model': 'opencode-go/claude-haiku-5-5', 'effort': 'high'}
         usage.validate_assignment(ledger, run)
         with self.assertRaisesRegex(ValueError, 'complete Review-Run-ID'):
             usage.validate_assignment(ledger, {**run, 'marker': 'unique'})
