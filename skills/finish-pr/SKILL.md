@@ -168,7 +168,10 @@ independent authorized work before handoff. Limits do not supply
 approval. Do not wait for an optional reviewer that never started, including
 Copilot when quota was explicitly exhausted. Human holds produce a ready handoff,
 not an indefinite wait or an automatic merge.
-When an essential human response is missing, report that precise blocker. On a
+When an essential human response is missing, report that precise blocker. Under
+`automatic`, proceed to the final audit when the only remaining review request
+is for the account the user authorized to approve this exact PR in the
+caller-supplied step. Under `manual`, retain the human review requirement. On a
 later resume after one business day, one concise reminder in the existing PR
 conversation is permitted only within the caller's communication authorization.
 Record it to avoid duplicates; preserve the convergence budget and human hold.
@@ -199,7 +202,15 @@ Immediately before merge/handoff, re-fetch PR/base/head and verify:
   mutation made by this run blocks merge until reconciled.
 - No review child, queued repair or other owned work can still mutate the change.
 
-Under `manual`, leave the PR ready and unmerged. Under `automatic`, merge with the
+Under `manual`, leave the PR ready and unmerged. Under `automatic`, run any
+user-authorized caller-supplied approval step after the audit above and
+before merging. Defer only the approval that step is authorized to supply.
+An outstanding change request or independent review requirement still blocks
+progress through the gate. After the step succeeds, repeat the audit against
+the current head and confirm the approval is still effective. If the step
+cannot complete, preserve the blocker and leave the PR open.
+
+Under `automatic`, merge with the
 repository's permitted method and an expected-head guard, for example
 `gh pr merge <url> --match-head-commit <sha> <permitted-method-flag>`. Never bypass
 protections. Merge-queue admission or enabling auto-merge is still pending work:
