@@ -156,6 +156,13 @@ The skill:
 - Pushes focused fixes and completes CI/feedback without delegated post-PR review
   rounds. Merges when the protected gate passes, unless a human hold applies.
 
+### [handle-renovate-prs](skills/handle-renovate-prs/)
+
+Investigates one or more existing Renovate PRs, verifies upgrade behaviour and
+commits any needed fixes to their existing branches. Uses `finish-pr` to
+converge CI and feedback, submit Pingu's requested approval on the verified green
+head and complete the protected merge.
+
 ### [implement-task-linear](skills/implement-task-linear/)
 
 Wraps `complete-work` to deliver one or more supplied Linear issues together in a
