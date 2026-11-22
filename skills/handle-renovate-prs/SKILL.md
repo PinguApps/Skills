@@ -57,19 +57,23 @@ finish-pr's post-publication workflow for convergence.
 ## Finish and approve
 
 Run [finish-pr](../finish-pr/SKILL.md) for each PR with its verification evidence,
-merge policy and this section as its caller-supplied approval step. Under
-automatic merge, Pingu's requested approval is a pre-merge action. A user request
-for personal review, no merge or manual handoff retains the manual policy and
-requires honouring the user's review boundary.
+merge policy and, under automatic policy, this section as its caller-supplied
+approval step. The authorized reviewer for that step is Pingu's GitHub account
+`pingu2k4` (user ID `11229848`). A personal-review request, no-merge instruction
+or manual handoff retains the manual policy. Under manual policy, complete
+authorized repairs and verification, leave the PR open without submitting
+approval, and report any review still due from Pingu.
 
-At the approval step, confirm all applicable CI for the current head is green.
-Check required and other applicable checks, with skips accepted only under the
-repository's success semantics. Pending, failing or unverified CI keeps the
-approval pending. Reverify any affected upgrade behaviour after head or base
-changes before acting.
+At the approval step, require completed upgrade verification covering the exact
+published head and applicable base. If existing evidence is for a different
+head or base, assess the changes, rerun affected checks and record the proof
+for the current revisions. Then confirm all applicable CI for that head is
+green. Check required and other applicable checks, with skips accepted only
+under the repository's success semantics. Pending, failing or unverified CI
+keeps the approval pending.
 
-Verify the submitting GitHub identity against Pingu's account (`pingu2k4`,
-GitHub user ID `11229848`), or the account Pingu explicitly specifies.
+Verify that the submitting GitHub identity matches the authorized reviewer
+above.
 Verify its review request or effective current-head approval. If a prior
 submission by this run fulfilled the request, retain the original request as
 evidence of reviewer assignment while that assignment still applies. Reuse an
