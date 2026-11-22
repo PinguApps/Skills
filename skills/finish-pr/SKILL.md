@@ -168,9 +168,10 @@ independent authorized work before handoff. Limits do not supply
 approval. Do not wait for an optional reviewer that never started, including
 Copilot when quota was explicitly exhausted. Human holds produce a ready handoff,
 not an indefinite wait or an automatic merge.
-When an essential human response is missing, report that precise blocker. A
-requested review assigned to an explicitly authorized caller-supplied approval
-step proceeds to the final audit when the other checks are ready. On a
+When an essential human response is missing, report that precise blocker. Under
+`automatic`, proceed to the final audit when the only remaining review request
+is for the account the user authorized to approve this exact PR in the
+caller-supplied step. Under `manual`, retain the human review requirement. On a
 later resume after one business day, one concise reminder in the existing PR
 conversation is permitted only within the caller's communication authorization.
 Record it to avoid duplicates; preserve the convergence budget and human hold.
@@ -202,7 +203,7 @@ Immediately before merge/handoff, re-fetch PR/base/head and verify:
 - No review child, queued repair or other owned work can still mutate the change.
 
 Under `manual`, leave the PR ready and unmerged. Under `automatic`, run any
-explicitly authorized caller-supplied approval step after the audit above and
+user-authorized caller-supplied approval step after the audit above and
 before merging. Defer only the approval that step is authorized to supply.
 An outstanding change request or independent review requirement still blocks
 progress through the gate. After the step succeeds, repeat the audit against

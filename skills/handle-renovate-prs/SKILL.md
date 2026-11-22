@@ -68,11 +68,13 @@ repository's success semantics. Pending, failing or unverified CI keeps the
 approval pending. Reverify any affected upgrade behaviour after head or base
 changes before acting.
 
-Verify that the GitHub identity used to submit the review is Pingu's account.
-Verify its review request or effective current-head approval. If a prior approval
-from this run cleared the request, use the recorded request and review receipt
-unless the review assignment was withdrawn. Reuse a verified current-head
-approval. Otherwise submit an approval bound to the verified SHA. With the
+Verify the submitting GitHub identity against Pingu's account (`pingu2k4`,
+GitHub user ID `11229848`), or the account Pingu explicitly specifies.
+Verify its review request or effective current-head approval. If a prior
+submission by this run fulfilled the request, retain the original request as
+evidence of reviewer assignment while that assignment still applies. Reuse an
+approval only if it remains effective and its commit equals the verified head.
+Otherwise submit a new approval bound to the verified SHA. With the
 GitHub connector, verify its authenticated profile and pass the SHA as
 `commit_id` to the approval operation. Read back the submitted approval,
 reviewer, commit and effective review state. If identity, authority, eligibility,
